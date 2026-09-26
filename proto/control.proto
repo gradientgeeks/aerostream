@@ -63,6 +63,14 @@ message HeartbeatResponse {
   // The controller sends back the list of partitions this broker is assigned to lead or replicate
   repeated PartitionAssignment assigned_leaders = 2;
   repeated PartitionAssignment assigned_followers = 3;
+
+  // ==== dataplane (Stream A) ====
+  // True when the controller is pushing data-plane config (quotas/compression); when false the
+  // broker keeps its local (TOML) configuration. When true the lists below are the full set.
+  bool dataplane_config_present = 100;
+  repeated ClientQuota client_quotas = 101;
+  // topic -> compression.type (producer|uncompressed|gzip|snappy|lz4|zstd)
+  map<string, string> topic_compression = 102;
 }
 
 // Metadata queries
@@ -153,4 +161,18 @@ message FetchOffsetsRequest {
 
 message FetchOffsetsResponse {
   repeated TopicPartitionOffset offsets = 1;
+}
+
+// ==== dataplane (Stream A) ====
+// Client quota entry (Kafka KIP-13 style). user/client_id: empty = dimension absent,
+// "<default>" = default entity. A rate <= 0 with has_* false means "no limit".
+message ClientQuota {
+  string user = 100;
+  string client_id = 101;
+  bool has_producer_byte_rate = 102;
+  double producer_byte_rate = 103;
+  bool has_consumer_byte_rate = 104;
+  double consumer_byte_rate = 105;
+  bool has_request_percentage = 106;
+  double request_percentage = 107;
 }

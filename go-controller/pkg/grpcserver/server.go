@@ -149,11 +149,13 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 		}
 	}
 
-	return &pb.HeartbeatResponse{
+	resp := &pb.HeartbeatResponse{
 		Success:           true,
 		AssignedLeaders:   assignedLeaders,
 		AssignedFollowers: assignedFollowers,
-	}, nil
+	}
+	addDataplaneConfig(resp)
+	return resp, nil
 }
 
 // DiscoveryService Implementation
