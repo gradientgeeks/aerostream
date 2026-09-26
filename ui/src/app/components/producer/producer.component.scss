@@ -154,10 +154,24 @@
     color: var(--app-text-muted);
 
     &.mat-button-toggle-checked {
-      background: var(--app-code-text);
-      color: #ffffff;
+      background: var(--app-primary) !important;
+      color: #080b11 !important;
       font-weight: 600;
+
+      .mat-button-toggle-label-content {
+        color: #080b11 !important;
+      }
     }
+  }
+}
+
+:host-context(.light-theme) .custom-toggle-group mat-button-toggle.mat-button-toggle-checked,
+:host-context(body.light-theme) .custom-toggle-group mat-button-toggle.mat-button-toggle-checked {
+  background: var(--app-primary) !important;
+  color: #ffffff !important;
+
+  .mat-button-toggle-label-content {
+    color: #ffffff !important;
   }
 }
 
@@ -286,17 +300,23 @@
       transition: all 0.15s ease;
 
       &:hover {
-        border-color: var(--app-code-text);
+        border-color: var(--app-primary);
       }
 
       &.active {
-        background: var(--app-code-text);
-        color: #ffffff;
+        background: var(--app-primary);
+        color: #080b11;
         font-weight: 600;
-        border-color: var(--app-code-text);
+        border-color: var(--app-primary);
       }
     }
   }
+}
+
+:host-context(.light-theme) .burst-pill.active,
+:host-context(body.light-theme) .burst-pill.active {
+  background: var(--app-primary) !important;
+  color: #ffffff !important;
 }
 
 /* Samples Bar */

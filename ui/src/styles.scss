@@ -29,6 +29,7 @@ html.light-theme, body.light-theme {
   --app-primary: #00e5ff;          /* Electric Go Cyan */
   --app-primary-dark: #00b4d8;
   --app-primary-text: #00e5ff;
+  --app-on-primary: #080b11;       /* Dark high-contrast text on bright cyan */
   --app-primary-bg: rgba(0, 229, 255, 0.12);
   --app-primary-border: rgba(0, 229, 255, 0.25);
   --app-secondary: #ff5722;        /* Rust Ferrum Flame / Orange */
@@ -88,6 +89,21 @@ html.light-theme, body.light-theme {
   --app-scrollbar-track: #080b11;
   --app-scrollbar-thumb: rgba(0, 229, 255, 0.25);
   --app-scrollbar-thumb-hover: #00e5ff;
+
+  /* MDC Form Field & Outline Tokens */
+  --mdc-outlined-text-field-input-text-color: var(--app-text);
+  --mdc-outlined-text-field-input-text-placeholder-color: var(--app-text-muted);
+  --mdc-outlined-text-field-label-text-color: var(--app-text-muted);
+  --mdc-outlined-text-field-focus-label-text-color: var(--app-primary);
+  --mdc-outlined-text-field-outline-color: var(--app-input-border);
+  --mdc-outlined-text-field-focus-outline-color: var(--app-primary);
+  --mdc-outlined-text-field-hover-outline-color: var(--app-primary-border);
+
+  /* MDC Select Tokens */
+  --mat-select-trigger-text-color: var(--app-text);
+  --mat-select-placeholder-text-color: var(--app-text-muted);
+  --mat-select-enabled-arrow-color: var(--app-text-muted);
+  --mat-select-focus-arrow-color: var(--app-primary);
 }
 
 /* ==========================================================================
@@ -99,6 +115,7 @@ html.light-theme, body.light-theme {
   --app-primary: #0891b2;          /* Rich Cyan 600 - dark enough for high contrast */
   --app-primary-dark: #0e7490;     /* Deep Cyan 700 - 6.2:1 contrast against white */
   --app-primary-text: #0e7490;     /* Highly legible dark cyan text */
+  --app-on-primary: #ffffff;       /* Pure white text on dark cyan */
   --app-primary-bg: rgba(8, 145, 178, 0.10);
   --app-primary-border: rgba(8, 145, 178, 0.28);
   --app-secondary: #c2410c;        /* High-contrast Rust Flame 700 */
@@ -157,9 +174,22 @@ html.light-theme, body.light-theme {
   /* Scrollbar */
   --app-scrollbar-track: #f8fafc;
   --app-scrollbar-thumb: #cbd5e1;
-  --app-scrollbar-thumb-hover: #94a3b8;
-  --app-scrollbar-thumb: #cbd5e1;
   --app-scrollbar-thumb-hover: #0284c7;
+
+  /* MDC Form Field & Outline Tokens */
+  --mdc-outlined-text-field-input-text-color: var(--app-text);
+  --mdc-outlined-text-field-input-text-placeholder-color: var(--app-text-muted);
+  --mdc-outlined-text-field-label-text-color: var(--app-text-muted);
+  --mdc-outlined-text-field-focus-label-text-color: var(--app-primary);
+  --mdc-outlined-text-field-outline-color: var(--app-input-border);
+  --mdc-outlined-text-field-focus-outline-color: var(--app-primary);
+  --mdc-outlined-text-field-hover-outline-color: var(--app-primary-border);
+
+  /* MDC Select Tokens */
+  --mat-select-trigger-text-color: var(--app-text);
+  --mat-select-placeholder-text-color: var(--app-text-muted);
+  --mat-select-enabled-arrow-color: var(--app-text-muted);
+  --mat-select-focus-arrow-color: var(--app-primary);
 }
 
 html, body, .mat-app-background {
@@ -222,7 +252,9 @@ mat-card,
   transition: background-color 0.15s ease;
 }
 
-/* Material dialog container styling across themes */
+/* ==========================================================================
+   Material Dialogs
+   ========================================================================== */
 .mat-mdc-dialog-container .mdc-dialog__surface {
   background-color: var(--app-surface) !important;
   color: var(--app-text) !important;
@@ -231,9 +263,318 @@ mat-card,
   border-radius: 16px !important;
 }
 
-/* Form controls & inputs */
+.mdc-dialog__title,
+mat-dialog-title,
+.mat-mdc-dialog-title {
+  color: var(--app-text) !important;
+}
+
+.mdc-dialog__content,
+mat-dialog-content,
+.mat-mdc-dialog-content {
+  color: var(--app-text) !important;
+}
+
+.mdc-dialog__actions,
+mat-dialog-actions,
+.mat-mdc-dialog-actions {
+  background-color: var(--app-surface) !important;
+  border-top: 1px solid var(--app-border) !important;
+}
+
+/* ==========================================================================
+   Material Form Field & Input Controls
+   ========================================================================== */
+mat-form-field,
 .mat-mdc-form-field {
   color: var(--app-text);
+  --mdc-outlined-text-field-input-text-color: var(--app-text);
+  --mdc-outlined-text-field-input-text-placeholder-color: var(--app-text-muted);
+  --mdc-outlined-text-field-label-text-color: var(--app-text-muted);
+  --mdc-outlined-text-field-focus-label-text-color: var(--app-primary);
+  --mdc-outlined-text-field-outline-color: var(--app-input-border);
+  --mdc-outlined-text-field-focus-outline-color: var(--app-primary);
+  --mdc-outlined-text-field-hover-outline-color: var(--app-primary-border);
+
+  .mat-mdc-text-field-wrapper {
+    background-color: var(--app-input-bg);
+    border-radius: 8px;
+  }
+
+  .mat-mdc-form-field-infix {
+    background-color: var(--app-input-bg);
+  }
+
+  input.mat-mdc-input-element,
+  textarea.mat-mdc-input-element,
+  input,
+  textarea {
+    color: var(--app-text) !important;
+    caret-color: var(--app-primary);
+
+    &::placeholder {
+      color: var(--app-text-muted) !important;
+    }
+  }
+
+  .mat-mdc-floating-label {
+    color: var(--app-text-muted);
+  }
+
+  &.mat-focused .mat-mdc-floating-label {
+    color: var(--app-primary) !important;
+  }
+
+  .mat-mdc-form-field-icon-prefix,
+  .mat-mdc-form-field-icon-suffix {
+    color: var(--app-text-muted);
+  }
+
+  .mat-mdc-form-field-hint {
+    color: var(--app-text-muted) !important;
+  }
+}
+
+/* ==========================================================================
+   Material Select & Option Dropdowns
+   ========================================================================== */
+mat-select,
+.mat-mdc-select {
+  --mat-select-trigger-text-color: var(--app-text);
+  --mat-select-placeholder-text-color: var(--app-text-muted);
+  --mat-select-enabled-arrow-color: var(--app-text-muted);
+  --mat-select-focus-arrow-color: var(--app-primary);
+  color: var(--app-text);
+
+  .mat-mdc-select-trigger,
+  .mat-mdc-select-value,
+  .mat-mdc-select-value-text {
+    color: var(--app-text) !important;
+  }
+
+  .mat-mdc-select-placeholder {
+    color: var(--app-text-muted) !important;
+  }
+
+  .mat-mdc-select-arrow {
+    color: var(--app-text-muted) !important;
+  }
+
+  &.mat-focused .mat-mdc-select-arrow {
+    color: var(--app-primary) !important;
+  }
+}
+
+.mat-mdc-select-panel {
+  background-color: var(--app-surface) !important;
+  border: 1px solid var(--app-border) !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4) !important;
+  border-radius: 8px !important;
+}
+
+.mat-mdc-option {
+  color: var(--app-text) !important;
+  background-color: transparent;
+  transition: background-color 0.15s ease, color 0.15s ease;
+
+  .mdc-list-item__primary-text,
+  .mat-mdc-option-text {
+    color: inherit !important;
+  }
+
+  &:hover:not(.mdc-list-item--disabled) {
+    background-color: var(--app-surface-hover) !important;
+    color: var(--app-text) !important;
+  }
+
+  &.mdc-list-item--selected:not(.mdc-list-item--disabled) {
+    background-color: var(--app-primary-bg) !important;
+    color: var(--app-primary-text) !important;
+    font-weight: 600;
+
+    .mdc-list-item__primary-text,
+    .mat-mdc-option-text {
+      color: var(--app-primary-text) !important;
+    }
+  }
+
+  &.mdc-list-item--disabled {
+    color: var(--app-text-muted) !important;
+    opacity: 0.5;
+  }
+}
+
+/* ==========================================================================
+   Material Paginator Sync
+   ========================================================================== */
+mat-paginator,
+.mat-mdc-paginator {
+  background-color: var(--app-table-header) !important;
+  color: var(--app-text-muted) !important;
+
+  .mat-mdc-paginator-range-label,
+  .mat-mdc-paginator-page-size-label {
+    color: var(--app-text-muted) !important;
+  }
+
+  .mat-mdc-paginator-icon {
+    fill: currentColor !important;
+  }
+
+  .mat-mdc-paginator-navigation-next,
+  .mat-mdc-paginator-navigation-previous,
+  .mat-mdc-paginator-navigation-first,
+  .mat-mdc-paginator-navigation-last {
+    color: var(--app-text-muted) !important;
+
+    &:hover:not([disabled]) {
+      color: var(--app-primary) !important;
+    }
+
+    &[disabled] {
+      opacity: 0.35 !important;
+    }
+  }
+
+  .mat-mdc-select-value {
+    color: var(--app-text) !important;
+  }
+}
+
+/* ==========================================================================
+   Material Button Toggle Group
+   ========================================================================== */
+mat-button-toggle-group,
+.mat-button-toggle-group,
+.mat-mdc-button-toggle-group {
+  background-color: var(--app-input-bg) !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+
+  .mat-button-toggle,
+  .mat-mdc-button-toggle {
+    background-color: transparent;
+    color: var(--app-text-muted) !important;
+    border-color: var(--app-border) !important;
+
+    .mat-button-toggle-label-content,
+    .mat-mdc-button-toggle-label-content {
+      color: inherit !important;
+    }
+
+    &:hover:not(.mat-button-toggle-checked):not(.mat-button-toggle-disabled) {
+      background-color: var(--app-surface-hover) !important;
+      color: var(--app-text) !important;
+    }
+
+    &.mat-button-toggle-checked {
+      background-color: var(--app-primary) !important;
+      color: #080b11 !important;
+      font-weight: 600;
+
+      .mat-button-toggle-label-content,
+      .mat-mdc-button-toggle-label-content {
+        color: #080b11 !important;
+      }
+    }
+  }
+}
+
+html.light-theme,
+body.light-theme {
+  mat-button-toggle-group,
+  .mat-button-toggle-group,
+  .mat-mdc-button-toggle-group {
+    .mat-button-toggle.mat-button-toggle-checked,
+    .mat-mdc-button-toggle.mat-button-toggle-checked {
+      background-color: var(--app-primary) !important;
+      color: #ffffff !important;
+
+      .mat-button-toggle-label-content,
+      .mat-mdc-button-toggle-label-content {
+        color: #ffffff !important;
+      }
+    }
+  }
+}
+
+/* ==========================================================================
+   Material Menu Panel
+   ========================================================================== */
+.mat-mdc-menu-panel {
+  background-color: var(--app-surface) !important;
+  color: var(--app-text) !important;
+  border: 1px solid var(--app-border) !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4) !important;
+  border-radius: 8px !important;
+
+  .mat-mdc-menu-item {
+    color: var(--app-text) !important;
+    transition: background-color 0.15s ease, color 0.15s ease;
+
+    .mdc-list-item__primary-text,
+    .mat-mdc-menu-item-text {
+      color: var(--app-text) !important;
+    }
+
+    mat-icon {
+      color: var(--app-text-muted) !important;
+    }
+
+    &:hover:not([disabled]) {
+      background-color: var(--app-surface-hover) !important;
+      color: var(--app-text) !important;
+
+      mat-icon {
+        color: var(--app-primary) !important;
+      }
+    }
+
+    &[disabled] {
+      color: var(--app-text-muted) !important;
+      opacity: 0.5;
+    }
+  }
+}
+
+/* ==========================================================================
+   Material Tooltip
+   ========================================================================== */
+.mdc-tooltip__surface,
+.mat-mdc-tooltip .mdc-tooltip__surface {
+  font-size: 12px !important;
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+html.light-theme,
+body.light-theme {
+  .mdc-tooltip__surface,
+  .mat-mdc-tooltip .mdc-tooltip__surface {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  }
+}
+
+.light-theme .mdc-tooltip__surface,
+.light-theme.mat-mdc-tooltip .mdc-tooltip__surface {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+.dark-theme .mdc-tooltip__surface,
+.dark-theme.mat-mdc-tooltip .mdc-tooltip__surface {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 code, pre {
@@ -577,3 +918,17 @@ mat-dialog-actions,
 
 .border-go-cyan { border-color: rgba(0, 229, 255, 0.3) !important; }
 .border-rust-orange { border-color: rgba(255, 87, 34, 0.3) !important; }
+
+/* ==========================================================================
+   Semantic Application Color & Surface Utilities
+   ========================================================================== */
+.text-app { color: var(--app-text) !important; }
+.text-app-muted { color: var(--app-text-muted) !important; }
+.text-app-subtle { color: var(--app-text-subtle) !important; }
+.text-app-primary { color: var(--app-primary-text, var(--app-primary)) !important; }
+
+.bg-app-surface { background-color: var(--app-surface) !important; }
+.bg-app-card { background-color: var(--app-card-bg) !important; }
+.bg-app-nested { background-color: var(--app-nested-bg) !important; }
+
+.border-app { border-color: var(--app-border) !important; }

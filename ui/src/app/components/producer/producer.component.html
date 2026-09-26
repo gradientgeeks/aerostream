@@ -7,9 +7,9 @@
     <div class="header-titles min-w-0">
       <div class="title-row flex items-center gap-3">
         <mat-icon class="page-icon text-[var(--app-code-text)] shrink-0">send</mat-icon>
-        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--app-text)] m-0">Web Producer Console</h1>
+        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-app m-0">Web Producer Console</h1>
       </div>
-      <p class="subtitle text-sm text-[var(--app-text-muted)] mt-1 sm:ml-11">
+      <p class="subtitle text-sm text-app-muted mt-1 sm:ml-11">
         Interactive testing utility to produce structured records or burst events directly to AeroMQ topic partitions
       </p>
     </div>
@@ -24,13 +24,13 @@
 
   <div class="producer-layout-grid grid grid-cols-1 lg:grid-cols-2 gap-6 w-full max-w-full">
     <!-- Left Column: Publisher Card -->
-    <div class="console-card w-full min-w-0 flex flex-col rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] p-4 sm:p-5">
+    <div class="console-card w-full min-w-0 flex flex-col rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5">
       <div class="card-header-bar flex flex-wrap justify-between items-center gap-3 mb-4">
         <div class="title-group flex items-center gap-3 min-w-0">
           <mat-icon class="card-icon text-[var(--app-code-text)] shrink-0">publish</mat-icon>
           <div class="min-w-0">
-            <h2 class="text-base sm:text-lg font-semibold text-[var(--app-text)] m-0 truncate">Publish Record</h2>
-            <p class="text-xs text-[var(--app-text-muted)] mt-0.5 truncate">Target a topic and partition to route messages to the leader</p>
+            <h2 class="text-base sm:text-lg font-semibold text-app m-0 truncate">Publish Record</h2>
+            <p class="text-xs text-app-muted mt-0.5 truncate">Target a topic and partition to route messages to the leader</p>
           </div>
         </div>
 
@@ -51,10 +51,10 @@
       <div class="form-row-grid grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 w-full">
         <!-- Topic Selection / Input -->
         <div class="field-item sm:col-span-2 min-w-0 flex flex-col gap-1.5">
-          <label class="field-label text-xs font-semibold text-[var(--app-text-muted)] uppercase tracking-wider">Target Topic</label>
+          <label class="field-label text-xs font-semibold text-app-muted uppercase tracking-wider">Target Topic</label>
           <div class="topic-input-container flex flex-col gap-1.5 w-full min-w-0">
             <select
-              class="custom-select w-full bg-[var(--app-input-bg)] border border-[var(--app-input-border)] rounded-md px-3 py-2 text-xs sm:text-sm text-[var(--app-text)] outline-none"
+              class="custom-select w-full bg-[var(--app-input-bg)] border border-[var(--app-input-border)] rounded-md px-3 py-2 text-xs sm:text-sm text-app outline-none"
               [ngModel]="topicName()"
               (ngModelChange)="topicName.set($event)">
               <option value="" disabled>Select a topic...</option>
@@ -74,7 +74,7 @@
 
         <!-- Partition Selector -->
         <div class="field-item partition-field min-w-0 flex flex-col gap-1.5">
-          <label class="field-label text-xs font-semibold text-[var(--app-text-muted)] uppercase tracking-wider">Partition</label>
+          <label class="field-label text-xs font-semibold text-app-muted uppercase tracking-wider">Partition</label>
           <div class="partition-chips flex flex-wrap gap-1.5">
             <button
               *ngFor="let p of partitionOptions()"
@@ -108,7 +108,7 @@
 
       <!-- Quick Sample Buttons -->
       <div class="samples-bar flex flex-wrap gap-2 items-center mb-4">
-        <span class="samples-title text-xs text-[var(--app-text-muted)] font-medium">Quick Samples:</span>
+        <span class="samples-title text-xs text-app-muted font-medium">Quick Samples:</span>
         <button type="button" mat-stroked-button (click)="loadSample('json')" class="sample-btn">
           <mat-icon class="tiny-icon">data_object</mat-icon>
           <span>Sample JSON Event</span>
@@ -124,20 +124,20 @@
       </div>
 
       <!-- Message Payload Editor -->
-      <div class="payload-editor-wrapper w-full min-w-0 max-w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-code-bg)] overflow-hidden mb-4">
-        <div class="editor-header flex flex-wrap justify-between items-center gap-2 p-2 sm:px-3 bg-[var(--app-surface)] border-b border-[var(--app-border)]">
-          <div class="editor-title flex items-center gap-1.5 text-xs font-semibold text-[var(--app-text)]">
+      <div class="payload-editor-wrapper w-full min-w-0 max-w-full rounded-lg border border-app bg-[var(--app-code-bg)] overflow-hidden mb-4">
+        <div class="editor-header flex flex-wrap justify-between items-center gap-2 p-2 sm:px-3 bg-app-surface border-b border-app">
+          <div class="editor-title flex items-center gap-1.5 text-xs font-semibold text-app">
             <mat-icon class="editor-icon text-sm text-[var(--app-code-text)]">code</mat-icon>
             <span>Payload Data</span>
             <span *ngIf="payloadStats().isValidJson" class="json-valid-tag text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded">VALID JSON</span>
           </div>
 
           <div class="editor-actions flex items-center gap-2">
-            <span class="stats-badge font-mono text-xs text-[var(--app-text-muted)]">{{ payloadStats().lines }} lines</span>
-            <span class="stats-badge font-mono text-xs text-[var(--app-text-muted)]">{{ payloadStats().bytes }} bytes</span>
+            <span class="stats-badge font-mono text-xs text-app-muted">{{ payloadStats().lines }} lines</span>
+            <span class="stats-badge font-mono text-xs text-app-muted">{{ payloadStats().bytes }} bytes</span>
             <button
               type="button"
-              class="icon-action-btn p-1 text-[var(--app-text-muted)] hover:text-[var(--app-text)]"
+              class="icon-action-btn p-1 text-app-muted hover:text-app"
               (click)="formatJson()"
               matTooltip="Format & Beautify JSON"
               [disabled]="!payload()">
@@ -145,7 +145,7 @@
             </button>
             <button
               type="button"
-              class="icon-action-btn p-1 text-[var(--app-text-muted)] hover:text-[var(--app-text)]"
+              class="icon-action-btn p-1 text-app-muted hover:text-app"
               (click)="clearPayload()"
               matTooltip="Clear Payload"
               [disabled]="!payload()">
@@ -155,7 +155,7 @@
         </div>
 
         <textarea
-          class="payload-textarea w-full min-w-0 box-border font-mono p-3 bg-[var(--app-code-bg)] text-[var(--app-text)] text-xs sm:text-sm border-none outline-none resize-y"
+          class="payload-textarea w-full min-w-0 box-border font-mono p-3 bg-[var(--app-code-bg)] text-app text-xs sm:text-sm border-none outline-none resize-y"
           rows="11"
           placeholder="Enter message body or payload (JSON, UTF-8 text, raw bytes)..."
           [ngModel]="payload()"
@@ -165,8 +165,8 @@
       </div>
 
       <!-- Burst Progress Indicator -->
-      <div class="burst-progress-container p-2.5 sm:px-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-nested-bg)] mb-4" *ngIf="burstProgress() as prog">
-        <div class="prog-meta flex justify-between text-xs mb-2 text-[var(--app-text)]">
+      <div class="burst-progress-container p-2.5 sm:px-3 rounded-lg border border-app bg-app-nested mb-4" *ngIf="burstProgress() as prog">
+        <div class="prog-meta flex justify-between text-xs mb-2 text-app">
           <span>Sending burst: {{ prog.current }} / {{ prog.total }}</span>
           <span class="prog-counts flex gap-2">
             <span class="text-green font-semibold">{{ prog.successCount }} ok</span>
@@ -182,8 +182,8 @@
       </div>
 
       <!-- Action Footer with Send Button -->
-      <div class="card-footer-action flex flex-wrap justify-between items-center gap-3 mt-auto pt-3 border-t border-[var(--app-border)]">
-        <div class="destination-summary font-mono text-xs sm:text-sm text-[var(--app-text-muted)] truncate max-w-full">
+      <div class="card-footer-action flex flex-wrap justify-between items-center gap-3 mt-auto pt-3 border-t border-app">
+        <div class="destination-summary font-mono text-xs sm:text-sm text-app-muted truncate max-w-full">
           Route: <span class="highlight text-[var(--app-code-text)] font-semibold">{{ topicName() || '(no topic)' }}</span> [P-{{ partition() }}]
         </div>
 
@@ -208,13 +208,13 @@
     </div>
 
     <!-- Right Column: Results History Panel -->
-    <div class="history-card w-full min-w-0 flex flex-col rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] p-4 sm:p-5">
+    <div class="history-card w-full min-w-0 flex flex-col rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5">
       <div class="card-header-bar flex flex-wrap justify-between items-center gap-3 mb-4">
         <div class="title-group flex items-center gap-3 min-w-0">
           <mat-icon class="card-icon history-icon text-purple-400 shrink-0">history</mat-icon>
           <div class="min-w-0">
-            <h2 class="text-base sm:text-lg font-semibold text-[var(--app-text)] m-0 truncate">Publish Results History</h2>
-            <p class="text-xs text-[var(--app-text-muted)] mt-0.5 truncate">Inspection log of records dispatched during this browser session</p>
+            <h2 class="text-base sm:text-lg font-semibold text-app m-0 truncate">Publish Results History</h2>
+            <p class="text-xs text-app-muted mt-0.5 truncate">Inspection log of records dispatched during this browser session</p>
           </div>
         </div>
 
@@ -332,9 +332,9 @@
         </mat-paginator>
 
         <!-- Selected Record Inspection Drawer -->
-        <div class="record-detail-drawer w-full min-w-0 max-w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-nested-bg)] p-3 mt-2 overflow-hidden" *ngIf="selectedRecord() as rec">
+        <div class="record-detail-drawer w-full min-w-0 max-w-full rounded-lg border border-app bg-app-nested p-3 mt-2 overflow-hidden" *ngIf="selectedRecord() as rec">
           <div class="drawer-header flex justify-between items-center mb-2">
-            <div class="drawer-title flex items-center gap-1.5 text-xs font-semibold text-[var(--app-text)] truncate min-w-0">
+            <div class="drawer-title flex items-center gap-1.5 text-xs font-semibold text-app truncate min-w-0">
               <mat-icon class="detail-icon text-[var(--app-code-text)] shrink-0">info</mat-icon>
               <span class="truncate">Record {{ rec.id }} Payload & Response</span>
             </div>
@@ -348,17 +348,17 @@
             <span>Error: {{ rec.error }}</span>
           </div>
 
-          <div class="payload-preview-box max-h-48 overflow-y-auto overflow-x-auto max-w-full rounded bg-[var(--app-code-bg)] border border-[var(--app-border)] p-2.5">
-            <pre class="font-mono text-xs m-0 whitespace-pre-wrap break-all max-w-full text-[var(--app-text)]">{{ rec.payload }}</pre>
+          <div class="payload-preview-box max-h-48 overflow-y-auto overflow-x-auto max-w-full rounded bg-[var(--app-code-bg)] border border-app p-2.5">
+            <pre class="font-mono text-xs m-0 whitespace-pre-wrap break-all max-w-full text-app">{{ rec.payload }}</pre>
           </div>
         </div>
       </div>
 
       <ng-template #noHistoryTemplate>
         <div class="empty-state-box p-8 text-center">
-          <mat-icon class="empty-icon text-4xl text-[var(--app-text-muted)] mb-2">history</mat-icon>
-          <h3 class="text-base font-semibold text-[var(--app-text)] m-0 mb-1">No Records Published</h3>
-          <p class="text-xs text-[var(--app-text-muted)] m-0">Dispatched messages and burst ACK receipts will appear here in chronological order.</p>
+          <mat-icon class="empty-icon text-4xl text-app-muted mb-2">history</mat-icon>
+          <h3 class="text-base font-semibold text-app m-0 mb-1">No Records Published</h3>
+          <p class="text-xs text-app-muted m-0">Dispatched messages and burst ACK receipts will appear here in chronological order.</p>
         </div>
       </ng-template>
     </div>

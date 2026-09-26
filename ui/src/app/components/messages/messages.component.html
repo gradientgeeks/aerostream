@@ -2,8 +2,8 @@
   <!-- Page Header -->
   <div class="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
     <div class="header-titles min-w-0">
-      <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--app-text)] m-0">Message Explorer</h1>
-      <p class="subtitle text-sm text-[var(--app-text-muted)] mt-1">Query, inspect, and decode real-time messages from partition leader brokers</p>
+      <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-app m-0">Message Explorer</h1>
+      <p class="subtitle text-sm text-app-muted mt-1">Query, inspect, and decode real-time messages from partition leader brokers</p>
     </div>
     @if (currentPartitionInfo(); as p) {
       <div class="header-partition-pill flex flex-wrap items-center gap-2 self-start sm:self-auto">
@@ -15,7 +15,7 @@
   </div>
 
   <!-- Controls Card -->
-  <div class="controls-card mat-elevation-z2 rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] p-4 sm:p-5 mb-6">
+  <div class="controls-card mat-elevation-z2 rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5 mb-6">
     <div class="controls-grid flex flex-wrap gap-4 items-end w-full">
       <!-- Topic Selector -->
       <mat-form-field appearance="outline" class="selector-field flex-1 min-w-[200px]" subscriptSizing="dynamic">
@@ -108,7 +108,7 @@
 
     <!-- Quick Navigation Shortcuts -->
     <div class="quick-nav-bar flex flex-wrap items-center gap-2 sm:gap-3 mt-4 pt-3.5 border-t border-[var(--app-divider)]">
-      <span class="nav-label text-xs font-semibold uppercase tracking-wider text-[var(--app-text-muted)]">Quick Jump:</span>
+      <span class="nav-label text-xs font-semibold uppercase tracking-wider text-app-muted">Quick Jump:</span>
       <button mat-stroked-button class="nav-shortcut" (click)="jumpToStart()" [disabled]="isFetchingMessages()">
         <mat-icon>first_page</mat-icon>
         <span>Jump to Start (0)</span>
@@ -133,7 +133,7 @@
 
   <!-- Loading State -->
   @if (isFetchingMessages()) {
-    <div class="loading-state flex flex-col items-center justify-center gap-4 py-16 text-[var(--app-text-muted)]">
+    <div class="loading-state flex flex-col items-center justify-center gap-4 py-16 text-app-muted">
       <mat-spinner diameter="44"></mat-spinner>
       <span>Fetching messages from broker leader...</span>
     </div>
@@ -141,12 +141,12 @@
 
   <!-- Messages Table -->
   @if (!isFetchingMessages() && messagesDataSource.data.length > 0) {
-    <div class="table-card mat-elevation-z2 rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] overflow-hidden">
-      <div class="table-header-info flex items-center justify-between p-3.5 sm:px-5 bg-[var(--app-table-header)] border-b border-[var(--app-table-border)]">
+    <div class="table-card mat-elevation-z2 rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] overflow-hidden">
+      <div class="table-header-info flex items-center justify-between p-3.5 sm:px-5 bg-[var(--app-table-header)] border-b border-app">
         <div class="info-left flex items-center gap-2.5">
           <mat-icon class="text-[var(--app-code-text)]">list_alt</mat-icon>
-          <h3 class="m-0 text-base font-semibold text-[var(--app-text)]">Messages</h3>
-          <span class="results-count text-xs text-[var(--app-text-muted)] bg-[var(--app-surface)] px-2 py-0.5 rounded-full border border-[var(--app-border)]">Showing {{ messagesDataSource.data.length }} messages</span>
+          <h3 class="m-0 text-base font-semibold text-app">Messages</h3>
+          <span class="results-count text-xs text-app-muted bg-app-surface px-2 py-0.5 rounded-full border border-app">Showing {{ messagesDataSource.data.length }} messages</span>
         </div>
       </div>
 

@@ -1,1 +1,32 @@
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark-theme, .dark *));
+
+/* Prevent Tailwind preflight from overriding Angular Material form inputs, dialogs, and button typography */
+@layer base {
+  /* Angular Material Form Fields & Inputs */
+  .mat-mdc-form-field input,
+  .mat-mdc-form-field textarea,
+  .mat-mdc-input-element,
+  .mat-mdc-select,
+  .mat-mdc-select-value {
+    color: inherit;
+  }
+
+  /* Angular Material Dialogs */
+  .mat-mdc-dialog-container,
+  .mat-mdc-dialog-container .mdc-dialog__surface,
+  .mat-mdc-dialog-content,
+  .mat-mdc-dialog-title {
+    color: inherit;
+  }
+
+  /* Angular Material Button Typography */
+  .mat-mdc-button-base,
+  button.mat-mdc-button-base,
+  a.mat-mdc-button-base {
+    color: inherit;
+    font-family: inherit;
+    letter-spacing: inherit;
+  }
+}

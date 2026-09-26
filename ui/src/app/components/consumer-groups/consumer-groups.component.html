@@ -7,15 +7,15 @@
     <div class="header-titles min-w-0">
       <div class="title-row flex items-center gap-3">
         <mat-icon class="page-icon text-[var(--app-code-text)] shrink-0">groups</mat-icon>
-        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--app-text)] m-0">Consumer Groups & Lag Monitor</h1>
+        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-app m-0">Consumer Groups & Lag Monitor</h1>
       </div>
-      <p class="subtitle text-sm text-[var(--app-text-muted)] mt-1 sm:ml-11">
+      <p class="subtitle text-sm text-app-muted mt-1 sm:ml-11">
         Real-time telemetry for active consumer group membership, partition balancing, and committed offset lag
       </p>
     </div>
 
     <div class="header-actions flex items-center gap-3 sm:gap-4 shrink-0">
-      <div class="last-refreshed flex items-center gap-1.5 text-xs text-[var(--app-text-muted)] font-mono" *ngIf="lastRefreshed()">
+      <div class="last-refreshed flex items-center gap-1.5 text-xs text-app-muted font-mono" *ngIf="lastRefreshed()">
         <mat-icon class="tiny-icon">schedule</mat-icon>
         <span>Updated {{ lastRefreshed() | date: 'HH:mm:ss' }}</span>
       </div>
@@ -39,18 +39,18 @@
   <!-- Top Metrics Summary Cards -->
   <div class="metrics-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 w-full mb-6">
     <!-- Active Groups Card -->
-    <div class="metric-card rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] p-4 sm:p-5 min-w-0">
+    <div class="metric-card rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5 min-w-0">
       <div class="metric-header flex items-start justify-between gap-3 mb-3 w-full">
         <div class="metric-title-group min-w-0">
-          <span class="metric-title text-sm font-semibold text-[var(--app-text)] truncate block">Consumer Groups</span>
-          <span class="metric-sub text-xs text-[var(--app-text-muted)] truncate block">Active coordination</span>
+          <span class="metric-title text-sm font-semibold text-app truncate block">Consumer Groups</span>
+          <span class="metric-sub text-xs text-app-muted truncate block">Active coordination</span>
         </div>
         <div class="metric-icon-box groups-icon shrink-0">
           <mat-icon>groups</mat-icon>
         </div>
       </div>
       <div class="metric-body flex items-baseline justify-between">
-        <div class="metric-value text-2xl sm:text-3xl font-bold text-[var(--app-text)] tracking-tight">{{ summaryStats().groupCount }}</div>
+        <div class="metric-value text-2xl sm:text-3xl font-bold text-app tracking-tight">{{ summaryStats().groupCount }}</div>
         <div class="metric-tag text-xs font-semibold px-2 py-0.5 rounded" [ngClass]="summaryStats().groupCount > 0 ? 'tag-green' : 'tag-neutral'">
           {{ summaryStats().groupCount > 0 ? 'Active' : 'No Groups' }}
         </div>
@@ -58,18 +58,18 @@
     </div>
 
     <!-- Active Members Card -->
-    <div class="metric-card rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] p-4 sm:p-5 min-w-0">
+    <div class="metric-card rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5 min-w-0">
       <div class="metric-header flex items-start justify-between gap-3 mb-3 w-full">
         <div class="metric-title-group min-w-0">
-          <span class="metric-title text-sm font-semibold text-[var(--app-text)] truncate block">Active Members</span>
-          <span class="metric-sub text-xs text-[var(--app-text-muted)] truncate block">Consumer instances</span>
+          <span class="metric-title text-sm font-semibold text-app truncate block">Active Members</span>
+          <span class="metric-sub text-xs text-app-muted truncate block">Consumer instances</span>
         </div>
         <div class="metric-icon-box members-icon shrink-0">
           <mat-icon>person</mat-icon>
         </div>
       </div>
       <div class="metric-body flex items-baseline justify-between">
-        <div class="metric-value text-2xl sm:text-3xl font-bold text-[var(--app-text)] tracking-tight">{{ summaryStats().memberCount }}</div>
+        <div class="metric-value text-2xl sm:text-3xl font-bold text-app tracking-tight">{{ summaryStats().memberCount }}</div>
         <div class="metric-tag tag-blue text-xs font-semibold px-2 py-0.5 rounded">
           Connected Clients
         </div>
@@ -77,18 +77,18 @@
     </div>
 
     <!-- Monitored Partitions Card -->
-    <div class="metric-card rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] p-4 sm:p-5 min-w-0">
+    <div class="metric-card rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5 min-w-0">
       <div class="metric-header flex items-start justify-between gap-3 mb-3 w-full">
         <div class="metric-title-group min-w-0">
-          <span class="metric-title text-sm font-semibold text-[var(--app-text)] truncate block">Partitions Monitored</span>
-          <span class="metric-sub text-xs text-[var(--app-text-muted)] truncate block">Committed offsets</span>
+          <span class="metric-title text-sm font-semibold text-app truncate block">Partitions Monitored</span>
+          <span class="metric-sub text-xs text-app-muted truncate block">Committed offsets</span>
         </div>
         <div class="metric-icon-box partitions-icon shrink-0">
           <mat-icon>view_column</mat-icon>
         </div>
       </div>
       <div class="metric-body flex items-baseline justify-between">
-        <div class="metric-value text-2xl sm:text-3xl font-bold text-[var(--app-text)] tracking-tight">{{ summaryStats().monitoredPartitionsCount }}</div>
+        <div class="metric-value text-2xl sm:text-3xl font-bold text-app tracking-tight">{{ summaryStats().monitoredPartitionsCount }}</div>
         <div class="metric-tag tag-purple text-xs font-semibold px-2 py-0.5 rounded">
           {{ summaryStats().laggingPartitionsCount }} Lagging
         </div>
@@ -96,18 +96,18 @@
     </div>
 
     <!-- Total Cluster Lag Card -->
-    <div class="metric-card rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] p-4 sm:p-5 min-w-0">
+    <div class="metric-card rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5 min-w-0">
       <div class="metric-header flex items-start justify-between gap-3 mb-3 w-full">
         <div class="metric-title-group min-w-0">
-          <span class="metric-title text-sm font-semibold text-[var(--app-text)] truncate block">Max Lag</span>
-          <span class="metric-sub text-xs text-[var(--app-text-muted)] truncate block">Highest partition gap</span>
+          <span class="metric-title text-sm font-semibold text-app truncate block">Max Lag</span>
+          <span class="metric-sub text-xs text-app-muted truncate block">Highest partition gap</span>
         </div>
         <div class="metric-icon-box shrink-0" [ngClass]="summaryStats().maxLag > 50 ? 'lag-icon-critical' : (summaryStats().maxLag > 0 ? 'lag-icon-warning' : 'lag-icon-healthy')">
           <mat-icon>{{ summaryStats().maxLag > 50 ? 'warning' : (summaryStats().maxLag > 0 ? 'speed' : 'check_circle') }}</mat-icon>
         </div>
       </div>
       <div class="metric-body flex items-baseline justify-between">
-        <div class="metric-value font-mono text-2xl sm:text-3xl font-bold text-[var(--app-text)] tracking-tight">{{ summaryStats().maxLag | number }}</div>
+        <div class="metric-value font-mono text-2xl sm:text-3xl font-bold text-app tracking-tight">{{ summaryStats().maxLag | number }}</div>
         <div class="metric-tag text-xs font-semibold px-2 py-0.5 rounded" [ngClass]="summaryStats().maxLag > 50 ? 'tag-red' : (summaryStats().maxLag > 0 ? 'tag-orange' : 'tag-green')">
           {{ summaryStats().maxLag === 0 ? 'All Synced' : summaryStats().maxLag + ' msgs' }}
         </div>
@@ -116,32 +116,32 @@
   </div>
 
   <!-- Active Consumer Groups Section -->
-  <div class="content-card rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] p-4 sm:p-5 mb-6 min-w-0">
+  <div class="content-card rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5 mb-6 min-w-0">
     <div class="card-toolbar flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
       <div class="toolbar-title-group flex items-center gap-2.5 min-w-0">
         <div class="section-badge shrink-0">GROUPS</div>
-        <h2 class="text-base sm:text-lg font-semibold text-[var(--app-text)] m-0 truncate">Active Consumer Groups</h2>
+        <h2 class="text-base sm:text-lg font-semibold text-app m-0 truncate">Active Consumer Groups</h2>
         <span class="count-pill shrink-0">{{ filteredGroups().length }} total</span>
       </div>
 
       <div class="toolbar-filters flex flex-wrap gap-3 items-center w-full md:w-auto">
         <!-- Search filter -->
         <div class="search-input-box relative flex items-center flex-1 sm:flex-initial min-w-[200px] w-full sm:w-auto">
-          <mat-icon class="search-icon absolute left-2.5 text-[var(--app-text-muted)] pointer-events-none">search</mat-icon>
+          <mat-icon class="search-icon absolute left-2.5 text-app-muted pointer-events-none">search</mat-icon>
           <input
             type="text"
             placeholder="Search group ID or topic..."
             [ngModel]="searchQuery()"
             (ngModelChange)="searchQuery.set($event)"
-            class="custom-search-input w-full sm:w-60 pl-9 pr-8 py-2 text-xs sm:text-sm bg-[var(--app-input-bg)] border border-[var(--app-input-border)] rounded-md text-[var(--app-text)] outline-none"
+            class="custom-search-input w-full sm:w-60 pl-9 pr-8 py-2 text-xs sm:text-sm bg-[var(--app-input-bg)] border border-[var(--app-input-border)] rounded-md text-app outline-none"
           />
-          <button *ngIf="searchQuery()" (click)="searchQuery.set('')" class="clear-btn absolute right-2 text-[var(--app-text-muted)] hover:text-[var(--app-text)]">
+          <button *ngIf="searchQuery()" (click)="searchQuery.set('')" class="clear-btn absolute right-2 text-app-muted hover:text-app">
             <mat-icon class="!text-base !w-4 !h-4">close</mat-icon>
           </button>
         </div>
 
         <!-- Status filter buttons -->
-        <div class="filter-pills flex flex-wrap gap-1 bg-[var(--app-pill-bg)] p-1 rounded-md border border-[var(--app-border)]">
+        <div class="filter-pills flex flex-wrap gap-1 bg-[var(--app-pill-bg)] p-1 rounded-md border border-app">
           <button
             class="filter-pill px-2.5 py-1 text-xs rounded border-none cursor-pointer transition-all"
             [class.active]="statusFilter() === 'all'"
@@ -264,14 +264,14 @@
     <!-- Empty State for Groups Table -->
     <ng-template #noGroupsTemplate>
       <div class="empty-state-box p-8 text-center">
-        <mat-icon class="empty-icon text-4xl text-[var(--app-text-muted)] mb-2">groups_2</mat-icon>
-        <h3 class="text-base font-semibold text-[var(--app-text)] m-0 mb-1.5">No Consumer Groups Found</h3>
-        <p *ngIf="searchQuery() || statusFilter() !== 'all'" class="text-sm text-[var(--app-text-muted)] m-0">
+        <mat-icon class="empty-icon text-4xl text-app-muted mb-2">groups_2</mat-icon>
+        <h3 class="text-base font-semibold text-app m-0 mb-1.5">No Consumer Groups Found</h3>
+        <p *ngIf="searchQuery() || statusFilter() !== 'all'" class="text-sm text-app-muted m-0">
           No groups matched your filter criteria. Try clearing search filters.
         </p>
-        <div *ngIf="!searchQuery() && statusFilter() === 'all'" class="empty-guide mt-3 text-sm text-[var(--app-text-muted)]">
+        <div *ngIf="!searchQuery() && statusFilter() === 'all'" class="empty-guide mt-3 text-sm text-app-muted">
           <p class="m-0 mb-2">Consumers join groups dynamically by supplying a <code>group_id</code> when subscribing to topics.</p>
-          <div class="cmd-example font-mono break-all text-xs bg-[var(--app-code-bg)] border border-[var(--app-border)] p-2 rounded text-emerald-400">
+          <div class="cmd-example font-mono break-all text-xs bg-[var(--app-code-bg)] border border-app p-2 rounded text-emerald-400">
             ./client/bin/client consume --topic demo-topic --group analytics-workers
           </div>
         </div>
@@ -281,27 +281,27 @@
 
   <!-- Selected Group Detail View (Lag Breakdown + Members List) -->
   <div class="group-detail-section mt-7" *ngIf="activeGroup() as selected">
-    <div class="detail-header-card rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] p-4 sm:p-5 mb-5">
+    <div class="detail-header-card rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5 mb-5">
       <div class="detail-title-row flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div class="detail-name-box flex items-center gap-3 min-w-0">
           <mat-icon class="detail-icon text-[var(--app-code-text)] shrink-0">analytics</mat-icon>
           <div class="min-w-0">
-            <div class="detail-super text-[11px] font-bold text-[var(--app-text-muted)] tracking-wider">CONSUMER GROUP DETAILS</div>
-            <h2 class="font-mono text-lg sm:text-xl text-[var(--app-text)] m-0 truncate">{{ selected.groupId }}</h2>
+            <div class="detail-super text-[11px] font-bold text-app-muted tracking-wider">CONSUMER GROUP DETAILS</div>
+            <h2 class="font-mono text-lg sm:text-xl text-app m-0 truncate">{{ selected.groupId }}</h2>
           </div>
         </div>
 
         <div class="detail-tags-row flex flex-wrap items-center gap-2 sm:gap-3">
-          <div class="detail-meta-item flex items-center gap-1.5 bg-[var(--app-nested-bg)] px-3 py-1.5 rounded-md border border-[var(--app-border)] text-xs">
-            <span class="meta-label text-[var(--app-text-muted)]">Generation:</span>
-            <span class="meta-val font-mono font-semibold text-[var(--app-text)]">#{{ selected.generation }}</span>
+          <div class="detail-meta-item flex items-center gap-1.5 bg-app-nested px-3 py-1.5 rounded-md border border-app text-xs">
+            <span class="meta-label text-app-muted">Generation:</span>
+            <span class="meta-val font-mono font-semibold text-app">#{{ selected.generation }}</span>
           </div>
-          <div class="detail-meta-item flex items-center gap-1.5 bg-[var(--app-nested-bg)] px-3 py-1.5 rounded-md border border-[var(--app-border)] text-xs">
-            <span class="meta-label text-[var(--app-text-muted)]">Active Members:</span>
-            <span class="meta-val font-mono font-semibold text-[var(--app-text)]">{{ selected.memberCount }}</span>
+          <div class="detail-meta-item flex items-center gap-1.5 bg-app-nested px-3 py-1.5 rounded-md border border-app text-xs">
+            <span class="meta-label text-app-muted">Active Members:</span>
+            <span class="meta-val font-mono font-semibold text-app">{{ selected.memberCount }}</span>
           </div>
-          <div class="detail-meta-item flex items-center gap-1.5 bg-[var(--app-nested-bg)] px-3 py-1.5 rounded-md border border-[var(--app-border)] text-xs">
-            <span class="meta-label text-[var(--app-text-muted)]">Total Group Lag:</span>
+          <div class="detail-meta-item flex items-center gap-1.5 bg-app-nested px-3 py-1.5 rounded-md border border-app text-xs">
+            <span class="meta-label text-app-muted">Total Group Lag:</span>
             <span class="meta-val font-mono font-semibold" [ngClass]="selected.totalLag > 0 ? 'text-amber' : 'text-emerald'">
               {{ selected.totalLag | number }} msgs
             </span>
@@ -312,11 +312,11 @@
 
     <div class="detail-grid grid grid-cols-1 lg:grid-cols-5 gap-6 w-full max-w-full">
       <!-- Left Column: Per-Group Lag Breakdown Table -->
-      <div class="content-card lag-breakdown-card lg:col-span-3 min-w-0 rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] p-4 sm:p-5">
+      <div class="content-card lag-breakdown-card lg:col-span-3 min-w-0 rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5">
         <div class="card-toolbar flex flex-wrap items-center justify-between gap-3 mb-4">
           <div class="toolbar-title-group flex items-center gap-2 min-w-0">
             <div class="section-badge lag-badge shrink-0">BREAKDOWN</div>
-            <h3 class="text-base font-semibold text-[var(--app-text)] m-0 truncate">Per-Partition Lag Monitor</h3>
+            <h3 class="text-base font-semibold text-app m-0 truncate">Per-Partition Lag Monitor</h3>
             <span class="count-pill shrink-0">{{ activeGroupLag().length }} partitions</span>
           </div>
         </div>
@@ -383,31 +383,31 @@
 
         <ng-template #noLagTemplate>
           <div class="empty-state-box small p-6 text-center">
-            <mat-icon class="empty-icon text-3xl text-[var(--app-text-muted)] mb-2">speed</mat-icon>
-            <h4 class="text-sm font-semibold text-[var(--app-text)] m-0 mb-1">No Partition Lag Data</h4>
-            <p class="text-xs text-[var(--app-text-muted)] m-0">No committed offsets recorded for group "{{ selected.groupId }}" yet. Messages consumed will report lag here.</p>
+            <mat-icon class="empty-icon text-3xl text-app-muted mb-2">speed</mat-icon>
+            <h4 class="text-sm font-semibold text-app m-0 mb-1">No Partition Lag Data</h4>
+            <p class="text-xs text-app-muted m-0">No committed offsets recorded for group "{{ selected.groupId }}" yet. Messages consumed will report lag here.</p>
           </div>
         </ng-template>
       </div>
 
       <!-- Right Column: Members List & Partition Assignments -->
-      <div class="content-card members-card lg:col-span-2 min-w-0 rounded-xl border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow-[var(--app-card-shadow)] p-4 sm:p-5">
+      <div class="content-card members-card lg:col-span-2 min-w-0 rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5">
         <div class="card-toolbar flex flex-wrap items-center justify-between gap-3 mb-4">
           <div class="toolbar-title-group flex items-center gap-2 min-w-0">
             <div class="section-badge members-badge shrink-0">MEMBERS</div>
-            <h3 class="text-base font-semibold text-[var(--app-text)] m-0 truncate">Group Members & Assignments</h3>
+            <h3 class="text-base font-semibold text-app m-0 truncate">Group Members & Assignments</h3>
             <span class="count-pill shrink-0">{{ selected.members.length }} instances</span>
           </div>
         </div>
 
         <div class="members-list-wrap flex flex-col gap-3 min-w-0" *ngIf="selected.members.length > 0; else noMembersTemplate">
-          <div *ngFor="let member of selected.members" class="member-item-card min-w-0 p-3 sm:p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-nested-bg)]">
+          <div *ngFor="let member of selected.members" class="member-item-card min-w-0 p-3 sm:p-4 rounded-lg border border-app bg-app-nested">
             <div class="member-item-header flex flex-wrap justify-between items-center gap-2 mb-2.5">
               <div class="member-identity flex items-center gap-2.5 min-w-0">
                 <mat-icon class="member-avatar-icon text-[var(--app-code-text)] shrink-0">dns</mat-icon>
                 <div class="member-name-block min-w-0">
-                  <span class="member-id font-mono text-xs sm:text-sm font-semibold text-[var(--app-text)] truncate block">{{ member.id }}</span>
-                  <span class="member-last-seen flex items-center gap-1 text-[11px] text-[var(--app-text-muted)] mt-0.5">
+                  <span class="member-id font-mono text-xs sm:text-sm font-semibold text-app truncate block">{{ member.id }}</span>
+                  <span class="member-last-seen flex items-center gap-1 text-[11px] text-app-muted mt-0.5">
                     <mat-icon class="tiny-icon">access_time</mat-icon>
                     Heartbeat: {{ formatLastSeen(member.last_seen) }}
                   </span>
@@ -417,7 +417,7 @@
 
             <!-- Member Subscribed Topics -->
             <div class="member-details-row flex flex-wrap items-center gap-2 text-xs mb-2.5">
-              <span class="detail-label text-[var(--app-text-muted)] shrink-0">Subscribed Topics:</span>
+              <span class="detail-label text-app-muted shrink-0">Subscribed Topics:</span>
               <div class="topic-tags flex flex-wrap gap-1">
                 <span *ngFor="let topic of member.topics" class="topic-tag-chip font-mono text-[11px] truncate max-w-[160px]">
                   {{ topic }}
@@ -429,15 +429,15 @@
             </div>
 
             <!-- Member Partition Assignments -->
-            <div class="member-assignments-box bg-[var(--app-surface)] border border-[var(--app-border)] rounded-md p-2.5 min-w-0">
-              <div class="assignments-label flex items-center gap-1 text-[11px] font-semibold text-[var(--app-text-muted)] uppercase tracking-wider mb-1.5">
+            <div class="member-assignments-box bg-app-surface border border-app rounded-md p-2.5 min-w-0">
+              <div class="assignments-label flex items-center gap-1 text-[11px] font-semibold text-app-muted uppercase tracking-wider mb-1.5">
                 <mat-icon class="tiny-icon text-[var(--app-code-text)]">alt_route</mat-icon>
                 <span>Assigned Partitions:</span>
               </div>
 
               <div class="assignments-content flex flex-col gap-2">
                 <div *ngFor="let assignment of getMemberAssignments(member)" class="assignment-row flex flex-wrap items-center gap-2">
-                  <span class="assign-topic font-mono text-xs text-[var(--app-text)] shrink-0">{{ assignment.topic }}:</span>
+                  <span class="assign-topic font-mono text-xs text-app shrink-0">{{ assignment.topic }}:</span>
                   <div class="assign-partitions flex flex-wrap gap-1.5">
                     <span *ngFor="let p of assignment.partitions" class="partition-badge font-mono text-[11px]">
                       P-{{ p }}
@@ -448,7 +448,7 @@
                   </div>
                 </div>
 
-                <div *ngIf="getMemberAssignments(member).length === 0" class="no-assignments-msg flex items-center gap-1.5 text-xs text-[var(--app-text-muted)] italic">
+                <div *ngIf="getMemberAssignments(member).length === 0" class="no-assignments-msg flex items-center gap-1.5 text-xs text-app-muted italic">
                   <mat-icon class="tiny-icon">hourglass_empty</mat-icon>
                   <span>Awaiting coordinator partition rebalance</span>
                 </div>
@@ -459,9 +459,9 @@
 
         <ng-template #noMembersTemplate>
           <div class="empty-state-box small p-6 text-center">
-            <mat-icon class="empty-icon text-3xl text-[var(--app-text-muted)] mb-2">person_off</mat-icon>
-            <h4 class="text-sm font-semibold text-[var(--app-text)] m-0 mb-1">No Active Members</h4>
-            <p class="text-xs text-[var(--app-text-muted)] m-0">This group currently has 0 connected consumer instances. It remains registered until offset retention expires.</p>
+            <mat-icon class="empty-icon text-3xl text-app-muted mb-2">person_off</mat-icon>
+            <h4 class="text-sm font-semibold text-app m-0 mb-1">No Active Members</h4>
+            <p class="text-xs text-app-muted m-0">This group currently has 0 connected consumer instances. It remains registered until offset retention expires.</p>
           </div>
         </ng-template>
       </div>

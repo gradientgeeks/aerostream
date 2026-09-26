@@ -714,8 +714,8 @@
 
   &:hover {
     background: rgba(168, 85, 247, 0.22);
-    border-color: #c084fc;
-    color: #ffffff;
+    border-color: #a855f7;
+    color: #a855f7;
   }
 
   .schema-pill-icon {
@@ -738,9 +738,9 @@
     border-radius: 3px;
     font-weight: 700;
 
-    &.avro { background: rgba(168, 85, 247, 0.3); color: #e9d5ff; }
-    &.json { background: rgba(249, 115, 22, 0.3); color: #fdba74; }
-    &.protobuf { background: var(--app-primary-bg, rgba(0, 229, 255, 0.3)); color: var(--app-primary-text, #a5f3fc); }
+    &.avro { background: rgba(168, 85, 247, 0.3); color: #c084fc; }
+    &.json { background: rgba(249, 115, 22, 0.3); color: #fb923c; }
+    &.protobuf { background: var(--app-primary-bg, rgba(0, 229, 255, 0.3)); color: var(--app-primary-text, #0891b2); }
   }
 }
 
@@ -776,14 +776,14 @@
     font-size: 11px;
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    background: rgba(0, 229, 255, 0.1);
-    color: #38bdf8;
-    border: 1px solid rgba(0, 229, 255, 0.25);
+    background: var(--app-primary-bg, rgba(0, 229, 255, 0.1));
+    color: var(--app-primary-text, #38bdf8);
+    border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.25));
 
     &.compact {
-      background: rgba(255, 87, 34, 0.15);
-      color: #ff7043;
-      border-color: rgba(255, 87, 34, 0.35);
+      background: var(--app-secondary-bg, rgba(255, 87, 34, 0.15));
+      color: var(--app-secondary, #ff7043);
+      border-color: var(--app-secondary-border, rgba(255, 87, 34, 0.35));
     }
   }
 
@@ -796,7 +796,7 @@
     font-size: 11px;
     font-family: 'JetBrains Mono', monospace;
     background: rgba(168, 85, 247, 0.15);
-    color: #d8b4fe;
+    color: #a855f7;
     border: 1px solid rgba(168, 85, 247, 0.3);
     text-decoration: none;
 
@@ -804,13 +804,24 @@
       font-size: 13px;
       width: 13px;
       height: 13px;
-      color: #c084fc;
+      color: #a855f7;
     }
 
     &:hover {
       background: rgba(168, 85, 247, 0.25);
-      color: #ffffff;
+      color: #9333ea;
     }
+  }
+}
+
+:host-context(.dark-theme) {
+  .schema-pill:hover {
+    border-color: #c084fc;
+    color: #ffffff;
+  }
+
+  .schema-detail-tag:hover {
+    color: #ffffff;
   }
 }
 

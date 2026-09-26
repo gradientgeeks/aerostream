@@ -1,13 +1,13 @@
 <div class="dialog-wrapper w-full max-w-full min-w-0 box-border overflow-hidden">
   <!-- Header -->
-  <div class="dialog-header flex items-center justify-between gap-3 p-4 border-b border-[var(--app-border)]">
+  <div class="dialog-header flex items-center justify-between gap-3 p-4 border-b border-app">
     <div class="header-left flex items-center gap-3 min-w-0">
       <div class="header-icon shrink-0">
         <mat-icon>{{ isJson ? 'data_object' : 'notes' }}</mat-icon>
       </div>
       <div class="min-w-0">
-        <h2 mat-dialog-title class="truncate text-base sm:text-lg font-semibold m-0 text-[var(--app-text)]">Message Details</h2>
-        <div class="header-crumbs flex flex-wrap items-center gap-1.5 text-xs text-[var(--app-text-muted)] mt-1">
+        <h2 mat-dialog-title class="truncate text-base sm:text-lg font-semibold m-0 text-app">Message Details</h2>
+        <div class="header-crumbs flex flex-wrap items-center gap-1.5 text-xs text-app-muted mt-1">
           <span class="crumb topic font-medium text-[var(--app-code-text)] truncate max-w-[140px] sm:max-w-xs">{{ data.topic }}</span>
           <span class="separator">/</span>
           <span class="crumb">Partition {{ data.partition }}</span>
@@ -26,24 +26,24 @@
   <mat-dialog-content class="max-w-full min-w-0 overflow-x-hidden p-4">
     <!-- Metadata Bar -->
     <div class="metadata-bar flex flex-wrap gap-2 sm:gap-3 py-3">
-      <div class="meta-badge flex items-center gap-1.5 text-xs bg-[var(--app-nested-bg)] px-3 py-1.5 rounded-md border border-[var(--app-border)]">
-        <span class="label text-[var(--app-text-muted)]">Format:</span>
-        <span class="value format-tag font-medium text-[var(--app-text)]" [class.json-tag]="isJson">{{ isJson ? 'JSON' : 'Plain Text' }}</span>
+      <div class="meta-badge flex items-center gap-1.5 text-xs bg-app-nested px-3 py-1.5 rounded-md border border-app">
+        <span class="label text-app-muted">Format:</span>
+        <span class="value format-tag font-medium text-app" [class.json-tag]="isJson">{{ isJson ? 'JSON' : 'Plain Text' }}</span>
       </div>
-      <div class="meta-badge flex items-center gap-1.5 text-xs bg-[var(--app-nested-bg)] px-3 py-1.5 rounded-md border border-[var(--app-border)]">
-        <span class="label text-[var(--app-text-muted)]">Payload Size:</span>
-        <span class="value font-medium text-[var(--app-text)]">{{ data.length }} bytes</span>
+      <div class="meta-badge flex items-center gap-1.5 text-xs bg-app-nested px-3 py-1.5 rounded-md border border-app">
+        <span class="label text-app-muted">Payload Size:</span>
+        <span class="value font-medium text-app">{{ data.length }} bytes</span>
       </div>
-      <div class="meta-badge flex items-center gap-1.5 text-xs bg-[var(--app-nested-bg)] px-3 py-1.5 rounded-md border border-[var(--app-border)]">
-        <span class="label text-[var(--app-text-muted)]">Lines:</span>
-        <span class="value font-medium text-[var(--app-text)]">{{ lineCount }}</span>
+      <div class="meta-badge flex items-center gap-1.5 text-xs bg-app-nested px-3 py-1.5 rounded-md border border-app">
+        <span class="label text-app-muted">Lines:</span>
+        <span class="value font-medium text-app">{{ lineCount }}</span>
       </div>
     </div>
 
     <!-- Payload Content Box -->
-    <div class="content-box w-full max-w-full min-w-0 rounded-lg border border-[var(--app-border)] bg-[var(--app-code-bg)] overflow-hidden">
-      <div class="content-toolbar flex items-center justify-between px-3 py-2 bg-[var(--app-surface)] border-b border-[var(--app-border)]">
-        <span class="toolbar-title text-xs font-semibold uppercase tracking-wider text-[var(--app-text-muted)]">Payload Content</span>
+    <div class="content-box w-full max-w-full min-w-0 rounded-lg border border-app bg-[var(--app-code-bg)] overflow-hidden">
+      <div class="content-toolbar flex items-center justify-between px-3 py-2 bg-app-surface border-b border-app">
+        <span class="toolbar-title text-xs font-semibold uppercase tracking-wider text-app-muted">Payload Content</span>
         <button mat-stroked-button class="copy-btn h-7 text-xs px-2" (click)="copyPayload()">
           <mat-icon class="!text-sm !w-3.5 !h-3.5 mr-1">content_copy</mat-icon>
           <span>Copy</span>
@@ -53,7 +53,7 @@
     </div>
   </mat-dialog-content>
 
-  <mat-dialog-actions align="end" class="flex flex-wrap gap-2 p-4 border-t border-[var(--app-border)]">
+  <mat-dialog-actions align="end" class="flex flex-wrap gap-2 p-4 border-t border-app">
     <button mat-button (click)="onClose()">Close</button>
     <button mat-flat-button color="primary" (click)="copyPayload()">
       <mat-icon class="mr-1">content_copy</mat-icon>
