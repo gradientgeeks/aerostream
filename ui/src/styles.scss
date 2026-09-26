@@ -980,3 +980,20 @@ mat-dialog-actions,
     padding: 10px 8px !important;
   }
 }
+
+/* ==========================================================================
+   Angular Material Sidenav & Drawer Global Overrides (Zero Rounded Corners)
+   ========================================================================== */
+.mat-drawer,
+.mat-drawer-container,
+.mat-drawer-inner-container,
+.mat-sidenav,
+.mat-sidenav-container,
+.mat-sidenav-content,
+.app-sidebar,
+.mdc-drawer {
+  border-radius: 0 !important;
+  -webkit-border-radius: 0 !important;
+  --mdc-drawer-container-shape: 0 !important;
+  --mat-sidenav-container-shape: 0 !important;
+}
