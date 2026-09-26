@@ -3,27 +3,46 @@ package rest
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/consensus"
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/schemaregistry"
 )
 
 type Server struct {
-	raftNode *consensus.RaftNode
-	httpAddr string
+	raftNode       *consensus.RaftNode
+	httpAddr       string
+	schemaRegistry *schemaregistry.Registry
 }
 
-func NewServer(raftNode *consensus.RaftNode, httpAddr string) *Server {
-	return &Server{
-		raftNode: raftNode,
-		httpAddr: httpAddr,
+func NewServer(raftNode *consensus.RaftNode, httpAddr string, registry ...*schemaregistry.Registry) *Server {
+	var reg *schemaregistry.Registry
+	if len(registry) > 0 && registry[0] != nil {
+		reg = registry[0]
+	} else {
+		reg = schemaregistry.NewRegistry()
 	}
+	return &Server{
+		raftNode:       raftNode,
+		httpAddr:       httpAddr,
+		schemaRegistry: reg,
+	}
+}
+
+func (s *Server) Registry() *schemaregistry.Registry {
+	return s.schemaRegistry
+}
+
+func (s *Server) SetSchemaRegistry(r *schemaregistry.Registry) {
+	s.schemaRegistry = r
 }
 
 func (s *Server) enableCORS(w http.ResponseWriter, r *http.Request) bool {
@@ -45,6 +64,14 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/lag", s.handleLag)
 	mux.HandleFunc("/api/produce", s.handleProduce)
 	mux.HandleFunc("/api/messages", s.handleMessages)
+
+	// Schema Registry endpoints (Confluent-compatible)
+	mux.HandleFunc("/subjects", s.handleSubjects)
+	mux.HandleFunc("/subjects/", s.handleSubjects)
+	mux.HandleFunc("/schemas/", s.handleSchemas)
+	mux.HandleFunc("/compatibility/", s.handleCompatibility)
+	mux.HandleFunc("/config", s.handleConfig)
+	mux.HandleFunc("/config/", s.handleConfig)
 }
 
 func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
@@ -501,3 +528,336 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 		"count":     len(messages),
 	})
 }
+
+type schemaRequestPayload struct {
+	Schema     json.RawMessage `json:"schema"`
+	SchemaType string          `json:"schemaType"`
+	Type       string          `json:"type"`
+}
+
+func (p *schemaRequestPayload) getSchemaType() string {
+	if p.SchemaType != "" {
+		return p.SchemaType
+	}
+	if p.Type != "" {
+		return p.Type
+	}
+	return schemaregistry.TypeAvro
+}
+
+func (p *schemaRequestPayload) getSchemaString() string {
+	raw := strings.TrimSpace(string(p.Schema))
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "\"") && strings.HasSuffix(raw, "\"") {
+		var s string
+		if err := json.Unmarshal(p.Schema, &s); err == nil {
+			return s
+		}
+	}
+	return raw
+}
+
+func (s *Server) handleSubjects(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	path := strings.Trim(r.URL.Path, "/")
+	if path == "subjects" {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+			return
+		}
+		subjects := s.schemaRegistry.ListSubjects()
+		json.NewEncoder(w).Encode(subjects)
+		return
+	}
+
+	if !strings.HasPrefix(path, "subjects/") {
+		writeError(w, http.StatusNotFound, 404, "Not found")
+		return
+	}
+
+	restPath := strings.TrimPrefix(path, "subjects/")
+	idx := strings.Index(restPath, "/versions")
+	if idx == -1 {
+		writeError(w, http.StatusNotFound, 404, "Not found")
+		return
+	}
+
+	rawSubject := restPath[:idx]
+	subject, err := url.PathUnescape(rawSubject)
+	if err != nil || subject == "" {
+		writeError(w, http.StatusBadRequest, 400, "Invalid subject")
+		return
+	}
+
+	after := restPath[idx+len("/versions"):]
+	if after == "" || after == "/" {
+		switch r.Method {
+		case http.MethodGet:
+			if !s.schemaRegistry.HasSubject(subject) {
+				writeError(w, http.StatusNotFound, 40401, fmt.Sprintf("Subject '%s' not found.", subject))
+				return
+			}
+			versions := s.schemaRegistry.ListVersions(subject)
+			json.NewEncoder(w).Encode(versions)
+			return
+
+		case http.MethodPost:
+			var req schemaRequestPayload
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeError(w, http.StatusBadRequest, 400, fmt.Sprintf("Invalid request payload: %v", err))
+				return
+			}
+			schemaStr := req.getSchemaString()
+			if schemaStr == "" {
+				writeError(w, http.StatusUnprocessableEntity, 42201, "Schema cannot be empty")
+				return
+			}
+			id, _, err := s.schemaRegistry.RegisterSchema(subject, req.getSchemaType(), schemaStr)
+			if err != nil {
+				if errors.Is(err, schemaregistry.ErrIncompatibleSchema) {
+					writeError(w, http.StatusConflict, 409, fmt.Sprintf("Schema being registered is incompatible with an earlier schema: %v", err))
+					return
+				}
+				if errors.Is(err, schemaregistry.ErrInvalidSchema) {
+					writeError(w, http.StatusUnprocessableEntity, 42201, fmt.Sprintf("Invalid schema: %v", err))
+					return
+				}
+				writeError(w, http.StatusInternalServerError, 500, fmt.Sprintf("Failed to register schema: %v", err))
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": id,
+			})
+			return
+
+		default:
+			writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+			return
+		}
+	}
+
+	versionStr := strings.TrimPrefix(after, "/")
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+		return
+	}
+
+	var schema *schemaregistry.Schema
+	if strings.ToLower(versionStr) == "latest" {
+		schema, err = s.schemaRegistry.GetLatestSchema(subject)
+	} else {
+		v, parseErr := strconv.Atoi(versionStr)
+		if parseErr != nil {
+			writeError(w, http.StatusNotFound, 40402, fmt.Sprintf("Invalid version: %s", versionStr))
+			return
+		}
+		schema, err = s.schemaRegistry.GetSchemaByVersion(subject, v)
+	}
+
+	if err != nil {
+		if errors.Is(err, schemaregistry.ErrSubjectNotFound) {
+			writeError(w, http.StatusNotFound, 40401, fmt.Sprintf("Subject '%s' not found.", subject))
+			return
+		}
+		if errors.Is(err, schemaregistry.ErrVersionNotFound) {
+			writeError(w, http.StatusNotFound, 40402, fmt.Sprintf("Version %s not found for subject '%s'.", versionStr, subject))
+			return
+		}
+		writeError(w, http.StatusInternalServerError, 500, err.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode(schema)
+}
+
+func (s *Server) handleSchemas(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+		return
+	}
+
+	path := strings.Trim(r.URL.Path, "/")
+	if !strings.HasPrefix(path, "schemas/ids/") {
+		writeError(w, http.StatusNotFound, 404, "Not found")
+		return
+	}
+
+	idStr := strings.TrimPrefix(path, "schemas/ids/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, 400, "Invalid schema ID")
+		return
+	}
+
+	sc, err := s.schemaRegistry.GetSchemaByID(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, 40403, fmt.Sprintf("Schema %d not found", id))
+		return
+	}
+
+	resp := map[string]interface{}{
+		"schema": sc.Schema,
+		"id":     sc.ID,
+	}
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleCompatibility(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+		return
+	}
+
+	path := strings.Trim(r.URL.Path, "/")
+	if !strings.HasPrefix(path, "compatibility/subjects/") {
+		writeError(w, http.StatusNotFound, 404, "Not found")
+		return
+	}
+
+	restPath := strings.TrimPrefix(path, "compatibility/subjects/")
+	idx := strings.Index(restPath, "/versions")
+	if idx == -1 {
+		writeError(w, http.StatusBadRequest, 400, "Invalid compatibility path")
+		return
+	}
+
+	rawSubject := restPath[:idx]
+	subject, err := url.PathUnescape(rawSubject)
+	if err != nil || subject == "" {
+		writeError(w, http.StatusBadRequest, 400, "Invalid subject")
+		return
+	}
+
+	versionStr := "latest"
+	if strings.HasPrefix(restPath[idx:], "/versions/") {
+		versionStr = restPath[idx+len("/versions/"):]
+	}
+	var req schemaRequestPayload
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, 400, fmt.Sprintf("Invalid request payload: %v", err))
+		return
+	}
+	schemaStr := req.getSchemaString()
+	schemaType := req.getSchemaType()
+
+	var versionNum int
+	if strings.ToLower(versionStr) == "latest" {
+		versionNum = 0
+	} else {
+		v, parseErr := strconv.Atoi(versionStr)
+		if parseErr != nil {
+			writeError(w, http.StatusNotFound, 40402, fmt.Sprintf("Invalid version: %s", versionStr))
+			return
+		}
+		versionNum = v
+	}
+
+	if !s.schemaRegistry.HasSubject(subject) {
+		writeError(w, http.StatusNotFound, 40401, fmt.Sprintf("Subject '%s' not found.", subject))
+		return
+	}
+
+	isCompat, testErr := s.schemaRegistry.TestCompatibilityWithVersion(subject, versionNum, schemaType, schemaStr)
+	if testErr != nil {
+		if errors.Is(testErr, schemaregistry.ErrVersionNotFound) {
+			writeError(w, http.StatusNotFound, 40402, testErr.Error())
+			return
+		}
+		if errors.Is(testErr, schemaregistry.ErrInvalidSchema) {
+			writeError(w, http.StatusUnprocessableEntity, 42201, testErr.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, 500, testErr.Error())
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"is_compatible": isCompat,
+	})
+}
+
+func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	path := strings.Trim(r.URL.Path, "/")
+	var subject string
+	if path != "config" && strings.HasPrefix(path, "config/") {
+		rawSubject := strings.TrimPrefix(path, "config/")
+		var err error
+		subject, err = url.PathUnescape(rawSubject)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, 400, "Invalid subject in config path")
+			return
+		}
+	} else if path != "config" {
+		writeError(w, http.StatusNotFound, 404, "Not found")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		compat := s.schemaRegistry.GetCompatibility(subject)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"compatibilityLevel": compat,
+			"compatibility":      compat,
+		})
+		return
+
+	case http.MethodPut:
+		var req struct {
+			Compatibility      string `json:"compatibility"`
+			CompatibilityLevel string `json:"compatibilityLevel"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, 400, fmt.Sprintf("Invalid JSON body: %v", err))
+			return
+		}
+		levelStr := req.Compatibility
+		if levelStr == "" {
+			levelStr = req.CompatibilityLevel
+		}
+		level := schemaregistry.CompatibilityLevel(strings.ToUpper(strings.TrimSpace(levelStr)))
+		if err := s.schemaRegistry.SetCompatibility(subject, level); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, 42203, fmt.Sprintf("Invalid compatibility level: %v", err))
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"compatibility":      level,
+			"compatibilityLevel": level,
+		})
+		return
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+		return
+	}
+}
+
+func writeError(w http.ResponseWriter, statusCode int, errorCode int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"error_code": errorCode,
+		"message":    message,
+	})
+}
+

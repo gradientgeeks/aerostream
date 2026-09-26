@@ -8,7 +8,10 @@ pub mod handlers;
 
 pub use handlers::{
     handle_fetch, handle_produce, parse_records, encode_records_batch,
-    encode_single_record_batch, FetchPartition, FetchPartitionResponse,
+    encode_single_record_batch, encode_idempotent_records_batch,
+    encode_single_idempotent_record_batch, extract_batch_producer_info,
+    allocate_producer_id, handle_init_producer_id, handle_init_producer_id_sync,
+    FetchPartition, FetchPartitionResponse,
     FetchRequest, FetchResponse, FetchTopic, FetchTopicResponse,
     KafkaRecord, PartitionProduceData, PartitionProduceResponse,
     PartitionRecords, ProduceRequest, ProduceResponse, TopicProduceData,
@@ -21,6 +24,7 @@ pub use protocol::{
     write_nullable_string, write_string, write_unsigned_varint, ApiKey, ApiVersionKey,
     ApiVersionsRequest, ApiVersionsResponse, BrokerMetadata, KafkaProtocolError, KafkaRequest,
     KafkaRequestBody, KafkaResponse, KafkaResponseBody, MetadataRequest, MetadataResponse,
+    InitProducerIdRequest, InitProducerIdResponse,
     PartitionMetadata, RequestHeader, ResponseHeader, TopicMetadata,
 };
 
@@ -330,7 +334,7 @@ mod tests {
         assert_eq!(resp.header.correlation_id, 777);
         if let KafkaResponseBody::ApiVersions(v_resp) = resp.body {
             assert_eq!(v_resp.error_code, 0);
-            assert_eq!(v_resp.api_keys.len(), 4);
+            assert_eq!(v_resp.api_keys.len(), 5);
         } else {
             panic!("Expected ApiVersions response body");
         }
@@ -391,7 +395,7 @@ mod tests {
 
         let decoded_api_versions = ApiVersionsResponse::decode(&mut read_resp, 0).unwrap();
         assert_eq!(decoded_api_versions.error_code, 0);
-        assert_eq!(decoded_api_versions.api_keys.len(), 4);
+        assert_eq!(decoded_api_versions.api_keys.len(), 5);
     }
 
     #[test]

@@ -4,6 +4,7 @@ import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSliderModule } from '@angular/material/slider';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -19,6 +20,7 @@ import { ApiService } from '../../services/api.service';
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatSliderModule,
     MatButtonModule,
     MatIconModule,
@@ -46,7 +48,8 @@ export class CreateTopicDialogComponent {
       ]
     ],
     partitions: [3, [Validators.required, Validators.min(1), Validators.max(100)]],
-    replication_factor: [2, [Validators.required, Validators.min(1), Validators.max(10)]]
+    replication_factor: [2, [Validators.required, Validators.min(1), Validators.max(10)]],
+    cleanup_policy: ['delete', [Validators.required]]
   });
 
   onSubmit(): void {
@@ -61,7 +64,8 @@ export class CreateTopicDialogComponent {
     this.apiService.createTopic({
       name: val.name.trim(),
       partitions: Number(val.partitions),
-      replication_factor: Number(val.replication_factor)
+      replication_factor: Number(val.replication_factor),
+      cleanup_policy: val.cleanup_policy
     }).subscribe({
       next: (res) => {
         this.isSubmitting.set(false);

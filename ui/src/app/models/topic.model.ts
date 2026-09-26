@@ -13,12 +13,16 @@ export interface TopicInfo {
   partitionCount?: number;
   replicationFactor?: number;
   highWatermarkTotal?: number;
+  cleanup_policy?: 'delete' | 'compact';
+  schema_subject?: string;
+  schema_type?: string;
 }
 
 export interface CreateTopicRequest {
   name: string;
   partitions: number;
   replication_factor: number;
+  cleanup_policy?: 'delete' | 'compact';
 }
 
 export interface CreateTopicResponse {

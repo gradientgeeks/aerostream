@@ -15,6 +15,7 @@ import (
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/consensus"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/grpcserver"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/rest"
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/schemaregistry"
 	pb "github.com/gradientgeeks/aerostream/go-controller/proto/aeromq"
 	"google.golang.org/grpc"
 )
@@ -124,8 +125,9 @@ func main() {
 			len(meta.Brokers), len(meta.Topics))
 	})
 
-	// Register REST API endpoints for Web UI
-	restServer := rest.NewServer(raftNode, cfg.HTTPAddr)
+	// Register REST API endpoints for Web UI and Schema Registry
+	schemaReg := schemaregistry.NewRegistry()
+	restServer := rest.NewServer(raftNode, cfg.HTTPAddr, schemaReg)
 	restServer.RegisterRoutes(http.DefaultServeMux)
 
 	// Serve Web UI Console if ui-dir is provided and valid

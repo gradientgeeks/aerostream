@@ -1,15 +1,18 @@
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tracing::{debug, error, warn};
 
-use crate::kafka::protocol::{
+pub use crate::kafka::protocol::{
     read_nullable_string, read_string, write_nullable_string, write_string,
     read_unsigned_varint, write_unsigned_varint,
     encode_response_envelope, KafkaProtocolError, RequestHeader,
+    InitProducerIdRequest, InitProducerIdResponse,
 };
 use crate::log::LogManager;
+use crate::log::producer_state::SequenceCheckResult;
 
 // ---------------------------------------------------------------------------
 // CRC32 (IEEE 802.3) and CRC32C (Castagnoli) for Kafka Records
@@ -375,8 +378,18 @@ pub fn encode_single_record_batch(base_offset: i64, record: &KafkaRecord) -> Vec
     encode_records_batch(base_offset, std::slice::from_ref(record))
 }
 
-/// Encodes a list of `KafkaRecord`s into a standard Kafka `RecordBatch` (magic 2).
 pub fn encode_records_batch(base_offset: i64, records: &[KafkaRecord]) -> Vec<u8> {
+    encode_idempotent_records_batch(base_offset, -1, -1, -1, records)
+}
+
+/// Encodes a list of `KafkaRecord`s into a standard Kafka `RecordBatch` (magic 2) with PID and sequence.
+pub fn encode_idempotent_records_batch(
+    base_offset: i64,
+    producer_id: i64,
+    producer_epoch: i16,
+    base_sequence: i32,
+    records: &[KafkaRecord],
+) -> Vec<u8> {
     if records.is_empty() {
         return Vec::new();
     }
@@ -426,11 +439,6 @@ pub fn encode_records_batch(base_offset: i64, records: &[KafkaRecord]) -> Vec<u8
         recs_buf.extend_from_slice(&rec_inner);
     }
 
-    // RecordBatch header length from partition_leader_epoch to end of batch
-    // leader_epoch(4) + magic(1) + crc(4) + attributes(2) + last_offset_delta(4)
-    // + base_timestamp(8) + max_timestamp(8) + producer_id(8) + producer_epoch(2)
-    // + base_sequence(4) + records_count(4) + recs_buf.len()
-    // = 49 + recs_buf.len()
     let batch_length = 49 + recs_buf.len() as i32;
 
     let mut batch = Vec::with_capacity(12 + batch_length as usize);
@@ -449,9 +457,9 @@ pub fn encode_records_batch(base_offset: i64, records: &[KafkaRecord]) -> Vec<u8
     batch.extend_from_slice(&last_offset_delta.to_be_bytes()); // 23..27: last_offset_delta
     batch.extend_from_slice(&first_ts.to_be_bytes()); // 27..35: base_timestamp
     batch.extend_from_slice(&max_ts.to_be_bytes()); // 35..43: max_timestamp
-    batch.extend_from_slice(&(-1i64).to_be_bytes()); // 43..51: producer_id
-    batch.extend_from_slice(&(-1i16).to_be_bytes()); // 51..53: producer_epoch
-    batch.extend_from_slice(&(-1i32).to_be_bytes()); // 53..57: base_sequence
+    batch.extend_from_slice(&producer_id.to_be_bytes()); // 43..51: producer_id
+    batch.extend_from_slice(&producer_epoch.to_be_bytes()); // 51..53: producer_epoch
+    batch.extend_from_slice(&base_sequence.to_be_bytes()); // 53..57: base_sequence
     batch.extend_from_slice(&(records.len() as i32).to_be_bytes()); // 57..61: records_count
     batch.extend_from_slice(&recs_buf); // 61..end: records
 
@@ -460,6 +468,66 @@ pub fn encode_records_batch(base_offset: i64, records: &[KafkaRecord]) -> Vec<u8
     batch[crc_offset..crc_offset + 4].copy_from_slice(&computed_crc.to_be_bytes());
 
     batch
+}
+
+/// Encodes a single `KafkaRecord` into a self-contained modern Kafka `RecordBatch` (magic 2) with PID and sequence.
+pub fn encode_single_idempotent_record_batch(
+    base_offset: i64,
+    producer_id: i64,
+    producer_epoch: i16,
+    base_sequence: i32,
+    record: &KafkaRecord,
+) -> Vec<u8> {
+    encode_idempotent_records_batch(
+        base_offset,
+        producer_id,
+        producer_epoch,
+        base_sequence,
+        std::slice::from_ref(record),
+    )
+}
+
+/// Extracts producer ID, epoch, base sequence, and record count from a modern RecordBatch (magic 2).
+pub fn extract_batch_producer_info(data: &[u8]) -> Option<(i64, i16, i32, i32)> {
+    if data.len() < 61 || data[16] != 2 {
+        return None;
+    }
+    let producer_id = i64::from_be_bytes(data[43..51].try_into().ok()?);
+    let producer_epoch = i16::from_be_bytes(data[51..53].try_into().ok()?);
+    let base_sequence = i32::from_be_bytes(data[53..57].try_into().ok()?);
+    let records_count = i32::from_be_bytes(data[57..61].try_into().ok()?);
+    Some((producer_id, producer_epoch, base_sequence, records_count))
+}
+
+// ---------------------------------------------------------------------------
+// InitProducerId (ApiKey 22) Monotonic ID Allocation & Handlers
+// ---------------------------------------------------------------------------
+
+static NEXT_PRODUCER_ID: AtomicI64 = AtomicI64::new(1000);
+
+/// Assign monotonically increasing producer_id (starting at 1000).
+pub fn allocate_producer_id() -> i64 {
+    NEXT_PRODUCER_ID.fetch_add(1, Ordering::SeqCst)
+}
+
+/// Synchronous handler for InitProducerId request.
+pub fn handle_init_producer_id_sync(_req: &InitProducerIdRequest) -> InitProducerIdResponse {
+    let producer_id = allocate_producer_id();
+    InitProducerIdResponse {
+        throttle_time_ms: 0,
+        error_code: 0,
+        producer_id,
+        producer_epoch: 0,
+    }
+}
+
+/// Asynchronous handler for Kafka InitProducerId request frame.
+pub async fn handle_init_producer_id(
+    header: &RequestHeader,
+    mut body: Bytes,
+) -> Result<InitProducerIdResponse, Box<dyn std::error::Error + Send + Sync>> {
+    let req = InitProducerIdRequest::decode(&mut body, header.api_version)?;
+    Ok(handle_init_producer_id_sync(&req))
 }
 
 // ---------------------------------------------------------------------------
@@ -1157,6 +1225,55 @@ pub async fn handle_produce(
 
             let mut guard = part_log.lock().await;
             let mut base_offset = guard.next_offset as i64;
+            let current_next_offset = guard.next_offset;
+
+            let producer_info = extract_batch_producer_info(&part_entry.records);
+            if let Some((producer_id, epoch, base_sequence, record_count)) = producer_info {
+                if producer_id >= 0 && base_sequence >= 0 {
+                    let seq_check = guard.producer_tracker.check_and_update_sequence(
+                        producer_id,
+                        epoch,
+                        base_sequence,
+                        record_count,
+                        current_next_offset,
+                    );
+                    match seq_check {
+                        SequenceCheckResult::Duplicate { last_offset } => {
+                            debug!(
+                                "[AeroMQ Kafka] Duplicate sequence {} for producer_id {}, returning cached offset {}",
+                                base_sequence, producer_id, last_offset
+                            );
+                            part_responses.push(PartitionProduceResponse {
+                                partition,
+                                error_code: 0,
+                                base_offset: last_offset as i64,
+                                log_append_time: -1,
+                                log_start_offset: 0,
+                                error_message: None,
+                            });
+                            continue;
+                        }
+                        SequenceCheckResult::OutOfOrder { error_code } => {
+                            warn!(
+                                "[AeroMQ Kafka] Out of order sequence {} for producer_id {} (error {})",
+                                base_sequence, producer_id, error_code
+                            );
+                            part_responses.push(PartitionProduceResponse {
+                                partition,
+                                error_code, // 45: OutOfOrderSequenceNumber
+                                base_offset: -1,
+                                log_append_time: -1,
+                                log_start_offset: 0,
+                                error_message: Some("OutOfOrderSequenceNumber".to_string()),
+                            });
+                            continue;
+                        }
+                        SequenceCheckResult::ValidNext => {
+                            // Proceed to append!
+                        }
+                    }
+                }
+            }
 
             if records.is_empty() {
                 // Empty produce / heartbeat record
@@ -1172,11 +1289,25 @@ pub async fn handle_produce(
             }
 
             let mut first_assigned = None;
-            for rec in &records {
+            for (i, rec) in records.iter().enumerate() {
                 let next_off = guard.next_offset as i64;
                 // Encode record as a valid modern RecordBatch so that it can be
                 // served directly with zero-copy on subsequent Kafka Fetch requests!
-                let encoded_batch = encode_single_record_batch(next_off, rec);
+                let encoded_batch = if let Some((pid, epoch, base_seq, _)) = producer_info {
+                    if pid >= 0 && base_seq >= 0 {
+                        encode_single_idempotent_record_batch(
+                            next_off,
+                            pid,
+                            epoch,
+                            base_seq + i as i32,
+                            rec,
+                        )
+                    } else {
+                        encode_single_record_batch(next_off, rec)
+                    }
+                } else {
+                    encode_single_record_batch(next_off, rec)
+                };
                 let assigned_offset = guard.append(&encoded_batch)?;
                 if first_assigned.is_none() {
                     first_assigned = Some(assigned_offset as i64);
@@ -1622,6 +1753,129 @@ mod tests {
                 assert_eq!(fetched_records[0].value.as_deref(), Some(&b"purchase-item-99"[..]));
             }
             ZeroCopyFetchEnvelope::Buffered(_) => panic!("Expected ZeroCopy split"),
+        }
+
+        // Clean up
+        let _ = fs::remove_dir_all(&test_dir);
+    }
+
+    #[tokio::test]
+    async fn test_init_producer_id_handler_monotonic_pid() {
+        let header = RequestHeader::new(22, 2, 9999, Some("test-client".to_string()));
+        let req1 = InitProducerIdRequest {
+            transactional_id: None,
+            transaction_timeout_ms: 10000,
+            producer_id: -1,
+            producer_epoch: -1,
+        };
+        let mut buf1 = BytesMut::new();
+        req1.encode(2, &mut buf1);
+
+        let resp1 = handle_init_producer_id(&header, buf1.freeze()).await.unwrap();
+        assert_eq!(resp1.error_code, 0);
+        assert!(resp1.producer_id >= 1000);
+        assert_eq!(resp1.producer_epoch, 0);
+
+        let req2 = InitProducerIdRequest {
+            transactional_id: None,
+            transaction_timeout_ms: 10000,
+            producer_id: -1,
+            producer_epoch: -1,
+        };
+        let mut buf2 = BytesMut::new();
+        req2.encode(2, &mut buf2);
+
+        let resp2 = handle_init_producer_id(&header, buf2.freeze()).await.unwrap();
+        assert_eq!(resp2.error_code, 0);
+        assert_eq!(resp2.producer_id, resp1.producer_id + 1);
+        assert_eq!(resp2.producer_epoch, 0);
+    }
+
+    #[tokio::test]
+    async fn test_idempotent_produce_sequence_progression_duplicate_and_out_of_order() {
+        let test_dir = PathBuf::from("./data/test_kafka_idempotent_produce");
+        let _ = fs::remove_dir_all(&test_dir);
+        fs::create_dir_all(&test_dir).unwrap();
+
+        let log_manager = Arc::new(LogManager::new(&test_dir, 1).with_limits(1024 * 1024, None, None));
+        let topic = "idempotent-topic";
+        let partition = 0i32;
+
+        let pid = allocate_producer_id();
+        let epoch = 0i16;
+
+        let produce_batch = |seq: i32, payload: &[u8]| -> ProduceRequest {
+            let rec = KafkaRecord::new(None, Some(payload.to_vec()));
+            let batch_bytes = encode_idempotent_records_batch(0, pid, epoch, seq, &[rec]);
+            ProduceRequest {
+                transactional_id: None,
+                acks: 1,
+                timeout_ms: 1000,
+                topic_data: vec![TopicProduceData {
+                    topic: topic.to_string(),
+                    partition_data: vec![PartitionProduceData {
+                        partition,
+                        records: Bytes::from(batch_bytes),
+                    }],
+                }],
+            }
+        };
+
+        // 1. Sequence Progression: 0, 1, 2 accepted
+        for seq in 0..=2 {
+            let req = produce_batch(seq, format!("msg-seq-{}", seq).as_bytes());
+            let mut buf = BytesMut::new();
+            req.encode(7, &mut buf);
+            let header = RequestHeader::new(0, 7, 2000 + seq, Some("idempotent-producer".to_string()));
+            let resp = handle_produce(&header, buf.freeze(), &log_manager).await.unwrap();
+
+            assert_eq!(resp.responses.len(), 1);
+            let part_resp = &resp.responses[0].partition_responses[0];
+            assert_eq!(part_resp.error_code, 0, "Sequence {} should be accepted", seq);
+            assert_eq!(part_resp.base_offset, seq as i64, "Sequence {} should have offset {}", seq, seq);
+        }
+
+        // Verify partition log contains exactly 3 records (next_offset == 3)
+        let part_log = log_manager.get_partition(topic, partition as u32).await.unwrap();
+        {
+            let guard = part_log.lock().await;
+            assert_eq!(guard.next_offset, 3);
+        }
+
+        // 2. Duplicate Sequence: retrying sequence 1 does NOT append duplicate record, returns cached offset
+        let dup_req = produce_batch(1, b"msg-seq-1-retry");
+        let mut dup_buf = BytesMut::new();
+        dup_req.encode(7, &mut dup_buf);
+        let dup_header = RequestHeader::new(0, 7, 3001, Some("idempotent-producer".to_string()));
+        let dup_resp = handle_produce(&dup_header, dup_buf.freeze(), &log_manager).await.unwrap();
+
+        assert_eq!(dup_resp.responses.len(), 1);
+        let dup_part_resp = &dup_resp.responses[0].partition_responses[0];
+        assert_eq!(dup_part_resp.error_code, 0, "Duplicate sequence should return success (error 0)");
+        assert_eq!(dup_part_resp.base_offset, 1, "Duplicate sequence 1 must return cached offset 1");
+
+        // Verify partition log was NOT appended (next_offset is STILL 3)
+        {
+            let guard = part_log.lock().await;
+            assert_eq!(guard.next_offset, 3, "Duplicate record must NOT be appended to disk");
+        }
+
+        // 3. Out of Order Sequence: sequence 5 after sequence 2 (or 1) returns OutOfOrder error (45)
+        let ooo_req = produce_batch(5, b"msg-seq-5-gap");
+        let mut ooo_buf = BytesMut::new();
+        ooo_req.encode(7, &mut ooo_buf);
+        let ooo_header = RequestHeader::new(0, 7, 3005, Some("idempotent-producer".to_string()));
+        let ooo_resp = handle_produce(&ooo_header, ooo_buf.freeze(), &log_manager).await.unwrap();
+
+        assert_eq!(ooo_resp.responses.len(), 1);
+        let ooo_part_resp = &ooo_resp.responses[0].partition_responses[0];
+        assert_eq!(ooo_part_resp.error_code, 45, "Out of order sequence must return error code 45 (OutOfOrderSequenceNumber)");
+        assert_eq!(ooo_part_resp.base_offset, -1);
+
+        // Verify partition log still untouched
+        {
+            let guard = part_log.lock().await;
+            assert_eq!(guard.next_offset, 3, "Out of order sequence must NOT be appended to disk");
         }
 
         // Clean up

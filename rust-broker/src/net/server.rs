@@ -271,6 +271,35 @@ async fn handle_connection(
                 // Append to partition log
                 let part_log = log_manager.get_partition(&req.topic, req.partition).await?;
                 let mut log_guard = part_log.lock().await;
+
+                // When producer_id >= 0 and base_sequence >= 0, check ProducerStateTracker
+                if let Some((producer_id, epoch, base_sequence, record_count)) =
+                    crate::kafka::handlers::extract_batch_producer_info(req.payload)
+                {
+                    if producer_id >= 0 && base_sequence >= 0 {
+                        let next_off = log_guard.next_offset;
+                        match log_guard.producer_tracker.check_and_update_sequence(
+                            producer_id,
+                            epoch,
+                            base_sequence,
+                            record_count,
+                            next_off,
+                        ) {
+                            crate::log::producer_state::SequenceCheckResult::Duplicate { last_offset } => {
+                                // On Duplicate: bypass log append and return success with previous offset
+                                stream.write_all(&encode_produce_ack(last_offset)).await?;
+                                continue;
+                            }
+                            crate::log::producer_state::SequenceCheckResult::OutOfOrder { .. } => {
+                                // Status 45 = OutOfOrderSequenceNumber
+                                stream.write_all(&[0xAE, 0x01, 45]).await?;
+                                continue;
+                            }
+                            crate::log::producer_state::SequenceCheckResult::ValidNext => {}
+                        }
+                    }
+                }
+
                 let offset = log_guard.append(req.payload)?;
 
                 // Send Response: [magic (2)] [status (1: 0=Success)] [offset (8)]

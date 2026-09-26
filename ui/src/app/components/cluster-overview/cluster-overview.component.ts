@@ -34,6 +34,7 @@ export class ClusterOverviewComponent {
   protected readonly service = inject(AeroMQService);
 
   readonly displayedColumns: string[] = ['id', 'address', 'status', 'last_seen', 'actions'];
+  readonly kafkaSupportedClients = ['kafka-python', 'librdkafka', 'Spring Kafka', 'confluent-kafka'];
 
   // Cluster Status calculations
   readonly clusterState = computed(() => {

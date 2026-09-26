@@ -37,5 +37,16 @@ export const routes: Routes = [
         (m) => m.ProducerComponent
       ),
   },
+  {
+    path: 'schemas',
+    loadComponent: () =>
+      import('./components/schema-registry/schema-registry.component').then(
+        (m) => m.SchemaRegistryComponent
+      ),
+  },
+  {
+    path: 'aerostream/console/schemas',
+    redirectTo: 'schemas',
+  },
   { path: '**', redirectTo: 'cluster' },
 ];

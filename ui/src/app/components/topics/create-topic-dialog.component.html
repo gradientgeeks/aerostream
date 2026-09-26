@@ -81,6 +81,23 @@
         </mat-slider>
         <span class="hint">Number of broker replicas storing each partition (fault tolerance)</span>
       </div>
+
+      <!-- Cleanup Policy (Phase 2) -->
+      <div class="form-row mt-3">
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+          <mat-label>Log Cleanup Policy</mat-label>
+          <mat-select formControlName="cleanup_policy">
+            <mat-option value="delete">
+              Delete (Time & Size-based Segment Retention)
+            </mat-option>
+            <mat-option value="compact">
+              Compact (Key-Hash Log Deduplication & Tombstone GC)
+            </mat-option>
+          </mat-select>
+          <mat-icon matPrefix class="field-icon">auto_delete</mat-icon>
+          <mat-hint>Choose Compact for CDC, state stores, and latest-value retention</mat-hint>
+        </mat-form-field>
+      </div>
     </form>
   </mat-dialog-content>
 

@@ -125,6 +125,11 @@ pub async fn handle_kafka_frame(
             let resp = handle_list_offsets(correlation_id, api_version, &mut cursor, log_manager).await?;
             Ok(Some(resp))
         }
+        22 => {
+            // InitProducerId (ApiKey 22)
+            let resp = handle_init_producer_id(correlation_id, api_version, &mut cursor)?;
+            Ok(Some(resp))
+        }
         _ => {
             warn!("[AeroMQ Kafka] Unsupported API key: {}", api_key);
             let mut resp = BytesMut::new();
@@ -149,12 +154,13 @@ fn handle_api_versions(
     buf.put_i16(0); // ErrorCode: 0 (NONE)
 
     // Supported API keys list
-    let api_keys: [(i16, i16, i16); 5] = [
+    let api_keys: [(i16, i16, i16); 6] = [
         (0, 0, 7),  // Produce: v0 - v7
         (1, 0, 7),  // Fetch: v0 - v7
         (2, 0, 2),  // ListOffsets: v0 - v2
         (3, 0, 5),  // Metadata: v0 - v5
         (18, 0, 3), // ApiVersions: v0 - v3
+        (22, 0, 4), // InitProducerId: v0 - v4
     ];
 
     buf.put_i32(api_keys.len() as i32);
@@ -170,6 +176,36 @@ fn handle_api_versions(
 
     if api_version >= 3 {
         buf.put_u8(0); // Empty tagged fields buffer
+    }
+
+    Ok(buf.to_vec())
+}
+
+/// Handler for InitProducerId (API Key 22)
+fn handle_init_producer_id(
+    correlation_id: i32,
+    api_version: i16,
+    cursor: &mut io::Cursor<&[u8]>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    let _transactional_id = read_kafka_string(cursor)?;
+    let _transaction_timeout_ms = if cursor.remaining() >= 4 {
+        cursor.get_i32()
+    } else {
+        60000
+    };
+
+    let producer_id = crate::kafka::handlers::allocate_producer_id();
+    let producer_epoch = 0i16;
+
+    let mut buf = BytesMut::new();
+    buf.put_i32(correlation_id);
+    buf.put_i32(0); // ThrottleTimeMs
+    buf.put_i16(0); // ErrorCode: 0 (NONE)
+    buf.put_i64(producer_id);
+    buf.put_i16(producer_epoch);
+
+    if api_version >= 2 {
+        buf.put_u8(0); // empty tagged fields
     }
 
     Ok(buf.to_vec())
@@ -304,16 +340,40 @@ async fn handle_produce(
                 let mut records_data = vec![0u8; records_size as usize];
                 cursor.copy_to_slice(&mut records_data);
 
+                // Detect modern RecordBatch (magic byte 2 at index 16) with PID and sequence
+                let (producer_id, base_sequence, records_count) = if records_data.len() >= 61 && records_data[16] == 2 {
+                    let pid = i64::from_be_bytes(records_data[43..51].try_into().unwrap());
+                    let seq = i32::from_be_bytes(records_data[53..57].try_into().unwrap());
+                    let count = i32::from_be_bytes(records_data[57..61].try_into().unwrap());
+                    (pid, seq, count)
+                } else {
+                    (-1i64, -1i32, 1i32)
+                };
+
                 match log_manager.get_partition(&topic_name, partition_index as u32).await {
                     Ok(part_log) => {
                         let mut guard = part_log.lock().await;
-                        match guard.append(&records_data) {
-                            Ok(off) => {
-                                appended_offset = off as i64;
+                        match guard.validate_idempotent_produce(producer_id, base_sequence) {
+                            Ok(Some(cached_offset)) => {
+                                // Duplicate batch! Return duplicate ACK with cached offset without writing to disk
+                                appended_offset = cached_offset;
+                                error_code = 0;
                             }
-                            Err(e) => {
-                                error!("[AeroMQ Kafka] Append error for {}-{}: {:?}", topic_name, partition_index, e);
-                                error_code = 1; // OFFSET_OUT_OF_RANGE or general error
+                            Ok(None) => {
+                                match guard.append(&records_data) {
+                                    Ok(off) => {
+                                        appended_offset = off as i64;
+                                        guard.update_producer_state(producer_id, base_sequence, records_count, appended_offset);
+                                    }
+                                    Err(e) => {
+                                        error!("[AeroMQ Kafka] Append error for {}-{}: {:?}", topic_name, partition_index, e);
+                                        error_code = 1; // OFFSET_OUT_OF_RANGE or general error
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                warn!("[AeroMQ Kafka] Idempotent produce sequence error for PID {} seq {}: err {}", producer_id, base_sequence, err);
+                                error_code = err; // 45: OutOfOrderSequenceNumber
                             }
                         }
                     }
@@ -710,7 +770,7 @@ mod tests {
         assert_eq!(cursor.get_i32(), 1234); // correlation_id
         assert_eq!(cursor.get_i16(), 0);    // error_code: NONE
         let num_keys = cursor.get_i32();
-        assert_eq!(num_keys, 5);
+        assert_eq!(num_keys, 6);
     }
 
     #[tokio::test]
@@ -814,5 +874,143 @@ mod tests {
         assert!(hw >= 1);
         let records_len = fcur.get_i32();
         assert!(records_len > 0);
+    }
+
+    #[tokio::test]
+    async fn test_init_producer_id_and_idempotent_produce() {
+        use crate::kafka::handlers::{encode_idempotent_records_batch, KafkaRecord};
+
+        let dir = tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1));
+        let cfg = Arc::new(BrokerConfig {
+            id: 1,
+            host: "127.0.0.1".into(),
+            data_port: 9091,
+            kafka_port: 9093,
+            ..Default::default()
+        });
+
+        // 1. Send InitProducerId (ApiKey 22)
+        let mut init_frame = BytesMut::new();
+        init_frame.put_i16(22); // ApiKey = 22 (InitProducerId)
+        init_frame.put_i16(0);  // ApiVersion = 0
+        init_frame.put_i32(701); // CorrelationId = 701
+        put_kafka_string(&mut init_frame, Some("idempotent-client"));
+        put_kafka_string(&mut init_frame, None); // transactional_id: null
+        init_frame.put_i32(60000); // transaction_timeout_ms
+
+        let init_resp = handle_kafka_frame(&init_frame, &log_mgr, &cfg).await.unwrap().unwrap();
+        let mut icur = io::Cursor::new(init_resp.as_slice());
+        assert_eq!(icur.get_i32(), 701); // correlation_id
+        assert_eq!(icur.get_i32(), 0);   // throttle_time_ms
+        assert_eq!(icur.get_i16(), 0);   // error_code: 0
+        let producer_id = icur.get_i64();
+        let producer_epoch = icur.get_i16();
+        assert!(producer_id >= 1000);
+        assert_eq!(producer_epoch, 0);
+
+        // 2. First Idempotent Produce: sequence 0
+        let record = KafkaRecord::new(Some(b"key-0".to_vec()), Some(b"val-seq-0".to_vec()));
+        let batch_seq_0 = encode_idempotent_records_batch(0, producer_id, producer_epoch, 0, &[record]);
+
+        let mut prod_frame_0 = BytesMut::new();
+        prod_frame_0.put_i16(0); // Produce
+        prod_frame_0.put_i16(0); // v0
+        prod_frame_0.put_i32(702); // CorrelationId
+        put_kafka_string(&mut prod_frame_0, Some("idempotent-client"));
+        prod_frame_0.put_i16(1); // acks = 1
+        prod_frame_0.put_i32(1000); // timeout
+        prod_frame_0.put_i32(1); // 1 topic
+        put_kafka_string(&mut prod_frame_0, Some("idemp-topic"));
+        prod_frame_0.put_i32(1); // 1 partition
+        prod_frame_0.put_i32(0); // partition 0
+        prod_frame_0.put_i32(batch_seq_0.len() as i32);
+        prod_frame_0.put_slice(&batch_seq_0);
+
+        let resp_0 = handle_kafka_frame(&prod_frame_0, &log_mgr, &cfg).await.unwrap().unwrap();
+        let mut cur0 = io::Cursor::new(resp_0.as_slice());
+        assert_eq!(cur0.get_i32(), 702);
+        assert_eq!(cur0.get_i32(), 1);
+        let _ = read_kafka_string(&mut cur0);
+        assert_eq!(cur0.get_i32(), 1); // 1 part
+        assert_eq!(cur0.get_i32(), 0); // part 0
+        assert_eq!(cur0.get_i16(), 0); // error_code: 0
+        let offset_0 = cur0.get_i64();
+        assert_eq!(offset_0, 0);
+
+        // Verify partition next_offset is 1
+        {
+            let part_log = log_mgr.get_partition("idemp-topic", 0).await.unwrap();
+            let guard = part_log.lock().await;
+            assert_eq!(guard.next_offset, 1);
+        }
+
+        // 3. Duplicate Produce: duplicate sequence 0
+        let mut prod_frame_dup = BytesMut::new();
+        prod_frame_dup.put_i16(0);
+        prod_frame_dup.put_i16(0);
+        prod_frame_dup.put_i32(703);
+        put_kafka_string(&mut prod_frame_dup, Some("idempotent-client"));
+        prod_frame_dup.put_i16(1);
+        prod_frame_dup.put_i32(1000);
+        prod_frame_dup.put_i32(1);
+        put_kafka_string(&mut prod_frame_dup, Some("idemp-topic"));
+        prod_frame_dup.put_i32(1);
+        prod_frame_dup.put_i32(0);
+        prod_frame_dup.put_i32(batch_seq_0.len() as i32);
+        prod_frame_dup.put_slice(&batch_seq_0);
+
+        let resp_dup = handle_kafka_frame(&prod_frame_dup, &log_mgr, &cfg).await.unwrap().unwrap();
+        let mut cur_dup = io::Cursor::new(resp_dup.as_slice());
+        assert_eq!(cur_dup.get_i32(), 703);
+        assert_eq!(cur_dup.get_i32(), 1);
+        let _ = read_kafka_string(&mut cur_dup);
+        assert_eq!(cur_dup.get_i32(), 1);
+        assert_eq!(cur_dup.get_i32(), 0);
+        assert_eq!(cur_dup.get_i16(), 0); // duplicate ACK returned without error
+        let dup_offset = cur_dup.get_i64();
+        assert_eq!(dup_offset, 0); // returned cached offset 0
+
+        // Assert log length only increased by 1 and broker did not write a second record!
+        {
+            let part_log = log_mgr.get_partition("idemp-topic", 0).await.unwrap();
+            let guard = part_log.lock().await;
+            assert_eq!(guard.next_offset, 1);
+        }
+
+        // 4. Sequence gap: send sequence 5 when last sequence was 0 -> assert error code 45 (OutOfOrderSequenceNumber)
+        let record_gap = KafkaRecord::new(Some(b"key-gap".to_vec()), Some(b"val-gap".to_vec()));
+        let batch_gap = encode_idempotent_records_batch(1, producer_id, producer_epoch, 5, &[record_gap]);
+
+        let mut prod_frame_gap = BytesMut::new();
+        prod_frame_gap.put_i16(0);
+        prod_frame_gap.put_i16(0);
+        prod_frame_gap.put_i32(704);
+        put_kafka_string(&mut prod_frame_gap, Some("idempotent-client"));
+        prod_frame_gap.put_i16(1);
+        prod_frame_gap.put_i32(1000);
+        prod_frame_gap.put_i32(1);
+        put_kafka_string(&mut prod_frame_gap, Some("idemp-topic"));
+        prod_frame_gap.put_i32(1);
+        prod_frame_gap.put_i32(0);
+        prod_frame_gap.put_i32(batch_gap.len() as i32);
+        prod_frame_gap.put_slice(&batch_gap);
+
+        let resp_gap = handle_kafka_frame(&prod_frame_gap, &log_mgr, &cfg).await.unwrap().unwrap();
+        let mut cur_gap = io::Cursor::new(resp_gap.as_slice());
+        assert_eq!(cur_gap.get_i32(), 704);
+        assert_eq!(cur_gap.get_i32(), 1);
+        let _ = read_kafka_string(&mut cur_gap);
+        assert_eq!(cur_gap.get_i32(), 1);
+        assert_eq!(cur_gap.get_i32(), 0);
+        let gap_err_code = cur_gap.get_i16();
+        assert_eq!(gap_err_code, 45); // OutOfOrderSequenceNumber!
+
+        // Assert log still did not write the out-of-order record!
+        {
+            let part_log = log_mgr.get_partition("idemp-topic", 0).await.unwrap();
+            let guard = part_log.lock().await;
+            assert_eq!(guard.next_offset, 1);
+        }
     }
 }

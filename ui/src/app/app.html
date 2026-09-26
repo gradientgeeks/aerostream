@@ -28,6 +28,10 @@
         <mat-icon matListItemIcon>folder_open</mat-icon>
         <span matListItemTitle>Topics & Partitions</span>
       </a>
+      <a mat-list-item routerLink="/schemas" routerLinkActive="active-link" (click)="mobileNav.close()">
+        <mat-icon matListItemIcon>schema</mat-icon>
+        <span matListItemTitle>Schema Registry</span>
+      </a>
       <a mat-list-item routerLink="/messages" routerLinkActive="active-link" (click)="mobileNav.close()">
         <mat-icon matListItemIcon>mail</mat-icon>
         <span matListItemTitle>Message Explorer</span>
@@ -93,6 +97,10 @@
           <a routerLink="/topics" routerLinkActive="active" class="nav-link">
             <mat-icon>folder_open</mat-icon>
             <span>Topics</span>
+          </a>
+          <a routerLink="/schemas" routerLinkActive="active" class="nav-link">
+            <mat-icon>schema</mat-icon>
+            <span>Schema Registry</span>
           </a>
           <a routerLink="/messages" routerLinkActive="active" class="nav-link">
             <mat-icon>mail</mat-icon>

@@ -1,0 +1,342 @@
+<div class="schema-registry-container w-full max-w-full overflow-x-hidden">
+  <!-- Page Header -->
+  <div class="page-header flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+    <div class="header-titles">
+      <div class="title-row">
+        <mat-icon class="page-icon">schema</mat-icon>
+        <h1>Schema Registry</h1>
+      </div>
+      <p class="subtitle">Confluent-Compatible Schema Governance, Versioning & Evolution Engine</p>
+    </div>
+
+    <div class="header-actions">
+      <button mat-flat-button color="primary" class="register-hero-btn" (click)="openRegisterDialog()">
+        <mat-icon>add</mat-icon>
+        <span>Register Schema</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Metric Cards Grid -->
+  <div class="metrics-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 w-full max-w-full mb-6">
+    <!-- Total Schemas Card -->
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title>Total Schemas</mat-card-title>
+        <mat-card-subtitle>Active Versions in Catalog</mat-card-subtitle>
+        <div class="card-icon-avatar schemas-icon">
+          <mat-icon>data_object</mat-icon>
+        </div>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="metric-value-row">
+          <span class="metric-large-num">{{ schemaService.stats().totalSchemas }}</span>
+          <span class="status-indicator-badge healthy">
+            <span class="pulse-dot"></span>
+            Sync Active
+          </span>
+        </div>
+        <div class="metric-footer-note">
+          <span>Global schema identifiers indexed</span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Subjects Count Card -->
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title>Schema Subjects</mat-card-title>
+        <mat-card-subtitle>Topic Value & Key Streams</mat-card-subtitle>
+        <div class="card-icon-avatar subjects-icon">
+          <mat-icon>account_tree</mat-icon>
+        </div>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="metric-value-row">
+          <span class="metric-large-num">{{ schemaService.stats().totalSubjects }}</span>
+          <span class="subject-count-pill">
+            100% Validated
+          </span>
+        </div>
+        <div class="metric-footer-note">
+          <span>Governed topic message contracts</span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Compatibility Mode Card -->
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title>Compatibility Mode</mat-card-title>
+        <mat-card-subtitle>Evolution Enforcement</mat-card-subtitle>
+        <div class="card-icon-avatar compat-icon">
+          <mat-icon>verified_user</mat-icon>
+        </div>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="metric-value-row">
+          <span class="metric-large-text text-compat">
+            {{ schemaService.stats().compatibilityMode }}
+          </span>
+          <span class="compat-shield-badge">
+            <mat-icon>shield</mat-icon>
+            Enforced
+          </span>
+        </div>
+        <div class="metric-footer-note">
+          <span>Older consumers safely read newer versions</span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Active Types Card -->
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title>Active Types</mat-card-title>
+        <mat-card-subtitle>Supported Encodings</mat-card-subtitle>
+        <div class="card-icon-avatar types-icon">
+          <mat-icon>integration_instructions</mat-icon>
+        </div>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="types-breakdown-row">
+          <span class="type-pill badge-avro">
+            AVRO: <strong>{{ schemaService.stats().avroCount }}</strong>
+          </span>
+          <span class="type-pill badge-protobuf">
+            PROTO: <strong>{{ schemaService.stats().protobufCount }}</strong>
+          </span>
+          <span class="type-pill badge-json">
+            JSON: <strong>{{ schemaService.stats().jsonCount }}</strong>
+          </span>
+        </div>
+        <div class="metric-footer-note">
+          <span>Native Confluent v7 wire compatibility</span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Master-Detail Catalog Section -->
+  <div class="catalog-section grid grid-cols-1 lg:grid-cols-12 gap-6 w-full max-w-full">
+    <!-- Left Column: Subjects List (Master) -->
+    <div class="lg:col-span-4 xl:col-span-4 flex flex-col gap-4">
+      <mat-card class="subjects-list-card">
+        <!-- Search and Filter Bar -->
+        <div class="list-controls-bar">
+          <mat-form-field appearance="outline" class="w-full search-field" subscriptSizing="dynamic">
+            <mat-icon matPrefix>search</mat-icon>
+            <mat-label>Search subjects or topics...</mat-label>
+            <input
+              matInput
+              [ngModel]="searchQuery()"
+              (ngModelChange)="searchQuery.set($event)"
+              placeholder="e.g. orders or telemetry"
+            />
+            <button
+              mat-icon-button
+              matSuffix
+              *ngIf="searchQuery()"
+              (click)="searchQuery.set('')"
+              aria-label="Clear search"
+            >
+              <mat-icon>clear</mat-icon>
+            </button>
+          </mat-form-field>
+
+          <!-- Type Filter Buttons -->
+          <div class="type-filter-chips flex gap-2 flex-wrap mt-3">
+            <button
+              type="button"
+              class="filter-chip"
+              [class.active]="selectedTypeFilter() === 'ALL'"
+              (click)="setTypeFilter('ALL')"
+            >
+              All ({{ schemaService.schemas().length }})
+            </button>
+            <button
+              type="button"
+              class="filter-chip chip-avro"
+              [class.active]="selectedTypeFilter() === 'AVRO'"
+              (click)="setTypeFilter('AVRO')"
+            >
+              Avro ({{ schemaService.stats().avroCount }})
+            </button>
+            <button
+              type="button"
+              class="filter-chip chip-json"
+              [class.active]="selectedTypeFilter() === 'JSON'"
+              (click)="setTypeFilter('JSON')"
+            >
+              JSON ({{ schemaService.stats().jsonCount }})
+            </button>
+            <button
+              type="button"
+              class="filter-chip chip-proto"
+              [class.active]="selectedTypeFilter() === 'PROTOBUF'"
+              (click)="setTypeFilter('PROTOBUF')"
+            >
+              Proto ({{ schemaService.stats().protobufCount }})
+            </button>
+          </div>
+        </div>
+
+        <mat-divider></mat-divider>
+
+        <!-- Subjects List -->
+        <div class="subjects-scroll-list">
+          <div
+            *ngFor="let s of filteredSchemas()"
+            class="subject-item"
+            [class.selected]="activeSchema()?.subject === s.subject"
+            (click)="selectSubject(s.subject)"
+          >
+            <div class="subject-item-left">
+              <div class="subject-header-row">
+                <span class="subject-name" [title]="s.subject">{{ s.subject }}</span>
+                <span class="version-tag">v{{ s.version }}</span>
+              </div>
+              <div class="subject-sub-row">
+                <span class="type-badge" [ngClass]="getTypeBadgeClass(s.type)">
+                  {{ s.type }}
+                </span>
+                <span class="global-id-tag">ID: {{ s.id }}</span>
+                <span class="topic-tag" *ngIf="s.topic">
+                  <mat-icon>folder</mat-icon> {{ s.topic }}
+                </span>
+              </div>
+            </div>
+
+            <div class="subject-item-arrow">
+              <mat-icon>chevron_right</mat-icon>
+            </div>
+          </div>
+
+          <!-- Empty filter state -->
+          <div *ngIf="filteredSchemas().length === 0" class="empty-filter-state">
+            <mat-icon>search_off</mat-icon>
+            <p>No schemas match your query</p>
+          </div>
+        </div>
+      </mat-card>
+    </div>
+
+    <!-- Right Column: Schema Details & Code Viewer (Detail) -->
+    <div class="lg:col-span-8 xl:col-span-8 flex flex-col gap-4">
+      <mat-card *ngIf="activeSchema() as current" class="schema-detail-card">
+        <!-- Detail Header -->
+        <div class="detail-header flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <div class="subject-meta-titles">
+            <div class="meta-title-row flex items-center gap-3 flex-wrap">
+              <h2 class="current-subject-name">{{ current.subject }}</h2>
+              <span class="type-badge large" [ngClass]="getTypeBadgeClass(current.type)">
+                {{ current.type }}
+              </span>
+              <span class="version-badge">Version {{ current.version }}</span>
+              <span class="id-pill">Global ID: {{ current.id }}</span>
+            </div>
+            <p class="subject-desc" *ngIf="current.description">{{ current.description }}</p>
+          </div>
+
+          <div class="detail-header-actions flex gap-2 flex-wrap">
+            <button
+              mat-stroked-button
+              (click)="copySchemaToClipboard(current.schema)"
+              matTooltip="Copy schema contract to clipboard"
+            >
+              <mat-icon>content_copy</mat-icon>
+              <span>Copy</span>
+            </button>
+            <button
+              mat-stroked-button
+              (click)="downloadSchema(current)"
+              matTooltip="Download schema definition file"
+            >
+              <mat-icon>download</mat-icon>
+              <span>Download</span>
+            </button>
+            <button
+              mat-flat-button
+              color="primary"
+              (click)="openRegisterDialog(current.subject, current.type)"
+              matTooltip="Register a new version for this subject"
+            >
+              <mat-icon>upgrade</mat-icon>
+              <span>Evolve Schema</span>
+            </button>
+          </div>
+        </div>
+
+        <mat-divider class="my-4"></mat-divider>
+
+        <!-- Governance & Evolution Banner -->
+        <div class="governance-banner flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <div class="governance-item">
+            <span class="gov-label">Compatibility Mode</span>
+            <div class="gov-value">
+              <mat-icon class="shield-icon">security</mat-icon>
+              <span class="mode-text">{{ current.compatibility }}</span>
+              <span class="check-pill">Active Rule</span>
+            </div>
+          </div>
+
+          <div class="governance-item">
+            <span class="gov-label">Associated Topic</span>
+            <div class="gov-value">
+              <mat-icon class="topic-icon">layers</mat-icon>
+              <span class="topic-name-bold">{{ current.topic || current.subject.replace('-value', '') }}</span>
+              <a
+                mat-button
+                color="primary"
+                [routerLink]="['/messages']"
+                [queryParams]="{ topic: current.topic || current.subject.replace('-value', '') }"
+                class="view-topic-btn"
+              >
+                Inspect Messages &rarr;
+              </a>
+            </div>
+          </div>
+
+          <div class="governance-item">
+            <span class="gov-label">Registration Date</span>
+            <div class="gov-value">
+              <mat-icon class="time-icon">calendar_today</mat-icon>
+              <span class="time-text">{{ current.created_at | date:'mediumDate' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Syntax-Highlighted Code Viewer -->
+        <div class="code-viewer-container mt-4">
+          <div class="viewer-top-bar flex items-center justify-between">
+            <div class="file-tab">
+              <mat-icon>terminal</mat-icon>
+              <span>{{ current.subject }}.{{ current.type === 'AVRO' ? 'avsc' : current.type === 'JSON' ? 'json' : 'proto' }}</span>
+            </div>
+            <div class="viewer-actions">
+              <span class="encoding-tag">{{ current.type }} Format</span>
+            </div>
+          </div>
+
+          <div class="code-box-wrapper">
+            <div class="line-numbers">
+              <span *ngFor="let line of formatLines(current.schema); let idx = index">{{ idx + 1 }}</span>
+            </div>
+            <pre class="code-content"><code>{{ current.schema }}</code></pre>
+          </div>
+        </div>
+      </mat-card>
+
+      <!-- Empty Selection State -->
+      <mat-card *ngIf="!activeSchema()" class="empty-selection-card">
+        <mat-icon class="empty-icon">schema</mat-icon>
+        <h3>No Schema Selected</h3>
+        <p>Select a subject from the left panel or click "Register Schema" to create one.</p>
+        <button mat-flat-button color="primary" (click)="openRegisterDialog()">
+          <mat-icon>add</mat-icon>
+          <span>Register Schema</span>
+        </button>
+      </mat-card>
+    </div>
+  </div>
+</div>

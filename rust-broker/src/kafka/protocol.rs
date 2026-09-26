@@ -25,6 +25,7 @@ pub enum ApiKey {
     ApiVersions = 18,
     CreateTopics = 19,
     DeleteTopics = 20,
+    InitProducerId = 22,
     Unknown(i16),
 }
 
@@ -52,6 +53,7 @@ impl From<i16> for ApiKey {
             18 => ApiKey::ApiVersions,
             19 => ApiKey::CreateTopics,
             20 => ApiKey::DeleteTopics,
+            22 => ApiKey::InitProducerId,
             other => ApiKey::Unknown(other),
         }
     }
@@ -81,6 +83,7 @@ impl From<ApiKey> for i16 {
             ApiKey::ApiVersions => 18,
             ApiKey::CreateTopics => 19,
             ApiKey::DeleteTopics => 20,
+            ApiKey::InitProducerId => 22,
             ApiKey::Unknown(v) => v,
         }
     }
@@ -451,6 +454,11 @@ impl ApiVersionsResponse {
                     api_key: ApiKey::ApiVersions.as_i16(), // 18
                     min_version: 0,
                     max_version: 3,
+                },
+                ApiVersionKey {
+                    api_key: ApiKey::InitProducerId.as_i16(), // 22
+                    min_version: 0,
+                    max_version: 4,
                 },
             ],
             throttle_time_ms: 0,
@@ -1038,6 +1046,146 @@ impl MetadataResponse {
 }
 
 // ---------------------------------------------------------------------------
+// 4. InitProducerId request / response (ApiKey 22, Versions 0 to 4)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InitProducerIdRequest {
+    pub transactional_id: Option<String>,
+    pub transaction_timeout_ms: i32,
+    pub producer_id: i64,
+    pub producer_epoch: i16,
+}
+
+impl InitProducerIdRequest {
+    pub fn new(
+        transactional_id: Option<String>,
+        transaction_timeout_ms: i32,
+        producer_id: i64,
+        producer_epoch: i16,
+    ) -> Self {
+        Self {
+            transactional_id,
+            transaction_timeout_ms,
+            producer_id,
+            producer_epoch,
+        }
+    }
+
+    pub fn decode(buf: &mut impl Buf, version: i16) -> Result<Self, KafkaProtocolError> {
+        if version >= 2 {
+            let transactional_id = read_nullable_compact_string(buf)?;
+            if buf.remaining() < 4 {
+                return Err(KafkaProtocolError::UnexpectedEof);
+            }
+            let transaction_timeout_ms = buf.get_i32();
+            let (producer_id, producer_epoch) = if version >= 3 {
+                if buf.remaining() < 10 {
+                    return Err(KafkaProtocolError::UnexpectedEof);
+                }
+                (buf.get_i64(), buf.get_i16())
+            } else {
+                (-1, -1)
+            };
+            if buf.has_remaining() {
+                skip_tagged_fields(buf)?;
+            }
+            Ok(Self {
+                transactional_id,
+                transaction_timeout_ms,
+                producer_id,
+                producer_epoch,
+            })
+        } else {
+            let transactional_id = read_nullable_string(buf)?;
+            if buf.remaining() < 4 {
+                return Err(KafkaProtocolError::UnexpectedEof);
+            }
+            let transaction_timeout_ms = buf.get_i32();
+            let (producer_id, producer_epoch) = if buf.remaining() >= 10 {
+                (buf.get_i64(), buf.get_i16())
+            } else {
+                (-1, -1)
+            };
+            Ok(Self {
+                transactional_id,
+                transaction_timeout_ms,
+                producer_id,
+                producer_epoch,
+            })
+        }
+    }
+
+    pub fn encode(&self, version: i16, buf: &mut impl BufMut) {
+        if version >= 2 {
+            write_nullable_compact_string(self.transactional_id.as_deref(), buf);
+            buf.put_i32(self.transaction_timeout_ms);
+            if version >= 3 {
+                buf.put_i64(self.producer_id);
+                buf.put_i16(self.producer_epoch);
+            }
+            write_unsigned_varint(0, buf); // empty tagged fields
+        } else {
+            write_nullable_string(self.transactional_id.as_deref(), buf);
+            buf.put_i32(self.transaction_timeout_ms);
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InitProducerIdResponse {
+    pub throttle_time_ms: i32,
+    pub error_code: i16,
+    pub producer_id: i64,
+    pub producer_epoch: i16,
+}
+
+impl InitProducerIdResponse {
+    pub fn new(
+        throttle_time_ms: i32,
+        error_code: i16,
+        producer_id: i64,
+        producer_epoch: i16,
+    ) -> Self {
+        Self {
+            throttle_time_ms,
+            error_code,
+            producer_id,
+            producer_epoch,
+        }
+    }
+
+    pub fn decode(buf: &mut impl Buf, version: i16) -> Result<Self, KafkaProtocolError> {
+        if buf.remaining() < 16 {
+            return Err(KafkaProtocolError::UnexpectedEof);
+        }
+        let throttle_time_ms = buf.get_i32();
+        let error_code = buf.get_i16();
+        let producer_id = buf.get_i64();
+        let producer_epoch = buf.get_i16();
+        if version >= 2 && buf.has_remaining() {
+            skip_tagged_fields(buf)?;
+        }
+        Ok(Self {
+            throttle_time_ms,
+            error_code,
+            producer_id,
+            producer_epoch,
+        })
+    }
+
+    pub fn encode(&self, version: i16, buf: &mut impl BufMut) {
+        buf.put_i32(self.throttle_time_ms);
+        buf.put_i16(self.error_code);
+        buf.put_i64(self.producer_id);
+        buf.put_i16(self.producer_epoch);
+        if version >= 2 {
+            write_unsigned_varint(0, buf); // empty tagged fields
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // High-Level Envelope & Decoders / Encoders
 // ---------------------------------------------------------------------------
 
@@ -1045,6 +1193,7 @@ impl MetadataResponse {
 pub enum KafkaRequestBody {
     ApiVersions(ApiVersionsRequest),
     Metadata(MetadataRequest),
+    InitProducerId(InitProducerIdRequest),
     Unknown { api_key: i16, payload: Bytes },
 }
 
@@ -1066,6 +1215,10 @@ impl KafkaRequest {
                 let req = MetadataRequest::decode(&mut buf, header.api_version)?;
                 KafkaRequestBody::Metadata(req)
             }
+            22 => {
+                let req = InitProducerIdRequest::decode(&mut buf, header.api_version)?;
+                KafkaRequestBody::InitProducerId(req)
+            }
             other => KafkaRequestBody::Unknown {
                 api_key: other,
                 payload: buf,
@@ -1079,6 +1232,7 @@ impl KafkaRequest {
 pub enum KafkaResponseBody {
     ApiVersions(ApiVersionsResponse),
     Metadata(MetadataResponse),
+    InitProducerId(InitProducerIdResponse),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1102,6 +1256,9 @@ impl KafkaResponse {
                 resp.encode(version, &mut body_buf);
             }
             KafkaResponseBody::Metadata(resp) => {
+                resp.encode(version, &mut body_buf);
+            }
+            KafkaResponseBody::InitProducerId(resp) => {
                 resp.encode(version, &mut body_buf);
             }
         }
@@ -1255,5 +1412,46 @@ mod tests {
         let decoded = decode_frame(&mut buf).unwrap().expect("frame should decode");
         assert_eq!(&decoded[..], payload);
         assert_eq!(buf.len(), 0);
+    }
+
+    #[test]
+    fn test_init_producer_id_roundtrip() {
+        let req = InitProducerIdRequest {
+            transactional_id: Some("tx-producer-1".to_string()),
+            transaction_timeout_ms: 30000,
+            producer_id: 1005,
+            producer_epoch: 2,
+        };
+
+        for v in 0..=4 {
+            let mut buf = BytesMut::new();
+            req.encode(v, &mut buf);
+            let mut read_buf = buf.freeze();
+            let decoded = InitProducerIdRequest::decode(&mut read_buf, v).unwrap();
+            assert_eq!(decoded.transactional_id, req.transactional_id);
+            assert_eq!(decoded.transaction_timeout_ms, req.transaction_timeout_ms);
+            if v >= 3 {
+                assert_eq!(decoded.producer_id, req.producer_id);
+                assert_eq!(decoded.producer_epoch, req.producer_epoch);
+            }
+        }
+
+        let resp = InitProducerIdResponse {
+            throttle_time_ms: 5,
+            error_code: 0,
+            producer_id: 1000,
+            producer_epoch: 0,
+        };
+
+        for v in 0..=4 {
+            let mut buf = BytesMut::new();
+            resp.encode(v, &mut buf);
+            let mut read_buf = buf.freeze();
+            let decoded = InitProducerIdResponse::decode(&mut read_buf, v).unwrap();
+            assert_eq!(decoded.throttle_time_ms, resp.throttle_time_ms);
+            assert_eq!(decoded.error_code, resp.error_code);
+            assert_eq!(decoded.producer_id, resp.producer_id);
+            assert_eq!(decoded.producer_epoch, resp.producer_epoch);
+        }
     }
 }

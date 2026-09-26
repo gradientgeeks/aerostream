@@ -13,6 +13,9 @@ pub struct LogSegment {
     pub idx_path: PathBuf,
 }
 
+use crate::log::producer_state::{ProducerStateTracker, SequenceCheckResult};
+
+// Configurations
 pub struct PartitionLog {
     pub topic: String,
     pub partition: u32,
@@ -46,6 +49,16 @@ pub struct PartitionLog {
     pub high_watermark: u64,
     pub replica_offsets: HashMap<u32, u64>,
     pub replica_ids: Vec<u32>,
+
+    // Idempotent producer sequence tracking
+    pub producer_tracker: ProducerStateTracker,
+    pub producer_states: HashMap<i64, ProducerState>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProducerState {
+    pub last_sequence: i32,
+    pub last_offset: i64,
 }
 
 impl PartitionLog {
@@ -163,6 +176,8 @@ impl PartitionLog {
             high_watermark: 0,
             replica_offsets: HashMap::new(),
             replica_ids: Vec::new(),
+            producer_tracker: ProducerStateTracker::new(),
+            producer_states: HashMap::new(),
         };
         log.recompute_high_watermark();
         Ok(log)
@@ -199,6 +214,79 @@ impl PartitionLog {
             }
         }
         self.high_watermark = min_offset;
+    }
+
+    /// Checks and updates producer sequence using `ProducerStateTracker`.
+    pub fn check_and_update_producer(
+        &mut self,
+        producer_id: i64,
+        epoch: i16,
+        base_sequence: i32,
+        record_count: i32,
+    ) -> SequenceCheckResult {
+        let next_off = self.next_offset;
+        self.producer_tracker.check_and_update_sequence(
+            producer_id,
+            epoch,
+            base_sequence,
+            record_count,
+            next_off,
+        )
+    }
+
+    /// Validates sequence number for idempotent producer.
+    /// Returns Ok(None) if sequence is valid and should be appended.
+    /// Returns Ok(Some(last_offset)) if duplicate sequence (return duplicate ACK without appending).
+    /// Returns Err(45) if sequence gap detected (OutOfOrderSequenceNumber).
+    pub fn validate_idempotent_produce(&self, producer_id: i64, base_sequence: i32) -> Result<Option<i64>, i16> {
+        if producer_id < 0 {
+            return Ok(None);
+        }
+        if let Some(state) = self.producer_tracker.get_producer_state(producer_id) {
+            let last_seq = state.last_sequence;
+            if base_sequence <= last_seq {
+                // Duplicate message sequence -> return duplicate ACK without writing
+                let cached = self
+                    .producer_tracker
+                    .sequence_offsets
+                    .get(&(producer_id, base_sequence))
+                    .copied()
+                    .unwrap_or(state.last_offset);
+                Ok(Some(cached as i64))
+            } else if base_sequence == last_seq + 1 {
+                // Monotonically ordered next sequence
+                Ok(None)
+            } else {
+                // Sequence gap! e.g., seq 5 when last seq was 0
+                Err(45) // OutOfOrderSequenceNumber
+            }
+        } else {
+            if base_sequence == 0 {
+                // First sequence from new producer must be 0
+                Ok(None)
+            } else {
+                // Sequence gap from uninitialized producer
+                Err(45) // OutOfOrderSequenceNumber
+            }
+        }
+    }
+
+    /// Records sequence number and offset for an idempotent producer.
+    pub fn update_producer_state(&mut self, producer_id: i64, base_sequence: i32, records_count: i32, offset: i64) {
+        if producer_id >= 0 {
+            let last_seq = base_sequence + records_count.max(1) - 1;
+            let _ = self.producer_tracker.check_and_update_sequence(
+                producer_id,
+                0,
+                base_sequence,
+                records_count,
+                offset.max(0) as u64,
+            );
+            self.producer_states.insert(producer_id, ProducerState {
+                last_sequence: last_seq,
+                last_offset: offset,
+            });
+        }
     }
 
     pub fn append(&mut self, data: &[u8]) -> io::Result<u64> {

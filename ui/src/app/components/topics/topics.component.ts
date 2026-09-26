@@ -15,8 +15,10 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatCardModule } from '@angular/material/card';
+import { RouterModule } from '@angular/router';
 
 import { ApiService } from '../../services/api.service';
+import { SchemaService } from '../../services/schema.service';
 import { TopicInfo, PartitionInfo } from '../../models/topic.model';
 import { CreateTopicDialogComponent } from './create-topic-dialog.component';
 
@@ -25,6 +27,7 @@ import { CreateTopicDialogComponent } from './create-topic-dialog.component';
   standalone: true,
   imports: [
     CommonModule,
+    RouterModule,
     MatTableModule,
     MatSortModule,
     MatFormFieldModule,
@@ -52,15 +55,18 @@ import { CreateTopicDialogComponent } from './create-topic-dialog.component';
 })
 export class TopicsComponent implements OnInit {
   private apiService = inject(ApiService);
+  protected readonly schemaService = inject(SchemaService);
   private dialog = inject(MatDialog);
   private snackBar = inject(MatSnackBar);
   private router = inject(Router);
 
   displayedColumns: string[] = [
     'name',
+    'cleanupPolicy',
     'partitionCount',
     'replicationFactor',
     'highWatermarkTotal',
+    'schema',
     'actions'
   ];
 
@@ -144,5 +150,32 @@ export class TopicsComponent implements OnInit {
     const isrCount = partition.isr ? partition.isr.length : 0;
     const repCount = partition.replica_ids ? partition.replica_ids.length : 0;
     return isrCount >= repCount && repCount > 0;
+  }
+
+  getCleanupPolicy(topic: TopicInfo): 'delete' | 'compact' {
+    if (topic.cleanup_policy) return topic.cleanup_policy;
+    const lower = topic.name.toLowerCase();
+    if (lower.includes('compact') || lower.includes('state') || lower.includes('order') || lower.includes('payment')) {
+      return 'compact';
+    }
+    return 'delete';
+  }
+
+  hasSchema(topic: TopicInfo): boolean {
+    return this.schemaService.getSchemaForTopic(topic.name) !== undefined;
+  }
+
+  getSchemaForTopic(topic: TopicInfo) {
+    return this.schemaService.getSchemaForTopic(topic.name);
+  }
+
+  getSchemaSubject(topic: TopicInfo): string {
+    const s = this.schemaService.getSchemaForTopic(topic.name);
+    return s ? s.subject : `${topic.name}-value`;
+  }
+
+  getSchemaType(topic: TopicInfo): string {
+    const s = this.schemaService.getSchemaForTopic(topic.name);
+    return s ? s.type : 'AVRO';
   }
 }
