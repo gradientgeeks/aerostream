@@ -10,9 +10,9 @@
   >
     <div class="sidebar-wrapper">
       <!-- Sidebar Brand Header -->
-      <div class="sidebar-header">
+      <div class="sidebar-header" [class.collapsed-header]="!isMobile() && isSidebarCollapsed()">
         <a class="brand-link" routerLink="/cluster" (click)="closeMobileDrawer()">
-          <div class="brand-logo">
+          <div class="brand-logo" [matTooltip]="(!isMobile() && isSidebarCollapsed()) ? 'AeroStream Console' : ''" matTooltipPosition="right">
             <app-turbine-logo [size]="28" [glow]="false"></app-turbine-logo>
           </div>
           <div class="brand-titles" *ngIf="isMobile() || !isSidebarCollapsed()">
@@ -26,22 +26,26 @@
           *ngIf="isMobile()"
           mat-icon-button
           (click)="closeMobileDrawer()"
-          class="sidebar-action-btn"
+          class="sidebar-action-btn mobile-close-btn"
           aria-label="Close navigation drawer"
         >
           <mat-icon>close</mat-icon>
         </button>
+      </div>
 
-        <!-- Desktop Mini-Sidebar Collapse Button -->
+      <!-- Menubar Toggle Button Directly Below Brand Icon (Desktop) -->
+      <div class="sidebar-menubar-container" *ngIf="!isMobile()">
         <button
-          *ngIf="!isMobile() && !isSidebarCollapsed()"
-          mat-icon-button
+          mat-button
           (click)="toggleSidebar()"
-          class="sidebar-action-btn"
-          matTooltip="Collapse sidebar"
-          aria-label="Collapse sidebar"
+          class="sidebar-menubar-btn"
+          [class.collapsed-menubar-btn]="isSidebarCollapsed()"
+          [matTooltip]="isSidebarCollapsed() ? 'Expand sidebar (Menu)' : 'Collapse sidebar'"
+          [matTooltipPosition]="isSidebarCollapsed() ? 'right' : 'below'"
+          aria-label="Toggle sidebar expand and collapse"
         >
-          <mat-icon>chevron_left</mat-icon>
+          <mat-icon class="menubar-toggle-icon">{{ isSidebarCollapsed() ? 'menu' : 'menu_open' }}</mat-icon>
+          <span class="menubar-toggle-label" *ngIf="!isSidebarCollapsed()">Collapse Menu</span>
         </button>
       </div>
 
@@ -126,19 +130,20 @@
 
   <!-- Main Sidenav Content Shell -->
   <mat-sidenav-content class="app-sidenav-content w-full max-w-full overflow-x-hidden">
-    <!-- Top Control Bar (Breadcrumbs & Cluster Header) -->
+    <!-- Top Control Bar (Breadcrumbs, Global Search & Cluster Header) -->
     <header class="app-header w-full max-w-full">
       <div class="header-inner w-full max-w-full">
-        <!-- Left: Toggle & Breadcrumb -->
+        <!-- Left: Mobile Toggle & Desktop Breadcrumbs -->
         <div class="header-left">
+          <!-- Mobile Drawer Toggle Button (Desktop toggle is in sidebar below icon) -->
           <button
+            *ngIf="isMobile()"
             mat-icon-button
             (click)="toggleSidebar()"
-            class="header-toggle-btn"
-            [matTooltip]="isMobile() ? 'Open Navigation' : (isSidebarCollapsed() ? 'Expand Sidebar' : 'Collapse Sidebar')"
-            aria-label="Toggle sidebar navigation"
+            class="header-toggle-btn mobile-only"
+            aria-label="Toggle navigation drawer"
           >
-            <mat-icon>{{ isMobile() ? 'menu' : (isSidebarCollapsed() ? 'menu' : 'menu_open') }}</mat-icon>
+            <mat-icon>menu</mat-icon>
           </button>
 
           <!-- Mobile Brand Indicator -->
@@ -155,7 +160,78 @@
           </div>
         </div>
 
-        <!-- Right: Status Badges & Controls -->
+        <!-- Center: Global Search Bar -->
+        <div class="header-center" #searchContainer>
+          <div class="global-search-box" [class.search-focused]="isSearchOpen()">
+            <mat-icon class="search-icon">search</mat-icon>
+            <input
+              #searchInput
+              type="text"
+              class="global-search-input"
+              placeholder="Search topics, schemas, pages, actions... (Press /)"
+              [value]="searchQuery()"
+              (input)="onSearchInput($event)"
+              (focus)="onSearchFocus()"
+              (keydown)="onSearchKeydown($event)"
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="Global search across AeroStream"
+            />
+            <kbd class="search-kbd" *ngIf="!searchQuery()" (click)="openSearch()">/</kbd>
+            <button
+              *ngIf="searchQuery()"
+              mat-icon-button
+              class="search-clear-btn"
+              (click)="clearSearch($event)"
+              aria-label="Clear search"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+
+          <!-- Floating Global Search Dropdown Results -->
+          <div class="global-search-dropdown" *ngIf="isSearchOpen()">
+            <div class="search-dropdown-header">
+              <span class="results-count">{{ filteredSearchResults().length }} results</span>
+              <div class="keyboard-hints">
+                <span class="hint-item"><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+                <span class="hint-item"><kbd>↵</kbd> select</span>
+                <span class="hint-item"><kbd>esc</kbd> close</span>
+              </div>
+            </div>
+
+            <div class="search-dropdown-scroll">
+              <div *ngIf="filteredSearchResults().length === 0" class="search-empty-state">
+                <mat-icon class="empty-icon">search_off</mat-icon>
+                <span class="empty-text">No matching resources found for "{{ searchQuery() }}"</span>
+              </div>
+
+              <div
+                *ngFor="let item of filteredSearchResults(); let idx = index"
+                class="search-result-item"
+                [class.active-result]="idx === selectedResultIndex()"
+                (mouseenter)="selectedResultIndex.set(idx)"
+                (click)="selectSearchResult(item)"
+              >
+                <div class="result-icon-wrap" [ngClass]="item.category.toLowerCase()">
+                  <mat-icon>{{ item.icon }}</mat-icon>
+                </div>
+                <div class="result-details">
+                  <div class="result-title-row">
+                    <span class="result-title">{{ item.title }}</span>
+                    <span class="result-badge" [ngClass]="(item.badge || item.category).toLowerCase()">
+                      {{ item.badge || item.category }}
+                    </span>
+                  </div>
+                  <span class="result-subtitle">{{ item.subtitle }}</span>
+                </div>
+                <mat-icon class="result-arrow">subdirectory_arrow_left</mat-icon>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Status Badges (Theme toggle removed from top navbar as requested) -->
         <div class="header-right">
           <div class="cluster-status-pill desktop-only">
             <span class="status-dot"></span>
@@ -166,16 +242,6 @@
             <mat-icon class="port-icon">cable</mat-icon>
             <span>Port 9092</span>
           </div>
-
-          <button
-            mat-icon-button
-            (click)="themeService.toggleTheme()"
-            [matTooltip]="themeService.isDark() ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
-            class="theme-toggle-btn"
-            aria-label="Toggle theme"
-          >
-            <mat-icon>{{ themeService.isDark() ? 'light_mode' : 'dark_mode' }}</mat-icon>
-          </button>
         </div>
       </div>
     </header>
