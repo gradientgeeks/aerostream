@@ -288,6 +288,7 @@ func (s *Server) handleTopics(w http.ResponseWriter, r *http.Request) {
 			topics = append(topics, map[string]interface{}{
 				"name":       t.Name,
 				"partitions": partitions,
+				"configs":    t.Configs,
 			})
 		}
 	}

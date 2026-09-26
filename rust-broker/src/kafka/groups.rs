@@ -308,8 +308,7 @@ impl GroupCoordinator {
         if g.members.is_empty() {
             g.state = GroupState::Empty;
             g.protocol = None;
-            g.protocol_type = None;
-            g.leader = None;
+            g.leader = None; // protocol_type is retained (Kafka keeps it for Empty groups)
             return;
         }
         g.protocol = g.select_protocol();
@@ -361,7 +360,6 @@ impl GroupCoordinator {
                     g.state = GroupState::Empty;
                     g.generation += 1;
                     g.protocol = None;
-                    g.protocol_type = None;
                 } else {
                     self.prepare_rebalance(g);
                 }
@@ -372,7 +370,6 @@ impl GroupCoordinator {
                     g.epoch += 1;
                     g.generation += 1;
                     g.protocol = None;
-                    g.protocol_type = None;
                 } else {
                     self.try_complete(g);
                 }
@@ -910,6 +907,22 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(900)).await;
         assert_eq!(c.group_state("g5"), Some(GroupState::Empty));
         assert_eq!(c.heartbeat("g5", &j.member_id, 1), UNKNOWN_MEMBER_ID);
+    }
+
+    #[tokio::test]
+    async fn empty_group_keeps_protocol_type_for_listing() {
+        let c = GroupCoordinator::new(Duration::ZERO);
+        let j = c.join(jr("keep", "", &[("range", b"a")])).await;
+        c.sync("keep", &j.member_id, 1, None, None, vec![(j.member_id.clone(), vec![])]).await;
+        c.leave("keep", &j.member_id, None);
+        let listed = c.list();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].1, "consumer");
+        assert_eq!(listed[0].2, GroupState::Empty);
+        // an Empty group may be re-joined with a different protocol type
+        let mut other = jr("keep", "", &[("x", b"")]);
+        other.protocol_type = "connect".into();
+        assert_eq!(c.join(other).await.error, NONE);
     }
 
     #[tokio::test]

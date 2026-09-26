@@ -264,8 +264,12 @@ pub(crate) async fn handle_metadata_with_snapshot(
     // If no specific topics requested (empty or null array), list known topics from the cluster + local logs
     let topics_to_report: Vec<String> = if requested_topics.is_empty() {
         let mut set: std::collections::BTreeSet<String> = snap.topics.keys().cloned().collect();
-        for (topic, _, _) in log_manager.get_all_offsets().await {
-            set.insert(topic);
+        // With a populated cluster view the controller is authoritative (so deleted topics disappear even
+        // while stale local logs linger); otherwise fall back to locally known topics.
+        if snap.topics.is_empty() {
+            for (topic, _, _) in log_manager.get_all_offsets().await {
+                set.insert(topic);
+            }
         }
         if set.is_empty() {
             vec!["default".to_string()]
@@ -298,6 +302,10 @@ pub(crate) async fn handle_metadata_with_snapshot(
         if api_version >= 1 {
             put_kafka_string(&mut buf, rack.as_deref()); // Rack
         }
+    }
+
+    if api_version >= 2 {
+        put_kafka_string(&mut buf, Some("aerostream-cluster")); // ClusterId (v2+)
     }
 
     if api_version >= 1 {
@@ -1177,6 +1185,7 @@ mod topology_tests {
             racks.push(read_kafka_string(&mut c).unwrap().unwrap());
         }
         assert_eq!(racks, vec!["rack-a", "rack-b", "rack-c"]);
+        assert_eq!(read_kafka_string(&mut c).unwrap().as_deref(), Some("aerostream-cluster")); // cluster_id (v2+)
         assert_eq!(c.get_i32(), 1); // controller = lowest broker id
         assert_eq!(c.get_i32(), 1); // topics
         assert_eq!(c.get_i16(), 0);
