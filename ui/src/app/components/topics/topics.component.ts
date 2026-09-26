@@ -178,4 +178,40 @@ export class TopicsComponent implements OnInit {
     const s = this.schemaService.getSchemaForTopic(topic.name);
     return s ? s.type : 'AVRO';
   }
+
+  getRetentionPeriod(topic: TopicInfo): string {
+    if (!topic.retention_period) return '7 Days';
+    const map: Record<string, string> = {
+      '1d': '1 Day',
+      '3d': '3 Days',
+      '7d': '7 Days',
+      '14d': '14 Days',
+      '30d': '30 Days',
+      'infinite': 'Infinite'
+    };
+    return map[topic.retention_period.toLowerCase()] || topic.retention_period;
+  }
+
+  getRetentionQuota(topic: TopicInfo): string {
+    if (!topic.retention_size) return '1 GB';
+    const map: Record<string, string> = {
+      '512mb': '512 MB',
+      '1gb': '1 GB',
+      '5gb': '5 GB',
+      '10gb': '10 GB',
+      'unlimited': 'Unlimited'
+    };
+    return map[topic.retention_size.toLowerCase()] || topic.retention_size;
+  }
+
+  getSegmentSize(topic: TopicInfo): string {
+    if (!topic.segment_size) return '128 MB';
+    const map: Record<string, string> = {
+      '64mb': '64 MB',
+      '128mb': '128 MB',
+      '256mb': '256 MB',
+      '512mb': '512 MB'
+    };
+    return map[topic.segment_size.toLowerCase()] || topic.segment_size;
+  }
 }

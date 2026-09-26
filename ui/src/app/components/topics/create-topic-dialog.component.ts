@@ -36,6 +36,7 @@ export class CreateTopicDialogComponent {
 
   isSubmitting = signal(false);
   errorMessage = signal<string | null>(null);
+  showAdvancedRetention = signal(true);
 
   topicForm: FormGroup = this.fb.group({
     name: [
@@ -49,8 +50,16 @@ export class CreateTopicDialogComponent {
     ],
     partitions: [3, [Validators.required, Validators.min(1), Validators.max(100)]],
     replication_factor: [2, [Validators.required, Validators.min(1), Validators.max(10)]],
-    cleanup_policy: ['delete', [Validators.required]]
+    cleanup_policy: ['delete', [Validators.required]],
+    retention_period: ['7d', [Validators.required]],
+    retention_size: ['1gb', [Validators.required]],
+    segment_size: ['128mb', [Validators.required]],
+    tombstone_retention: ['24h']
   });
+
+  toggleAdvancedRetention(): void {
+    this.showAdvancedRetention.update((v) => !v);
+  }
 
   onSubmit(): void {
     if (this.topicForm.invalid || this.isSubmitting()) {
@@ -65,7 +74,11 @@ export class CreateTopicDialogComponent {
       name: val.name.trim(),
       partitions: Number(val.partitions),
       replication_factor: Number(val.replication_factor),
-      cleanup_policy: val.cleanup_policy
+      cleanup_policy: val.cleanup_policy,
+      retention_period: val.retention_period,
+      retention_size: val.retention_size,
+      segment_size: val.segment_size,
+      tombstone_retention: val.tombstone_retention
     }).subscribe({
       next: (res) => {
         this.isSubmitting.set(false);

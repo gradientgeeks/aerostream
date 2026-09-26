@@ -315,6 +315,54 @@
       border: 1px solid var(--app-border);
     }
   }
+
+  .partition-summary-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 10px 18px;
+    margin-bottom: 16px;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+
+    .summary-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+
+      .summary-icon {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+        color: var(--app-text-muted);
+      }
+
+      .summary-label {
+        font-weight: 500;
+        color: var(--app-text-muted);
+        font-size: 0.80rem;
+      }
+
+      .summary-val {
+        font-weight: 600;
+        color: var(--app-text);
+        font-family: 'JetBrains Mono', monospace;
+      }
+    }
+
+    .summary-divider {
+      width: 1px;
+      height: 16px;
+      background: var(--app-border);
+
+      @media (max-width: 640px) {
+        display: none;
+      }
+    }
+  }
 }
 
 .partition-accordion {
@@ -469,6 +517,28 @@
   border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.25));
   padding: 4px 10px;
   border-radius: 6px;
+}
+
+.retention-meta-pill,
+.quota-meta-pill,
+.segment-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--app-nested-bg);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
+
+  mat-icon {
+    font-size: 15px;
+    width: 15px;
+    height: 15px;
+    color: var(--app-text-muted);
+  }
 }
 
 .partition-action-bar {
@@ -694,6 +764,28 @@
     background: var(--app-primary-bg, rgba(0, 229, 255, 0.1));
     border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.25));
     color: var(--app-primary-text, #38bdf8);
+  }
+}
+
+.retention-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  background: var(--app-nested-bg);
+  border: 1px solid var(--app-border);
+  color: var(--app-text-muted);
+  white-space: nowrap;
+
+  .pill-icon {
+    font-size: 13px;
+    width: 13px;
+    height: 13px;
+    color: var(--app-text-muted);
   }
 }
 

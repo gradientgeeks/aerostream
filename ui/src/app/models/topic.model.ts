@@ -14,6 +14,10 @@ export interface TopicInfo {
   replicationFactor?: number;
   highWatermarkTotal?: number;
   cleanup_policy?: 'delete' | 'compact';
+  retention_period?: string;
+  retention_size?: string;
+  segment_size?: string;
+  tombstone_retention?: string;
   schema_subject?: string;
   schema_type?: string;
 }
@@ -23,6 +27,10 @@ export interface CreateTopicRequest {
   partitions: number;
   replication_factor: number;
   cleanup_policy?: 'delete' | 'compact';
+  retention_period?: string;
+  retention_size?: string;
+  segment_size?: string;
+  tombstone_retention?: string;
 }
 
 export interface CreateTopicResponse {

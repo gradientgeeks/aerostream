@@ -98,6 +98,86 @@
           <mat-hint>Choose Compact for CDC, state stores, and latest-value retention</mat-hint>
         </mat-form-field>
       </div>
+
+      <!-- Advanced Storage & Retention Parameters -->
+      <div class="retention-panel">
+        <button
+          type="button"
+          class="retention-panel-toggle"
+          (click)="toggleAdvancedRetention()"
+          [attr.aria-expanded]="showAdvancedRetention()"
+        >
+          <div class="toggle-header-content">
+            <div class="toggle-icon-wrap">
+              <mat-icon>tune</mat-icon>
+            </div>
+            <div class="toggle-titles">
+              <span class="toggle-title">Advanced Storage &amp; Retention Parameters</span>
+              <span class="toggle-subtitle">Configure retention window, partition quotas, and segment sizing</span>
+            </div>
+          </div>
+          <mat-icon class="chevron-icon">{{ showAdvancedRetention() ? 'expand_less' : 'expand_more' }}</mat-icon>
+        </button>
+
+        @if (showAdvancedRetention()) {
+          <div class="retention-panel-body">
+            <!-- Retention Period (Time) -->
+            <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+              <mat-label>Retention Period (Time)</mat-label>
+              <mat-select formControlName="retention_period">
+                <mat-option value="1d">1 Day (24 Hours - Rapid Turnover)</mat-option>
+                <mat-option value="3d">3 Days (Transient Logs)</mat-option>
+                <mat-option value="7d">7 Days (Standard Production Default)</mat-option>
+                <mat-option value="14d">14 Days (Extended Audit)</mat-option>
+                <mat-option value="30d">30 Days (Monthly History)</mat-option>
+                <mat-option value="infinite">Infinite / Tiered Offload (Never Evict)</mat-option>
+              </mat-select>
+              <mat-icon matPrefix class="field-icon">schedule</mat-icon>
+              <mat-hint>Duration before older segments are purged from partition logs</mat-hint>
+            </mat-form-field>
+
+            <!-- Partition Disk Quota (Size) -->
+            <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+              <mat-label>Partition Disk Quota (Size)</mat-label>
+              <mat-select formControlName="retention_size">
+                <mat-option value="512mb">512 MB per partition</mat-option>
+                <mat-option value="1gb">1 GB per partition (Standard Default)</mat-option>
+                <mat-option value="5gb">5 GB per partition</mat-option>
+                <mat-option value="10gb">10 GB per partition</mat-option>
+                <mat-option value="unlimited">Unlimited Quota</mat-option>
+              </mat-select>
+              <mat-icon matPrefix class="field-icon">storage</mat-icon>
+              <mat-hint>Maximum cumulative storage quota allocated per partition</mat-hint>
+            </mat-form-field>
+
+            <!-- Segment Rolling Size -->
+            <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+              <mat-label>Segment Rolling Size</mat-label>
+              <mat-select formControlName="segment_size">
+                <mat-option value="64mb">64 MB (Faster offload to S3)</mat-option>
+                <mat-option value="128mb">128 MB (Balanced Storage Default)</mat-option>
+                <mat-option value="256mb">256 MB (High-Throughput Streaming)</mat-option>
+              </mat-select>
+              <mat-icon matPrefix class="field-icon">pie_chart</mat-icon>
+              <mat-hint>Active log segment file size threshold before rolling to disk</mat-hint>
+            </mat-form-field>
+
+            <!-- Tombstone Retention (GC) - Show when cleanup_policy === 'compact' -->
+            @if (topicForm.get('cleanup_policy')?.value === 'compact') {
+              <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+                <mat-label>Tombstone Retention (GC)</mat-label>
+                <mat-select formControlName="tombstone_retention">
+                  <mat-option value="12h">12 Hours</mat-option>
+                  <mat-option value="24h">24 Hours (Standard Default)</mat-option>
+                  <mat-option value="7d">7 Days (Long Grace Period)</mat-option>
+                </mat-select>
+                <mat-icon matPrefix class="field-icon">hourglass_empty</mat-icon>
+                <mat-hint>Grace period to keep tombstone delete markers before garbage collection</mat-hint>
+              </mat-form-field>
+            }
+          </div>
+        }
+      </div>
     </form>
   </mat-dialog-content>
 

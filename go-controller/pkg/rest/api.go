@@ -129,9 +129,14 @@ func (s *Server) handleTopics(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
 		var req struct {
-			Name              string `json:"name"`
-			Partitions        uint32 `json:"partitions"`
-			ReplicationFactor uint32 `json:"replication_factor"`
+			Name               string `json:"name"`
+			Partitions         uint32 `json:"partitions"`
+			ReplicationFactor  uint32 `json:"replication_factor"`
+			CleanupPolicy      string `json:"cleanup_policy,omitempty"`
+			RetentionPeriod    string `json:"retention_period,omitempty"`
+			RetentionSize      string `json:"retention_size,omitempty"`
+			SegmentSize        string `json:"segment_size,omitempty"`
+			TombstoneRetention string `json:"tombstone_retention,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, fmt.Sprintf("invalid request body: %v", err), http.StatusBadRequest)
