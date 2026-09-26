@@ -19,6 +19,7 @@ pub struct ExtractedKey {
 
 /// Helper to encode a generic key-value record:
 /// `[key_len: u32 BE][key bytes][val_len: u32 BE][val bytes]`
+#[allow(dead_code)]
 pub fn encode_kv_record(key: &[u8], value: Option<&[u8]>) -> Vec<u8> {
     let key_len = key.len() as u32;
     let val_len = value.map_or(0, |v| v.len()) as u32;
@@ -34,6 +35,7 @@ pub fn encode_kv_record(key: &[u8], value: Option<&[u8]>) -> Vec<u8> {
 
 /// Helper to encode a generic key-value record with a timestamp (epoch ms):
 /// `[timestamp: i64 BE][key_len: u32 BE][key bytes][val_len: u32 BE][val bytes]`
+#[allow(dead_code)]
 pub fn encode_kv_record_with_timestamp(key: &[u8], value: Option<&[u8]>, timestamp_ms: i64) -> Vec<u8> {
     let key_len = key.len() as u32;
     let val_len = value.map_or(0, |v| v.len()) as u32;
