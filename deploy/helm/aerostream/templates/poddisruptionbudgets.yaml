@@ -1,0 +1,29 @@
+{{- if .Values.controller.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aerostream.fullname" . }}-controller
+  labels:
+    {{- include "aerostream.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  maxUnavailable: {{ .Values.controller.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "aerostream.selectorLabels" (dict "ctx" . "component" "controller") | nindent 6 }}
+{{- end }}
+{{- if .Values.broker.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aerostream.fullname" . }}-broker
+  labels:
+    {{- include "aerostream.labels" . | nindent 4 }}
+    app.kubernetes.io/component: broker
+spec:
+  maxUnavailable: {{ .Values.broker.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "aerostream.selectorLabels" (dict "ctx" . "component" "broker") | nindent 6 }}
+{{- end }}

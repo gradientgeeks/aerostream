@@ -1,0 +1,35 @@
+{{- if .Values.controller.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "aerostream.fullname" . }}
+  labels:
+    {{- include "aerostream.labels" . | nindent 4 }}
+  {{- with .Values.controller.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.controller.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.controller.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.controller.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ include "aerostream.controller.service" $ }}
+                port:
+                  name: http
+          {{- end }}
+    {{- end }}
+{{- end }}

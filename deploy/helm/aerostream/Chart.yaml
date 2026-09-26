@@ -1,0 +1,16 @@
+apiVersion: v2
+name: aerostream
+description: AeroStream - distributed event streaming platform (Go Raft controllers + Rust zero-copy brokers, Kafka wire protocol, embedded web console)
+type: application
+version: 0.1.0
+# appVersion is the default image tag. Pin it to a release tag for production.
+appVersion: "latest"
+kubeVersion: ">=1.25.0-0"
+keywords:
+  - streaming
+  - kafka
+  - event-streaming
+  - raft
+home: https://quay.io/repository/gradientgeeks/aerostream
+sources:
+  - https://github.com/Uttam-Mahata/AeroMQ

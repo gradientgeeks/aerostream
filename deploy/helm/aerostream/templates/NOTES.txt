@@ -1,0 +1,28 @@
+AeroStream ({{ include "aerostream.image" . }}) installed as "{{ .Release.Name }}" in namespace {{ .Release.Namespace }}.
+
+  Controllers : {{ .Values.controller.replicas }} (Raft quorum)      Brokers : {{ .Values.broker.replicas }}
+
+Web console + REST API:
+{{- if .Values.controller.ingress.enabled }}
+  http{{ if .Values.controller.ingress.tls }}s{{ end }}://{{ (index .Values.controller.ingress.hosts 0).host }}/aerostream/console
+{{- else if eq .Values.controller.service.type "ClusterIP" }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "aerostream.controller.service" . }} {{ .Values.controller.ports.http }}:{{ .Values.controller.ports.http }}
+  open http://localhost:{{ .Values.controller.ports.http }}/aerostream/console
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} get svc {{ include "aerostream.controller.service" . }}   # then /aerostream/console on port {{ .Values.controller.ports.http }}
+{{- end }}
+
+Kafka clients (inside the cluster):
+  bootstrap.servers={{ include "aerostream.broker.service" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:{{ .Values.broker.ports.kafka }}
+  (brokers advertise their pod IPs, so clients must be able to reach the pod network)
+
+Check the cluster:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  helm -n {{ .Release.Namespace }} test {{ .Release.Name }}
+{{- if not .Values.controller.persistence.enabled }}
+
+WARNING: controller persistence is disabled; a restarted controller loses its Raft snapshots.
+{{- end }}
+{{- if and (gt (int .Values.controller.replicas) 1) (not .Values.controller.persistence.enabled) }}
+WARNING: running {{ .Values.controller.replicas }} controllers without persistence is not safe - a restarted pod 0 re-bootstraps its own cluster.
+{{- end }}
