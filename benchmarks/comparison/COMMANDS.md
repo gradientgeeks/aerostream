@@ -102,7 +102,7 @@ scripts/run-all.sh mytest aerostream                                        # a 
 ONLY="1KB 50MB" RUNS=1 scripts/run-all.sh quick                             # quick check
 scripts/cleanup.sh                                                          # remove all benchmark containers
 ```
-Output per session in `results/<label>/`: raw tool output `<system>-<workload>-run<n>.log`, `<system>-summary.tsv`
+Output per session in `results/<label>/` (the raw `*.log` files and `*-stats.csv` samples are git-ignored, see `benchmarks/.gitignore`): raw tool output `<system>-<workload>-run<n>.log`, `<system>-summary.tsv`
 (`scripts/summarize.sh`), `<system>-stats.csv`, `<system>-peaks.txt`, `<system>-idle.txt`.
 
 ## 8. Other scripts
