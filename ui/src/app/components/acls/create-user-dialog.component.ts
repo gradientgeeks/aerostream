@@ -46,17 +46,17 @@ import { AclService } from '../../services/acl.service';
       }
 
       <form [formGroup]="form" class="user-form">
-        <mat-form-field appearance="outline" class="w-full">
+        <mat-form-field appearance="outline" class="w-full" subscriptSizing="dynamic">
           <mat-label>Username / Account ID</mat-label>
           <input matInput formControlName="username" placeholder="e.g. analytics_worker, dev_john" />
           <mat-icon matPrefix class="field-icon">account_box</mat-icon>
-          <mat-hint>Principal identity will be registered as <code>User:&lt;username&gt;</code></mat-hint>
+          <mat-hint>Registered identity: <code>User:&lt;username&gt;</code></mat-hint>
           @if (form.get('username')?.hasError('required')) {
             <mat-error>Username is required</mat-error>
           }
         </mat-form-field>
 
-        <mat-form-field appearance="outline" class="w-full">
+        <mat-form-field appearance="outline" class="w-full" subscriptSizing="dynamic">
           <mat-label>Assigned RBAC Role</mat-label>
           <mat-select formControlName="role">
             @for (role of roles; track role) {
@@ -167,7 +167,7 @@ import { AclService } from '../../services/acl.service';
     .user-form {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 24px;
     }
 
     .field-icon {

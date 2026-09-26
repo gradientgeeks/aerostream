@@ -22,11 +22,11 @@
   <form [formGroup]="form" class="acl-form">
     <!-- Principal -->
     <div class="form-row">
-      <mat-form-field appearance="outline" class="w-full">
+      <mat-form-field appearance="outline" class="w-full" subscriptSizing="dynamic">
         <mat-label>Principal</mat-label>
         <input matInput formControlName="principal" placeholder="User:service_name or User:*" />
         <mat-icon matPrefix class="field-icon">account_circle</mat-icon>
-        <mat-hint>Format: <code>User:&lt;name&gt;</code>, <code>User:*</code> (Wildcard for all users)</mat-hint>
+        <mat-hint>Format: <code>User:&lt;name&gt;</code> or <code>User:*</code></mat-hint>
         @if (form.get('principal')?.hasError('required')) {
           <mat-error>Principal is required</mat-error>
         }
@@ -42,7 +42,7 @@
 
     <!-- Resource Type & Permission -->
     <div class="form-grid-2">
-      <mat-form-field appearance="outline">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Resource Type</mat-label>
         <mat-select formControlName="resource_type">
           @for (type of resourceTypes; track type) {
@@ -50,10 +50,10 @@
           }
         </mat-select>
         <mat-icon matPrefix class="field-icon">layers</mat-icon>
-        <mat-hint>Resource domain (Topic, Consumer Group, Cluster)</mat-hint>
+        <mat-hint>Topic, Consumer Group, or Cluster</mat-hint>
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Permission Type</mat-label>
         <mat-select formControlName="permission">
           @for (perm of permissions; track perm) {
@@ -65,17 +65,17 @@
           }
         </mat-select>
         <mat-icon matPrefix class="field-icon">verified_user</mat-icon>
-        <mat-hint>ALLOW or explicit DENY (Deny takes precedence)</mat-hint>
+        <mat-hint>ALLOW or DENY (DENY takes precedence)</mat-hint>
       </mat-form-field>
     </div>
 
     <!-- Resource Name Pattern -->
     <div class="form-row">
-      <mat-form-field appearance="outline" class="w-full">
+      <mat-form-field appearance="outline" class="w-full" subscriptSizing="dynamic">
         <mat-label>Resource Name / Pattern</mat-label>
         <input matInput formControlName="resource_name" placeholder="e.g. orders-*, telemetry, *" />
         <mat-icon matPrefix class="field-icon">folder_special</mat-icon>
-        <mat-hint>Supports exact names, wildcards (<code>*</code>), or prefix patterns (e.g. <code>orders-*</code>)</mat-hint>
+        <mat-hint>Exact name, wildcard (<code>*</code>), or prefix (e.g. <code>orders-*</code>)</mat-hint>
         @if (form.get('resource_name')?.hasError('required')) {
           <mat-error>Resource name or pattern is required</mat-error>
         }
@@ -92,7 +92,7 @@
 
     <!-- Operation -->
     <div class="form-row">
-      <mat-form-field appearance="outline" class="w-full">
+      <mat-form-field appearance="outline" class="w-full" subscriptSizing="dynamic">
         <mat-label>Operation</mat-label>
         <mat-select formControlName="operation">
           @for (op of operations; track op) {
