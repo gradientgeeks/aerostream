@@ -117,12 +117,7 @@ pub async fn handle_kafka_frame(
         }
         1 => {
             // Fetch
-            let resp = handle_fetch(correlation_id, api_version, &mut cursor, log_manager).await?;
-            Ok(Some(resp))
-        }
-        2 => {
-            // ListOffsets
-            let resp = handle_list_offsets(correlation_id, api_version, &mut cursor, log_manager).await?;
+            let resp = handle_fetch(correlation_id, api_version, &mut cursor, log_manager, cfg).await?;
             Ok(Some(resp))
         }
         22 => {
@@ -131,6 +126,15 @@ pub async fn handle_kafka_frame(
             Ok(Some(resp))
         }
         _ => {
+            // Admin / group-coordinator APIs (stream C): ListOffsets, CreateTopics, JoinGroup, ...
+            if crate::kafka::admin::supported_range(api_key).is_some() {
+                let st = crate::kafka::admin::init(cfg, log_manager);
+                let client_id = _client_id.clone().unwrap_or_default();
+                let body = &frame[cursor.position() as usize..];
+                if let Some(res) = crate::kafka::admin::dispatch(&st, api_key, api_version, correlation_id, &client_id, body).await {
+                    return res.map(Some).map_err(|e| e.into());
+                }
+            }
             warn!("[AeroMQ Kafka] Unsupported API key: {}", api_key);
             let mut resp = BytesMut::new();
             resp.put_i32(correlation_id);
@@ -144,40 +148,49 @@ pub async fn handle_kafka_frame(
 // API Handlers
 // ============================================================================
 
-/// Handler for ApiVersions (API Key 18)
+/// Handler for ApiVersions (API Key 18). Advertises every API the broker implements.
+/// The response header is always v0; v3+ bodies use the flexible (compact) encoding.
 fn handle_api_versions(
     correlation_id: i32,
     api_version: i16,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    let mut buf = BytesMut::new();
-    buf.put_i32(correlation_id);
-    buf.put_i16(0); // ErrorCode: 0 (NONE)
+    use crate::kafka::codec::Wr;
 
-    // Supported API keys list
-    let api_keys: [(i16, i16, i16); 6] = [
+    let mut apis: Vec<(i16, i16, i16)> = vec![
         (0, 0, 7),  // Produce: v0 - v7
-        (1, 0, 7),  // Fetch: v0 - v7
-        (2, 0, 2),  // ListOffsets: v0 - v2
+        (1, 0, 11), // Fetch: v0 - v11 (v11 = KIP-392 rack_id / preferred_read_replica)
         (3, 0, 5),  // Metadata: v0 - v5
         (18, 0, 3), // ApiVersions: v0 - v3
         (22, 0, 4), // InitProducerId: v0 - v4
     ];
+    apis.extend_from_slice(crate::kafka::admin::ADMIN_APIS);
+    apis.sort();
 
-    buf.put_i32(api_keys.len() as i32);
-    for (key, min_v, max_v) in api_keys {
-        buf.put_i16(key);
-        buf.put_i16(min_v);
-        buf.put_i16(max_v);
+    let mut buf = BytesMut::new();
+    buf.put_i32(correlation_id);
+
+    // Unsupported ApiVersions version: reply with UNSUPPORTED_VERSION in v0 format (KIP-511).
+    if api_version < 0 || api_version > 3 {
+        buf.put_i16(35);
+        buf.put_i32(1);
+        buf.put_i16(18);
+        buf.put_i16(0);
+        buf.put_i16(3);
+        return Ok(buf.to_vec());
     }
 
+    let flex = api_version >= 3;
+    let mut w = Wr::new(flex);
+    w.i16(0); // ErrorCode: NONE
+    w.arr(apis.len());
+    for (key, min_v, max_v) in apis {
+        w.i16(key).i16(min_v).i16(max_v).tagged();
+    }
     if api_version >= 1 {
-        buf.put_i32(0); // ThrottleTimeMs
+        w.i32(0); // ThrottleTimeMs
     }
-
-    if api_version >= 3 {
-        buf.put_u8(0); // Empty tagged fields buffer
-    }
-
+    w.tagged();
+    buf.put_slice(&w.finish());
     Ok(buf.to_vec())
 }
 
@@ -231,11 +244,16 @@ async fn handle_metadata(
         }
     }
 
-    // If no specific topics requested (empty or null array), list known topics from log manager
-    let topics_to_report = if requested_topics.is_empty() {
-        let existing = log_manager.get_all_offsets().await;
-        let mut set = std::collections::HashSet::new();
-        for (topic, _, _) in existing {
+    // Cluster view (brokers with racks, real partition layout) from the controller-fed topology cache.
+    // (kept fresh by the refresh loop started in `admin::init`, called at broker startup)
+    let snap = crate::topology::TopologyCache::global().snapshot();
+    let my_id = cfg.id as i32;
+    let cluster = !snap.brokers.is_empty();
+
+    // If no specific topics requested (empty or null array), list known topics from the cluster + local logs
+    let topics_to_report: Vec<String> = if requested_topics.is_empty() {
+        let mut set: std::collections::BTreeSet<String> = snap.topics.keys().cloned().collect();
+        for (topic, _, _) in log_manager.get_all_offsets().await {
             set.insert(topic);
         }
         if set.is_empty() {
@@ -254,17 +272,26 @@ async fn handle_metadata(
         buf.put_i32(0); // ThrottleTimeMs
     }
 
-    // Brokers array
-    buf.put_i32(1); // 1 broker
-    buf.put_i32(cfg.id as i32); // NodeId
-    put_kafka_string(&mut buf, Some(&cfg.host));
-    buf.put_i32(cfg.kafka_port);
-    if api_version >= 1 {
-        put_kafka_string(&mut buf, None); // Rack: null
+    // Brokers array (all live brokers when the controller view is available)
+    let self_rack = cfg.rack.clone();
+    let brokers: Vec<(i32, String, i32, Option<String>)> = if cluster {
+        snap.brokers.values().map(|b| (b.id, b.host.clone(), b.kafka_port, b.rack.clone())).collect()
+    } else {
+        vec![(my_id, cfg.host.clone(), cfg.kafka_port, self_rack)]
+    };
+    buf.put_i32(brokers.len() as i32);
+    for (id, host, port, rack) in &brokers {
+        buf.put_i32(*id); // NodeId
+        put_kafka_string(&mut buf, Some(host));
+        buf.put_i32(*port);
+        if api_version >= 1 {
+            put_kafka_string(&mut buf, rack.as_deref()); // Rack
+        }
     }
 
     if api_version >= 1 {
-        buf.put_i32(cfg.id as i32); // ControllerId
+        let controller = brokers.iter().map(|b| b.0).min().unwrap_or(my_id);
+        buf.put_i32(controller); // ControllerId
     }
 
     // TopicMetadata array
@@ -277,26 +304,46 @@ async fn handle_metadata(
             buf.put_u8(0); // IsInternal: false
         }
 
-        // Partitions array (Partition 0)
-        buf.put_i32(1); // 1 partition
-        buf.put_i16(0); // Partition ErrorCode: 0
-        buf.put_i32(0); // PartitionIndex: 0
-        buf.put_i32(cfg.id as i32); // LeaderId
+        // Partition layout: controller-provided when known, else single local partition 0
+        let layout: Vec<(i32, i32, Vec<i32>, Vec<i32>)> = match snap.topics.get(&topic_name) {
+            Some(t) if !t.partitions.is_empty() => t
+                .partitions
+                .iter()
+                .map(|(pid, p)| (*pid, if p.leader == 0 { -1 } else { p.leader }, p.replicas.clone(), p.isr.clone()))
+                .collect(),
+            _ => vec![(0, my_id, vec![my_id], vec![my_id])],
+        };
+        buf.put_i32(layout.len() as i32);
+        for (pid, leader, replicas, isr) in layout {
+            buf.put_i16(if leader < 0 { 5 } else { 0 }); // LEADER_NOT_AVAILABLE when unassigned
+            buf.put_i32(pid); // PartitionIndex
+            buf.put_i32(leader); // LeaderId
 
-        if api_version >= 7 {
-            buf.put_i32(0); // LeaderEpoch: 0
-        }
+            if api_version >= 7 {
+                buf.put_i32(0); // LeaderEpoch: 0
+            }
 
-        // Replicas: [broker_id]
-        buf.put_i32(1);
-        buf.put_i32(cfg.id as i32);
+            buf.put_i32(replicas.len() as i32);
+            for r in &replicas {
+                buf.put_i32(*r);
+            }
+            buf.put_i32(isr.len() as i32);
+            for r in &isr {
+                buf.put_i32(*r);
+            }
 
-        // Isr: [broker_id]
-        buf.put_i32(1);
-        buf.put_i32(cfg.id as i32);
-
-        if api_version >= 5 {
-            buf.put_i32(0); // OfflineReplicas count: 0
+            if api_version >= 5 {
+                // OfflineReplicas: replicas whose broker is not currently registered/active
+                let offline: Vec<i32> = if cluster {
+                    replicas.iter().copied().filter(|r| !snap.brokers.contains_key(r)).collect()
+                } else {
+                    vec![]
+                };
+                buf.put_i32(offline.len() as i32);
+                for r in offline {
+                    buf.put_i32(r);
+                }
+            }
         }
     }
 
@@ -422,18 +469,32 @@ async fn handle_produce(
     Ok(Some(buf.to_vec()))
 }
 
-/// Handler for Fetch (API Key 1)
+/// Handler for Fetch (API Key 1), using the process-wide topology cache for KIP-392 routing.
 async fn handle_fetch(
     correlation_id: i32,
     api_version: i16,
     cursor: &mut io::Cursor<&[u8]>,
     log_manager: &Arc<LogManager>,
+    cfg: &Arc<BrokerConfig>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    let topo = crate::topology::TopologyCache::global();
+    handle_fetch_with_topo(correlation_id, api_version, cursor, log_manager, cfg, &topo).await
+}
+
+/// Fetch implementation. Supports v0-v11; v11 carries `rack_id` and returns `preferred_read_replica` (KIP-392).
+pub(crate) async fn handle_fetch_with_topo(
+    correlation_id: i32,
+    api_version: i16,
+    cursor: &mut io::Cursor<&[u8]>,
+    log_manager: &Arc<LogManager>,
+    cfg: &Arc<BrokerConfig>,
+    topo: &crate::topology::TopologyCache,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     if cursor.remaining() < 12 {
         return Err("Fetch request truncated".into());
     }
 
-    let _replica_id = cursor.get_i32();
+    let replica_id = cursor.get_i32();
     let _max_wait_ms = cursor.get_i32();
     let _min_bytes = cursor.get_i32();
 
@@ -450,15 +511,17 @@ async fn handle_fetch(
 
     let topics_count = cursor.get_i32();
     let mut topic_results = Vec::new();
+    // Requested partitions are parsed first; rack_id (v11) trails the topics/forgotten-topics arrays.
+    let mut requested: Vec<(String, Vec<(i32, i64, i32)>)> = Vec::new();
 
     for _ in 0..topics_count {
         let topic_name = read_kafka_string(cursor)?.unwrap_or_default();
         let partitions_count = cursor.get_i32();
-        let mut part_results = Vec::new();
+        let mut parts = Vec::new();
 
         for _ in 0..partitions_count {
             let partition_index = cursor.get_i32();
-            if api_version >= 5 && cursor.remaining() >= 4 {
+            if api_version >= 9 && cursor.remaining() >= 4 {
                 let _current_leader_epoch = cursor.get_i32();
             }
             let fetch_offset = cursor.get_i64();
@@ -466,17 +529,69 @@ async fn handle_fetch(
                 let _log_start_offset = cursor.get_i64();
             }
             let partition_max_bytes = cursor.get_i32();
+            parts.push((partition_index, fetch_offset, partition_max_bytes));
+        }
+        requested.push((topic_name, parts));
+    }
 
+    // forgotten_topics_data (v7+): incremental fetch sessions are not used, so just skip it.
+    if api_version >= 7 && cursor.remaining() >= 4 {
+        let forgotten = cursor.get_i32();
+        for _ in 0..forgotten.max(0) {
+            let _ = read_kafka_string(cursor)?;
+            let n = cursor.get_i32();
+            for _ in 0..n.max(0) {
+                if cursor.remaining() >= 4 {
+                    let _ = cursor.get_i32();
+                }
+            }
+        }
+    }
+    // rack_id (v11, KIP-392): the client's rack, used to pick the closest replica.
+    let client_rack = if api_version >= 11 { read_kafka_string(cursor)? } else { None };
+
+    let my_id = cfg.id as i32;
+    let selector = crate::topology::ReplicaSelector::parse(&cfg.replica_selector);
+
+    for (topic_name, parts) in requested {
+        let mut part_results = Vec::new();
+
+        for (partition_index, fetch_offset, partition_max_bytes) in parts {
             let mut high_watermark = 0i64;
             let mut record_set = Vec::new();
             let mut error_code = 0i16;
+            let mut preferred_replica = -1i32;
+            let mut hw_cap: Option<i64> = None;
+
+            // KIP-392 routing (consumers only: replica_id == -1) using the controller-fed topology.
+            if replica_id < 0 {
+                if let Some(info) = topo.partition(&topic_name, partition_index) {
+                    if info.leader == my_id {
+                        let snap = topo.snapshot();
+                        let choice = crate::topology::select_replica(selector, client_rack.as_deref(), &info, &snap.brokers, fetch_offset);
+                        if choice != my_id && choice > 0 {
+                            // Tell the client to read from the closer replica; no records from the leader.
+                            preferred_replica = choice;
+                        }
+                    } else if info.replicas.contains(&my_id) {
+                        // Follower read: only expose data known to be committed (<= partition high watermark).
+                        hw_cap = Some(info.high_watermark);
+                    } else if info.leader != 0 {
+                        error_code = 6; // NOT_LEADER_OR_FOLLOWER
+                    }
+                }
+            }
 
             match log_manager.get_partition(&topic_name, partition_index as u32).await {
+                Ok(_) if error_code != 0 => {}
                 Ok(part_log) => {
                     let mut guard = part_log.lock().await;
                     high_watermark = guard.high_watermark as i64;
+                    if let Some(cap) = hw_cap {
+                        high_watermark = high_watermark.min(cap);
+                    }
 
-                    if (fetch_offset as u64) < guard.high_watermark {
+                    if preferred_replica < 0 && fetch_offset < high_watermark {
                         let max_read = (partition_max_bytes as u32).min(32 * 1024 * 1024);
                         if let Ok(Some((mut file, position, bytes_to_read))) =
                             guard.read_from_offset(fetch_offset as u64, max_read)
@@ -495,7 +610,7 @@ async fn handle_fetch(
                 }
             }
 
-            part_results.push((partition_index, error_code, high_watermark, record_set));
+            part_results.push((partition_index, error_code, high_watermark, record_set, preferred_replica));
         }
 
         topic_results.push((topic_name, part_results));
@@ -517,7 +632,7 @@ async fn handle_fetch(
     for (topic, parts) in topic_results {
         put_kafka_string(&mut buf, Some(&topic));
         buf.put_i32(parts.len() as i32);
-        for (part_idx, err_code, hw, records) in parts {
+        for (part_idx, err_code, hw, records, preferred) in parts {
             buf.put_i32(part_idx);
             buf.put_i16(err_code);
             buf.put_i64(hw);
@@ -530,87 +645,11 @@ async fn handle_fetch(
             if api_version >= 4 {
                 buf.put_i32(0); // AbortedTransactions count: 0
             }
+            if api_version >= 11 {
+                buf.put_i32(preferred); // PreferredReadReplica (-1 = none)
+            }
             buf.put_i32(records.len() as i32);
             buf.put_slice(&records);
-        }
-    }
-
-    Ok(buf.to_vec())
-}
-
-/// Handler for ListOffsets (API Key 2)
-async fn handle_list_offsets(
-    correlation_id: i32,
-    api_version: i16,
-    cursor: &mut io::Cursor<&[u8]>,
-    log_manager: &Arc<LogManager>,
-) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    if cursor.remaining() < 8 {
-        return Err("ListOffsets request truncated".into());
-    }
-
-    let _replica_id = cursor.get_i32();
-    if api_version >= 2 && cursor.remaining() >= 1 {
-        let _isolation_level = cursor.get_i8();
-    }
-
-    let topics_count = cursor.get_i32();
-    let mut topic_results = Vec::new();
-
-    for _ in 0..topics_count {
-        let topic_name = read_kafka_string(cursor)?.unwrap_or_default();
-        let partitions_count = cursor.get_i32();
-        let mut part_results = Vec::new();
-
-        for _ in 0..partitions_count {
-            let partition_index = cursor.get_i32();
-            let timestamp = cursor.get_i64();
-            if api_version == 0 && cursor.remaining() >= 4 {
-                let _max_num_offsets = cursor.get_i32();
-            }
-
-            let mut offset = 0i64;
-            if let Ok(part_log) = log_manager.get_partition(&topic_name, partition_index as u32).await {
-                let guard = part_log.lock().await;
-                if timestamp == -2 {
-                    // Earliest offset
-                    offset = 0;
-                } else {
-                    // Latest offset (timestamp == -1 or current)
-                    offset = guard.next_offset as i64;
-                }
-            }
-
-            part_results.push((partition_index, 0i16, offset));
-        }
-
-        topic_results.push((topic_name, part_results));
-    }
-
-    let mut buf = BytesMut::new();
-    buf.put_i32(correlation_id);
-
-    if api_version >= 2 {
-        buf.put_i32(0); // ThrottleTimeMs
-    }
-
-    buf.put_i32(topic_results.len() as i32);
-    for (topic, parts) in topic_results {
-        put_kafka_string(&mut buf, Some(&topic));
-        buf.put_i32(parts.len() as i32);
-        for (part_idx, err_code, off) in parts {
-            buf.put_i32(part_idx);
-            buf.put_i16(err_code);
-            if api_version == 0 {
-                buf.put_i32(1); // Offsets array len = 1
-                buf.put_i64(off);
-            } else {
-                buf.put_i64(-1); // Timestamp
-                buf.put_i64(off);
-                if api_version >= 4 {
-                    buf.put_i32(0); // LeaderEpoch: 0
-                }
-            }
         }
     }
 
@@ -770,7 +809,7 @@ mod tests {
         assert_eq!(cursor.get_i32(), 1234); // correlation_id
         assert_eq!(cursor.get_i16(), 0);    // error_code: NONE
         let num_keys = cursor.get_i32();
-        assert_eq!(num_keys, 6);
+        assert_eq!(num_keys as usize, 5 + crate::kafka::admin::ADMIN_APIS.len());
     }
 
     #[tokio::test]

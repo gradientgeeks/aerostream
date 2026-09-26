@@ -22,6 +22,12 @@ pub struct BrokerConfig {
     pub controller: String,
     /// Path to store physical partition log files (defaults to ./data/broker_{id}).
     pub storage_dir: Option<PathBuf>,
+    /// `broker.rack`: rack / availability-zone label reported to the controller and in Metadata.
+    pub rack: Option<String>,
+    /// KIP-392 replica selector: "rack_aware" (default) or "leader".
+    pub replica_selector: String,
+    /// Consumer-group coordinator: delay before the first rebalance of an empty group completes.
+    pub group_initial_rebalance_delay_ms: u64,
 
     pub storage: StorageConfig,
     pub tiered_storage: crate::storage::TieredStorageConfig,
@@ -78,6 +84,9 @@ impl Default for BrokerConfig {
             kafka_port: 9093,
             controller: "http://127.0.0.1:8001".to_string(),
             storage_dir: None,
+            rack: None,
+            replica_selector: "rack_aware".to_string(),
+            group_initial_rebalance_delay_ms: 3000,
             storage: StorageConfig::default(),
             tiered_storage: crate::storage::TieredStorageConfig::default(),
             tls: TlsConfig::default(),
