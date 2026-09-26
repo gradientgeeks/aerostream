@@ -63,6 +63,7 @@
           },
           "configurations": {
             "production": {
+              "baseHref": "/aerostream/console/",
               "budgets": [
                 {
                   "type": "initial",
