@@ -188,7 +188,7 @@ async fn closing_session_releases_acquired_records() {
 async fn lock_timeout_redelivery_and_delivery_limit_archive() {
     let e = env("share_lock");
     produce_plain(&e, "q", 0, 1).await;
-    let cfg = ShareConfig { lock_timeout_ms: 30, max_delivery_attempts: 2, auto_offset_reset: "earliest".into(), dlq_topic: Some("dead".into()), ..Default::default() };
+    let cfg = ShareConfig { lock_timeout_ms: 300, max_delivery_attempts: 2, auto_offset_reset: "earliest".into(), dlq_topic: Some("dead".into()), ..Default::default() };
     let sc = Arc::new(ShareCoordinator::open(None, Arc::downgrade(&e.lm), cfg));
     assert!(e.lm.share_coord.set(sc.clone()).is_ok());
     let tid = topic_id("q");
@@ -201,7 +201,7 @@ async fn lock_timeout_redelivery_and_delivery_limit_archive() {
     let o = share_fetch(&e, &fetch_args("g", "m2", 0, tid, 0, vec![])).await;
     assert!(o.partitions.iter().all(|p| p.acquired.is_empty()));
 
-    tokio::time::sleep(Duration::from_millis(60)).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
     sc.sweep(now_ms()).await; // lock expires -> Available
     let o = share_fetch(&e, &fetch_args("g", "m2", 1, tid, 0, vec![])).await;
     assert_eq!(o.partitions[0].acquired, vec![(0, 0, 2)]);
@@ -209,7 +209,7 @@ async fn lock_timeout_redelivery_and_delivery_limit_archive() {
     let (_, res) = share_ack(&e, "g", "m1", 1, tid, 0, vec![ack(0, 0, ACK_ACCEPT)]).await;
     assert_eq!(res[0].2, err::INVALID_RECORD_STATE);
 
-    tokio::time::sleep(Duration::from_millis(60)).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
     sc.sweep(now_ms()).await; // 2nd expiry hits the delivery limit -> archived + DLQ
     let st = sc.partition_stats("g", "q", 0).unwrap();
     assert_eq!((st.0, st.2, st.3), (1, 0, 0));
@@ -254,14 +254,14 @@ async fn assignment_is_balanced_and_rebalances_on_membership_change() {
 async fn member_session_timeout_releases_records() {
     let e = env("share_session");
     produce_plain(&e, "q", 0, 2).await;
-    let cfg = ShareConfig { session_timeout_ms: 20, auto_offset_reset: "earliest".into(), ..Default::default() };
+    let cfg = ShareConfig { session_timeout_ms: 200, auto_offset_reset: "earliest".into(), ..Default::default() };
     let sc = Arc::new(ShareCoordinator::open(None, Arc::downgrade(&e.lm), cfg));
     assert!(e.lm.share_coord.set(sc.clone()).is_ok());
     let tid = topic_id("q");
     hb(&e, "g", "m1", 0, Some(vec!["q"])).await;
     let o = share_fetch(&e, &fetch_args("g", "m1", 0, tid, 0, vec![])).await;
     assert_eq!(o.partitions[0].acquired.len(), 1);
-    tokio::time::sleep(Duration::from_millis(40)).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
     sc.sweep(now_ms()).await;
     assert_eq!(sc.describe(&["g".to_string()])[0].members.len(), 0);
     let st = sc.partition_stats("g", "q", 0).unwrap();

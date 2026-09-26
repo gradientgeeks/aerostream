@@ -302,3 +302,11 @@ async fn unsupported_version_and_pid_allocation() {
     let r = crate::net::kafka_server::handle_kafka_frame(&f, &e.lm, &e.cfg).await.unwrap().unwrap();
     assert_eq!(i16::from_be_bytes(r[4..6].try_into().unwrap()), err::UNSUPPORTED_VERSION);
 }
+
+#[test]
+fn example_config_sections_parse() {
+    let cfg: crate::config::BrokerConfig = toml::from_str(include_str!("../../../config/broker.example.toml")).unwrap();
+    assert_eq!(cfg.txn.max_timeout_ms, 900_000);
+    assert_eq!(cfg.share.max_delivery_attempts, 5);
+    assert_eq!(cfg.share.auto_offset_reset, "latest");
+}
