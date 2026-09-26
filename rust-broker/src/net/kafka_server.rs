@@ -7,6 +7,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, error, info, warn};
 
 use crate::config::BrokerConfig;
+use crate::kafka::quota::{self, RequestCtx};
 use crate::log::LogManager;
 
 pub struct KafkaServer {
@@ -73,11 +74,28 @@ async fn handle_kafka_connection(
         let mut frame_buf = vec![0u8; frame_len as usize];
         stream.read_exact(&mut frame_buf).await?;
 
-        if let Some(resp_bytes) = handle_kafka_frame(&frame_buf, &log_manager, &cfg).await? {
+        let mut ctx = RequestCtx::default();
+        let resp = handle_kafka_frame_ctx(&frame_buf, &log_manager, &cfg, &mut ctx).await?;
+        let (api_key, api_version) = if frame_buf.len() >= 4 {
+            (i16::from_be_bytes([frame_buf[0], frame_buf[1]]), i16::from_be_bytes([frame_buf[2], frame_buf[3]]))
+        } else {
+            (-1, 0)
+        };
+        let throttle = std::time::Duration::from_millis(ctx.throttle_ms as u64);
+        // KIP-219: old API versions get their response delayed; newer ones get it right away
+        // (carrying throttle_time_ms) and the channel is muted before the next request is read.
+        let delay_before = ctx.throttle_ms > 0 && !quota::response_not_delayed(api_key, api_version);
+        if delay_before {
+            tokio::time::sleep(throttle).await;
+        }
+        if let Some(resp_bytes) = resp {
             let resp_len = (resp_bytes.len() as i32).to_be_bytes();
             stream.write_all(&resp_len).await?;
             stream.write_all(&resp_bytes).await?;
             stream.flush().await?;
+        }
+        if ctx.throttle_ms > 0 && !delay_before {
+            tokio::time::sleep(throttle).await;
         }
     }
 
@@ -89,6 +107,35 @@ pub async fn handle_kafka_frame(
     log_manager: &Arc<LogManager>,
     cfg: &Arc<BrokerConfig>,
 ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut ctx = RequestCtx::default();
+    handle_kafka_frame_ctx(frame, log_manager, cfg, &mut ctx).await
+}
+
+/// Like `handle_kafka_frame`, but exposes quota state: `ctx.throttle_ms` is filled with the
+/// throttle the connection must apply (KIP-13/124/219).
+pub async fn handle_kafka_frame_ctx(
+    frame: &[u8],
+    log_manager: &Arc<LogManager>,
+    cfg: &Arc<BrokerConfig>,
+    ctx: &mut RequestCtx,
+) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
+    let started = std::time::Instant::now();
+    let qm = quota::manager();
+    let quotas_active = !qm.is_empty();
+    let result = handle_kafka_frame_inner(frame, log_manager, cfg, ctx).await;
+    if quotas_active {
+        let t = qm.record_request_time(&ctx.user, &ctx.client_id, started.elapsed().as_nanos() as u64);
+        ctx.throttle_ms = ctx.throttle_ms.max(t);
+    }
+    result
+}
+
+async fn handle_kafka_frame_inner(
+    frame: &[u8],
+    log_manager: &Arc<LogManager>,
+    cfg: &Arc<BrokerConfig>,
+    ctx: &mut RequestCtx,
+) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
     let mut cursor = io::Cursor::new(frame);
     if cursor.remaining() < 8 {
         return Err("Kafka frame too short for header".into());
@@ -97,7 +144,13 @@ pub async fn handle_kafka_frame(
     let api_key = cursor.get_i16();
     let api_version = cursor.get_i16();
     let correlation_id = cursor.get_i32();
-    let _client_id = read_kafka_string(&mut cursor)?;
+    let client_id = read_kafka_string(&mut cursor)?;
+    *ctx = RequestCtx::new(client_id.as_deref(), None);
+    if !quota::manager().is_empty() {
+        // Throttle owed from earlier request-time usage is reported on this response too.
+        ctx.base_throttle_ms = quota::manager().peek(quota::Metric::Request, &ctx.user, &ctx.client_id);
+        ctx.throttle_ms = ctx.base_throttle_ms;
+    }
 
     match api_key {
         18 => {
@@ -112,12 +165,12 @@ pub async fn handle_kafka_frame(
         }
         0 => {
             // Produce
-            let resp_opt = handle_produce(correlation_id, api_version, &mut cursor, log_manager).await?;
+            let resp_opt = handle_produce(correlation_id, api_version, &mut cursor, log_manager, ctx).await?;
             Ok(resp_opt)
         }
         1 => {
             // Fetch
-            let resp = handle_fetch(correlation_id, api_version, &mut cursor, log_manager).await?;
+            let resp = handle_fetch(correlation_id, api_version, &mut cursor, log_manager, ctx).await?;
             Ok(Some(resp))
         }
         2 => {
@@ -309,7 +362,9 @@ async fn handle_produce(
     api_version: i16,
     cursor: &mut io::Cursor<&[u8]>,
     log_manager: &Arc<LogManager>,
+    ctx: &mut RequestCtx,
 ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut produced_bytes: u64 = 0;
     if api_version >= 3 {
         let _transactional_id = read_kafka_string(cursor)?;
     }
@@ -339,6 +394,18 @@ async fn handle_produce(
             if records_size > 0 && cursor.remaining() >= records_size as usize {
                 let mut records_data = vec![0u8; records_size as usize];
                 cursor.copy_to_slice(&mut records_data);
+                produced_bytes += records_data.len() as u64;
+
+                // Compression: validate codec/body, and re-encode when the topic forces a codec.
+                let ctype = crate::kafka::compression::registry().for_topic(&topic_name);
+                match crate::kafka::compression::normalize_produce_payload(&records_data, ctype) {
+                    Ok(v) => records_data = v,
+                    Err(e) => {
+                        warn!("[AeroMQ Kafka] Rejecting produce for {}-{}: {}", topic_name, partition_index, e);
+                        part_results.push((partition_index, e.error_code(), -1));
+                        continue;
+                    }
+                }
 
                 // Detect modern RecordBatch (magic byte 2 at index 16) with PID and sequence
                 let (producer_id, base_sequence, records_count) = if records_data.len() >= 61 && records_data[16] == 2 {
@@ -390,6 +457,14 @@ async fn handle_produce(
         topic_results.push((topic_name, part_results));
     }
 
+    // Producer byte-rate quota (KIP-13): record bytes and compute throttle.
+    let mut throttle_ms = ctx.base_throttle_ms;
+    if !quota::manager().is_empty() {
+        let t = quota::manager().record(quota::Metric::Produce, &ctx.user, &ctx.client_id, produced_bytes as f64);
+        throttle_ms = throttle_ms.max(t);
+        ctx.throttle_ms = ctx.throttle_ms.max(throttle_ms);
+    }
+
     // If acks == 0, Kafka specification dictates NO response frame is returned to the client
     if acks == 0 {
         return Ok(None);
@@ -416,7 +491,7 @@ async fn handle_produce(
     }
 
     if api_version >= 1 {
-        buf.put_i32(0); // ThrottleTimeMs
+        buf.put_i32(throttle_ms as i32); // ThrottleTimeMs
     }
 
     Ok(Some(buf.to_vec()))
@@ -428,6 +503,7 @@ async fn handle_fetch(
     api_version: i16,
     cursor: &mut io::Cursor<&[u8]>,
     log_manager: &Arc<LogManager>,
+    ctx: &mut RequestCtx,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     if cursor.remaining() < 12 {
         return Err("Fetch request truncated".into());
@@ -501,11 +577,24 @@ async fn handle_fetch(
         topic_results.push((topic_name, part_results));
     }
 
+    // Consumer byte-rate quota (KIP-13): record served bytes and compute throttle.
+    let mut throttle_ms = ctx.base_throttle_ms;
+    if !quota::manager().is_empty() {
+        let served: usize = topic_results
+            .iter()
+            .flat_map(|(_, parts)| parts.iter())
+            .map(|(_, _, _, r)| r.len())
+            .sum();
+        let t = quota::manager().record(quota::Metric::Fetch, &ctx.user, &ctx.client_id, served as f64);
+        throttle_ms = throttle_ms.max(t);
+        ctx.throttle_ms = ctx.throttle_ms.max(throttle_ms);
+    }
+
     let mut buf = BytesMut::new();
     buf.put_i32(correlation_id);
 
     if api_version >= 1 {
-        buf.put_i32(0); // ThrottleTimeMs
+        buf.put_i32(throttle_ms as i32); // ThrottleTimeMs
     }
 
     if api_version >= 7 {
@@ -874,6 +963,168 @@ mod tests {
         assert!(hw >= 1);
         let records_len = fcur.get_i32();
         assert!(records_len > 0);
+    }
+
+    fn produce_frame_v3(client: &str, topic: &str, records: &[u8], version: i16) -> BytesMut {
+        let mut f = BytesMut::new();
+        f.put_i16(0);
+        f.put_i16(version);
+        f.put_i32(7);
+        put_kafka_string(&mut f, Some(client));
+        put_kafka_string(&mut f, None); // transactional_id
+        f.put_i16(1); // acks
+        f.put_i32(1000);
+        f.put_i32(1);
+        put_kafka_string(&mut f, Some(topic));
+        f.put_i32(1);
+        f.put_i32(0);
+        f.put_i32(records.len() as i32);
+        f.put_slice(records);
+        f
+    }
+
+    /// Returns the produce partition error code (v3 layout).
+    fn produce_error_code(resp: &[u8]) -> i16 {
+        let mut c = io::Cursor::new(resp);
+        c.get_i32();
+        c.get_i32();
+        read_kafka_string(&mut c).unwrap();
+        c.get_i32();
+        c.get_i32();
+        c.get_i16()
+    }
+
+    fn fetch_records_v4(log_mgr_resp: &[u8]) -> Vec<u8> {
+        let mut c = io::Cursor::new(log_mgr_resp);
+        c.get_i32(); // corr
+        c.get_i32(); // throttle
+        c.get_i32(); // topics
+        read_kafka_string(&mut c).unwrap();
+        c.get_i32(); // parts
+        c.get_i32();
+        c.get_i16();
+        c.get_i64(); // hw
+        c.get_i64(); // lso
+        c.get_i32(); // aborted
+        let n = c.get_i32() as usize;
+        let mut v = vec![0u8; n];
+        c.copy_to_slice(&mut v);
+        v
+    }
+
+    fn fetch_frame_v4(client: &str, topic: &str, offset: i64) -> BytesMut {
+        let mut f = BytesMut::new();
+        f.put_i16(1);
+        f.put_i16(4);
+        f.put_i32(8);
+        put_kafka_string(&mut f, Some(client));
+        f.put_i32(-1);
+        f.put_i32(100);
+        f.put_i32(1);
+        f.put_i32(1 << 20); // max_bytes
+        f.put_i8(0); // isolation
+        f.put_i32(1);
+        put_kafka_string(&mut f, Some(topic));
+        f.put_i32(1);
+        f.put_i32(0);
+        f.put_i64(offset);
+        f.put_i32(1 << 20);
+        f
+    }
+
+    #[tokio::test]
+    async fn test_compressed_batches_produce_fetch_all_codecs() {
+        use crate::kafka::compression::{batch_codec, recompress_batch, Codec};
+        use crate::kafka::handlers::{encode_records_batch, parse_records, KafkaRecord};
+        let dir = tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1));
+        let cfg = Arc::new(BrokerConfig::default());
+        let recs: Vec<KafkaRecord> = (0..10)
+            .map(|i| KafkaRecord::new(Some(format!("k{}", i).into_bytes()), Some(vec![b'a' + i as u8; 300])))
+            .collect();
+        let plain = encode_records_batch(0, &recs);
+        for (n, codec) in [Codec::Gzip, Codec::Snappy, Codec::Lz4, Codec::Zstd].into_iter().enumerate() {
+            let topic = format!("comp-{}", n);
+            let z = recompress_batch(&plain, codec).unwrap();
+            let resp = handle_kafka_frame(&produce_frame_v3("c", &topic, &z, 3), &log_mgr, &cfg).await.unwrap().unwrap();
+            assert_eq!(produce_error_code(&resp), 0);
+            let fr = handle_kafka_frame(&fetch_frame_v4("c", &topic, 0), &log_mgr, &cfg).await.unwrap().unwrap();
+            let got = fetch_records_v4(&fr);
+            // stored verbatim: codec preserved, consumer can decode
+            assert_eq!(batch_codec(&got).unwrap(), codec);
+            let parsed = parse_records(&got).unwrap();
+            assert_eq!(parsed.len(), 10);
+            assert_eq!(parsed[3].value, recs[3].value);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_topic_compression_type_recompresses_and_unsupported_rejected() {
+        use crate::kafka::compression::{batch_codec, registry, Codec, CompressionType};
+        use crate::kafka::handlers::{encode_records_batch, parse_records, KafkaRecord};
+        let dir = tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1));
+        let cfg = Arc::new(BrokerConfig::default());
+        let recs: Vec<KafkaRecord> = (0..10)
+            .map(|i| KafkaRecord::new(None, Some(vec![b'z'; 100 + i])))
+            .collect();
+        let plain = encode_records_batch(0, &recs);
+        registry().set_topic("force-zstd-topic", CompressionType::Codec(Codec::Zstd));
+        let resp = handle_kafka_frame(&produce_frame_v3("c", "force-zstd-topic", &plain, 3), &log_mgr, &cfg).await.unwrap().unwrap();
+        assert_eq!(produce_error_code(&resp), 0);
+        let fr = handle_kafka_frame(&fetch_frame_v4("c", "force-zstd-topic", 0), &log_mgr, &cfg).await.unwrap().unwrap();
+        let got = fetch_records_v4(&fr);
+        assert_eq!(batch_codec(&got).unwrap(), Codec::Zstd);
+        assert_eq!(parse_records(&got).unwrap().len(), 10);
+
+        // unsupported codec id 7 -> UNSUPPORTED_COMPRESSION_TYPE (76)
+        let mut bad = plain.clone();
+        bad[22] = 7;
+        let resp = handle_kafka_frame(&produce_frame_v3("c", "plain-topic", &bad, 3), &log_mgr, &cfg).await.unwrap().unwrap();
+        assert_eq!(produce_error_code(&resp), 76);
+    }
+
+    #[test]
+    fn test_compaction_key_extraction_from_compressed_batch() {
+        use crate::kafka::compression::{recompress_batch, Codec};
+        use crate::kafka::handlers::{encode_records_batch, KafkaRecord};
+        let mut rec = KafkaRecord::new(Some(b"user-1".to_vec()), Some(vec![b'q'; 500]));
+        rec.timestamp = 1_700_000_000_000;
+        let plain = encode_records_batch(0, &[rec]);
+        for c in [Codec::Gzip, Codec::Snappy, Codec::Lz4, Codec::Zstd] {
+            let z = recompress_batch(&plain, c).unwrap();
+            let ek = crate::log::compactor::extract_key(&z);
+            assert_eq!(ek.key.as_deref(), Some(&b"user-1"[..]), "{:?}", c);
+            assert!(!ek.is_tombstone);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_producer_quota_returns_throttle_time() {
+        use crate::kafka::handlers::{encode_records_batch, KafkaRecord};
+        use crate::kafka::quota::{manager, QuotaEntry};
+        let _g = crate::kafka::quota::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1));
+        let cfg = Arc::new(BrokerConfig::default());
+        manager().set_entries(vec![QuotaEntry {
+            client_id: Some("quota-test-client".into()),
+            producer_byte_rate: Some(1000.0),
+            ..Default::default()
+        }]);
+        let big = encode_records_batch(0, &[KafkaRecord::new(None, Some(vec![7u8; 50_000]))]);
+        let frame = produce_frame_v3("quota-test-client", "quota-topic", &big, 3);
+        let mut ctx = RequestCtx::default();
+        let resp = handle_kafka_frame_ctx(&frame, &log_mgr, &cfg, &mut ctx).await.unwrap().unwrap();
+        let throttle = i32::from_be_bytes(resp[resp.len() - 4..].try_into().unwrap());
+        assert!(throttle > 0, "expected throttle_time_ms > 0");
+        assert_eq!(ctx.throttle_ms as i32, throttle);
+        // unrelated client is not throttled
+        let frame2 = produce_frame_v3("someone-else", "quota-topic", &big, 3);
+        let mut ctx2 = RequestCtx::default();
+        let resp2 = handle_kafka_frame_ctx(&frame2, &log_mgr, &cfg, &mut ctx2).await.unwrap().unwrap();
+        assert_eq!(i32::from_be_bytes(resp2[resp2.len() - 4..].try_into().unwrap()), 0);
+        manager().set_entries(vec![]);
     }
 
     #[tokio::test]

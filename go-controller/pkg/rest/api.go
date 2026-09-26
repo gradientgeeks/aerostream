@@ -91,6 +91,7 @@ func (s *Server) enableCORS(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
+	s.registerDataplaneRoutes(mux)
 	mux.HandleFunc("/api/cluster", s.handleCluster)
 	mux.HandleFunc("/api/brokers", s.handleBrokers)
 	mux.HandleFunc("/api/brokers/", s.handleBrokerItem)

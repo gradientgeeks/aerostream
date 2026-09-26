@@ -20,6 +20,10 @@ aws-sdk-s3 = { version = "1", default-features = false, features = ["rustls", "r
 aws-config = { version = "1", default-features = false, features = ["rustls", "rt-tokio"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 async-trait = "0.1.92"
+flate2 = "1"
+snap = "1"
+lz4_flex = { version = "0.11", default-features = false, features = ["std", "frame", "safe-encode", "safe-decode"] }
+zstd = "0.13"
 
 [build-dependencies]
 tonic-build = "0.11"

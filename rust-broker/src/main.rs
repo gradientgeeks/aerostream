@@ -151,6 +151,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .build()?;
 
+    // Data-plane settings: default compression.type and local client quotas.
+    match kafka::compression::CompressionType::parse(&cfg.compression_type) {
+        Some(t) => kafka::compression::registry().set_default(t),
+        None => tracing::warn!("[AeroMQ Broker] Unknown compression_type '{}', using 'producer'", cfg.compression_type),
+    }
+    kafka::quota::manager().set_entries(cfg.quotas.clone());
+
     let cfg = Arc::new(cfg);
 
     runtime.block_on(async move {
