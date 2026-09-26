@@ -151,14 +151,17 @@ pub fn split_batches(payload: &[u8]) -> Option<Vec<&[u8]>> {
 /// Converts one client batch into log entries, one per record, each a valid
 /// single-record batch whose base_offset equals its log offset.
 /// Producer id / epoch / transactional flag are preserved; sequence is base+i.
-/// Compressed batches (or anything unparsable) are stored as one entry.
+/// Compressed batches are decompressed by `parse_records` and stored as uncompressed
+/// single-record entries, so that every record keeps its own log offset (a compressed batch
+/// stored whole would occupy one offset while its header claims `count` of them).
+/// Anything unparsable is stored as one entry.
 pub fn to_entries(batch: &[u8], first_offset: u64) -> Vec<Vec<u8>> {
     let (pid, epoch, base_seq, count) = match producer_info(batch) {
         Some(x) => x,
         None => return vec![batch.to_vec()],
     };
     let attrs = attributes(batch);
-    if count <= 1 || is_compressed(batch) {
+    if count <= 1 {
         let mut e = batch.to_vec();
         patch_base_offset(&mut e, first_offset as i64);
         return vec![e];
@@ -226,6 +229,29 @@ mod tests {
             assert_eq!((pid, epoch, seq, count), (77, 1, 10 + i as i32, 1));
             assert_eq!(i64::from_be_bytes(e[0..8].try_into().unwrap()), 40 + i as i64);
             assert_eq!(parse_records(e).unwrap()[0].value.as_deref(), Some(format!("v{}", i).as_bytes()));
+        }
+    }
+
+    #[test]
+    fn split_compressed_multi_record_batch_gives_one_offset_per_record() {
+        use crate::kafka::compression::{recompress_batch, Codec};
+        let recs: Vec<KafkaRecord> = (0..5)
+            .map(|i| KafkaRecord::new(None, Some(format!("value-{}-{}", i, "z".repeat(100)).into_bytes()))
+            )
+            .collect();
+        let plain = encode_idempotent_records_batch(0, 9, 0, 0, &recs);
+        for codec in [Codec::Gzip, Codec::Zstd] {
+            let compressed = recompress_batch(&plain, codec).unwrap();
+            assert!(is_compressed(&compressed));
+            let entries = to_entries(&compressed, 100);
+            assert_eq!(entries.len(), 5, "{:?}", codec);
+            for (i, e) in entries.iter().enumerate() {
+                assert_eq!(i64::from_be_bytes(e[0..8].try_into().unwrap()), 100 + i as i64);
+                let (_, _, seq, count) = producer_info(e).unwrap();
+                assert_eq!((seq, count), (i as i32, 1));
+                let r = parse_records(e).unwrap();
+                assert!(r[0].value.as_deref().unwrap().starts_with(format!("value-{}-", i).as_bytes()));
+            }
         }
     }
 

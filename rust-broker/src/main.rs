@@ -11,6 +11,7 @@ mod grpc;
 mod iceberg;
 mod txn;
 mod share;
+pub mod topology;
 pub mod kafka;
 pub mod storage;
 
@@ -47,6 +48,10 @@ struct Args {
     /// Path to store physical partition log files
     #[arg(long)]
     storage_dir: Option<PathBuf>,
+
+    /// Rack / availability zone of this broker (broker.rack)
+    #[arg(long)]
+    rack: Option<String>,
 
     /// Tiered Storage Provider: s3, gcs, azure, local, disabled
     #[arg(long)]
@@ -93,6 +98,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(controller) = args.controller {
         cfg.controller = controller;
+    }
+    if args.rack.is_some() {
+        cfg.rack = args.rack;
     }
     if args.storage_dir.is_some() {
         cfg.storage_dir = args.storage_dir;
@@ -250,6 +258,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let kafka_bind_addr: SocketAddr = format!("{}:{}", cfg.host, cfg.kafka_port)
             .parse()
             .unwrap_or_else(|_| format!("0.0.0.0:{}", cfg.kafka_port).parse().unwrap());
+        // Kafka admin/group-coordinator state + controller topology refresh loop.
+        kafka::admin::init(&cfg, &log_manager);
         let kafka_server = net::KafkaServer::new(kafka_bind_addr, log_manager.clone(), cfg.clone());
         tokio::spawn(async move {
             if let Err(e) = kafka_server.run().await {

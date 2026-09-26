@@ -170,12 +170,7 @@ async fn handle_kafka_frame_inner(
         }
         1 => {
             // Fetch
-            let resp = handle_fetch(correlation_id, api_version, &mut cursor, log_manager, ctx).await?;
-            Ok(Some(resp))
-        }
-        2 => {
-            // ListOffsets
-            let resp = handle_list_offsets(correlation_id, api_version, &mut cursor, log_manager).await?;
+            let resp = handle_fetch(correlation_id, api_version, &mut cursor, log_manager, ctx, cfg).await?;
             Ok(Some(resp))
         }
         22 | 24 | 25 | 26 | 28 => {
@@ -189,6 +184,15 @@ async fn handle_kafka_frame_inner(
             Ok(Some(crate::share::api::handle_frame(api_key, api_version, correlation_id, rest, log_manager, cfg).await))
         }
         _ => {
+            // Admin / group-coordinator APIs (stream C): ListOffsets, CreateTopics, JoinGroup, ...
+            if crate::kafka::admin::supported_range(api_key).is_some() {
+                let st = crate::kafka::admin::init(cfg, log_manager);
+                let client_id = ctx.client_id.clone();
+                let body = &frame[cursor.position() as usize..];
+                if let Some(res) = crate::kafka::admin::dispatch(&st, api_key, api_version, correlation_id, &client_id, body).await {
+                    return res.map(Some).map_err(|e| e.into());
+                }
+            }
             warn!("[AeroMQ Kafka] Unsupported API key: {}", api_key);
             let mut resp = BytesMut::new();
             resp.put_i32(correlation_id);
@@ -202,42 +206,51 @@ async fn handle_kafka_frame_inner(
 // API Handlers
 // ============================================================================
 
-/// Handler for ApiVersions (API Key 18)
+/// Handler for ApiVersions (API Key 18). Advertises every API the broker implements.
+/// The response header is always v0; v3+ bodies use the flexible (compact) encoding.
 fn handle_api_versions(
     correlation_id: i32,
     api_version: i16,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    let mut buf = BytesMut::new();
-    buf.put_i32(correlation_id);
-    buf.put_i16(0); // ErrorCode: 0 (NONE)
+    use crate::kafka::codec::Wr;
 
-    // Supported API keys list
-    let mut api_keys: Vec<(i16, i16, i16)> = vec![
+    let mut apis: Vec<(i16, i16, i16)> = vec![
         (0, 0, 7),  // Produce: v0 - v7
-        (1, 0, 7),  // Fetch: v0 - v7
-        (2, 0, 2),  // ListOffsets: v0 - v2
+        (1, 0, 11), // Fetch: v0 - v11 (v11 = KIP-392 rack_id / preferred_read_replica)
         (3, 0, 5),  // Metadata: v0 - v5
         (18, 0, 3), // ApiVersions: v0 - v3
     ];
     // Transactions (22/24/25/26/28) and share groups (76-79).
-    api_keys.extend_from_slice(&crate::txn::api::TXN_API_VERSIONS);
-    api_keys.extend_from_slice(&crate::share::api::SHARE_API_VERSIONS);
+    apis.extend_from_slice(&crate::txn::api::TXN_API_VERSIONS);
+    apis.extend_from_slice(&crate::share::api::SHARE_API_VERSIONS);
+    apis.extend_from_slice(crate::kafka::admin::ADMIN_APIS);
+    apis.sort();
 
-    buf.put_i32(api_keys.len() as i32);
-    for (key, min_v, max_v) in api_keys.iter().copied() {
-        buf.put_i16(key);
-        buf.put_i16(min_v);
-        buf.put_i16(max_v);
+    let mut buf = BytesMut::new();
+    buf.put_i32(correlation_id);
+
+    // Unsupported ApiVersions version: reply with UNSUPPORTED_VERSION in v0 format (KIP-511).
+    if api_version < 0 || api_version > 3 {
+        buf.put_i16(35);
+        buf.put_i32(1);
+        buf.put_i16(18);
+        buf.put_i16(0);
+        buf.put_i16(3);
+        return Ok(buf.to_vec());
     }
 
+    let flex = api_version >= 3;
+    let mut w = Wr::new(flex);
+    w.i16(0); // ErrorCode: NONE
+    w.arr(apis.len());
+    for (key, min_v, max_v) in apis {
+        w.i16(key).i16(min_v).i16(max_v).tagged();
+    }
     if api_version >= 1 {
-        buf.put_i32(0); // ThrottleTimeMs
+        w.i32(0); // ThrottleTimeMs
     }
-
-    if api_version >= 3 {
-        buf.put_u8(0); // Empty tagged fields buffer
-    }
-
+    w.tagged();
+    buf.put_slice(&w.finish());
     Ok(buf.to_vec())
 }
 
@@ -248,6 +261,20 @@ async fn handle_metadata(
     cursor: &mut io::Cursor<&[u8]>,
     log_manager: &Arc<LogManager>,
     cfg: &Arc<BrokerConfig>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    // Cluster view (brokers with racks, real partition layout) from the controller-fed topology cache
+    // (kept fresh by the refresh loop started in `admin::init` at broker startup).
+    let snap = crate::topology::TopologyCache::global().snapshot();
+    handle_metadata_with_snapshot(correlation_id, api_version, cursor, log_manager, cfg, snap).await
+}
+
+pub(crate) async fn handle_metadata_with_snapshot(
+    correlation_id: i32,
+    api_version: i16,
+    cursor: &mut io::Cursor<&[u8]>,
+    log_manager: &Arc<LogManager>,
+    cfg: &Arc<BrokerConfig>,
+    snap: crate::topology::Snapshot,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     let mut requested_topics = Vec::new();
     if cursor.remaining() >= 4 {
@@ -261,12 +288,18 @@ async fn handle_metadata(
         }
     }
 
-    // If no specific topics requested (empty or null array), list known topics from log manager
-    let topics_to_report = if requested_topics.is_empty() {
-        let existing = log_manager.get_all_offsets().await;
-        let mut set = std::collections::HashSet::new();
-        for (topic, _, _) in existing {
-            set.insert(topic);
+    let my_id = cfg.id as i32;
+    let cluster = !snap.brokers.is_empty();
+
+    // If no specific topics requested (empty or null array), list known topics from the cluster + local logs
+    let topics_to_report: Vec<String> = if requested_topics.is_empty() {
+        let mut set: std::collections::BTreeSet<String> = snap.topics.keys().cloned().collect();
+        // With a populated cluster view the controller is authoritative (so deleted topics disappear even
+        // while stale local logs linger); otherwise fall back to locally known topics.
+        if snap.topics.is_empty() {
+            for (topic, _, _) in log_manager.get_all_offsets().await {
+                set.insert(topic);
+            }
         }
         if set.is_empty() {
             vec!["default".to_string()]
@@ -284,17 +317,30 @@ async fn handle_metadata(
         buf.put_i32(0); // ThrottleTimeMs
     }
 
-    // Brokers array
-    buf.put_i32(1); // 1 broker
-    buf.put_i32(cfg.id as i32); // NodeId
-    put_kafka_string(&mut buf, Some(&cfg.host));
-    buf.put_i32(cfg.kafka_port);
-    if api_version >= 1 {
-        put_kafka_string(&mut buf, None); // Rack: null
+    // Brokers array (all live brokers when the controller view is available)
+    let self_rack = cfg.rack.clone();
+    let brokers: Vec<(i32, String, i32, Option<String>)> = if cluster {
+        snap.brokers.values().map(|b| (b.id, b.host.clone(), b.kafka_port, b.rack.clone())).collect()
+    } else {
+        vec![(my_id, cfg.host.clone(), cfg.kafka_port, self_rack)]
+    };
+    buf.put_i32(brokers.len() as i32);
+    for (id, host, port, rack) in &brokers {
+        buf.put_i32(*id); // NodeId
+        put_kafka_string(&mut buf, Some(host));
+        buf.put_i32(*port);
+        if api_version >= 1 {
+            put_kafka_string(&mut buf, rack.as_deref()); // Rack
+        }
+    }
+
+    if api_version >= 2 {
+        put_kafka_string(&mut buf, Some("aerostream-cluster")); // ClusterId (v2+)
     }
 
     if api_version >= 1 {
-        buf.put_i32(cfg.id as i32); // ControllerId
+        let controller = brokers.iter().map(|b| b.0).min().unwrap_or(my_id);
+        buf.put_i32(controller); // ControllerId
     }
 
     // TopicMetadata array
@@ -307,26 +353,46 @@ async fn handle_metadata(
             buf.put_u8(0); // IsInternal: false
         }
 
-        // Partitions array (Partition 0)
-        buf.put_i32(1); // 1 partition
-        buf.put_i16(0); // Partition ErrorCode: 0
-        buf.put_i32(0); // PartitionIndex: 0
-        buf.put_i32(cfg.id as i32); // LeaderId
+        // Partition layout: controller-provided when known, else single local partition 0
+        let layout: Vec<(i32, i32, Vec<i32>, Vec<i32>)> = match snap.topics.get(&topic_name) {
+            Some(t) if !t.partitions.is_empty() => t
+                .partitions
+                .iter()
+                .map(|(pid, p)| (*pid, if p.leader == 0 { -1 } else { p.leader }, p.replicas.clone(), p.isr.clone()))
+                .collect(),
+            _ => vec![(0, my_id, vec![my_id], vec![my_id])],
+        };
+        buf.put_i32(layout.len() as i32);
+        for (pid, leader, replicas, isr) in layout {
+            buf.put_i16(if leader < 0 { 5 } else { 0 }); // LEADER_NOT_AVAILABLE when unassigned
+            buf.put_i32(pid); // PartitionIndex
+            buf.put_i32(leader); // LeaderId
 
-        if api_version >= 7 {
-            buf.put_i32(0); // LeaderEpoch: 0
-        }
+            if api_version >= 7 {
+                buf.put_i32(0); // LeaderEpoch: 0
+            }
 
-        // Replicas: [broker_id]
-        buf.put_i32(1);
-        buf.put_i32(cfg.id as i32);
+            buf.put_i32(replicas.len() as i32);
+            for r in &replicas {
+                buf.put_i32(*r);
+            }
+            buf.put_i32(isr.len() as i32);
+            for r in &isr {
+                buf.put_i32(*r);
+            }
 
-        // Isr: [broker_id]
-        buf.put_i32(1);
-        buf.put_i32(cfg.id as i32);
-
-        if api_version >= 5 {
-            buf.put_i32(0); // OfflineReplicas count: 0
+            if api_version >= 5 {
+                // OfflineReplicas: replicas whose broker is not currently registered/active
+                let offline: Vec<i32> = if cluster {
+                    replicas.iter().copied().filter(|r| !snap.brokers.contains_key(r)).collect()
+                } else {
+                    vec![]
+                };
+                buf.put_i32(offline.len() as i32);
+                for r in offline {
+                    buf.put_i32(r);
+                }
+            }
         }
     }
 
@@ -499,19 +565,34 @@ async fn handle_produce(
     Ok(Some(buf.to_vec()))
 }
 
-/// Handler for Fetch (API Key 1)
+/// Handler for Fetch (API Key 1), using the process-wide topology cache for KIP-392 routing.
 async fn handle_fetch(
     correlation_id: i32,
     api_version: i16,
     cursor: &mut io::Cursor<&[u8]>,
     log_manager: &Arc<LogManager>,
     ctx: &mut RequestCtx,
+    cfg: &Arc<BrokerConfig>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    let topo = crate::topology::TopologyCache::global();
+    handle_fetch_with_topo(correlation_id, api_version, cursor, log_manager, ctx, cfg, &topo).await
+}
+
+/// Fetch implementation. Supports v0-v11; v11 carries `rack_id` and returns `preferred_read_replica` (KIP-392).
+pub(crate) async fn handle_fetch_with_topo(
+    correlation_id: i32,
+    api_version: i16,
+    cursor: &mut io::Cursor<&[u8]>,
+    log_manager: &Arc<LogManager>,
+    ctx: &mut RequestCtx,
+    cfg: &Arc<BrokerConfig>,
+    topo: &crate::topology::TopologyCache,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     if cursor.remaining() < 12 {
         return Err("Fetch request truncated".into());
     }
 
-    let _replica_id = cursor.get_i32();
+    let replica_id = cursor.get_i32();
     let _max_wait_ms = cursor.get_i32();
     let _min_bytes = cursor.get_i32();
 
@@ -529,11 +610,13 @@ async fn handle_fetch(
 
     let topics_count = cursor.get_i32();
     let mut topic_results = Vec::new();
+    // Requested partitions are parsed first; rack_id (v11) trails the topics/forgotten-topics arrays.
+    let mut requested: Vec<(String, Vec<(i32, i64, i32)>)> = Vec::new();
 
     for _ in 0..topics_count {
         let topic_name = read_kafka_string(cursor)?.unwrap_or_default();
         let partitions_count = cursor.get_i32();
-        let mut part_results = Vec::new();
+        let mut parts = Vec::new();
 
         for _ in 0..partitions_count {
             let partition_index = cursor.get_i32();
@@ -545,24 +628,80 @@ async fn handle_fetch(
                 let _log_start_offset = cursor.get_i64();
             }
             let partition_max_bytes = cursor.get_i32();
+            parts.push((partition_index, fetch_offset, partition_max_bytes));
+        }
+        requested.push((topic_name, parts));
+    }
 
+    // forgotten_topics_data (v7+): incremental fetch sessions are not used, so just skip it.
+    if api_version >= 7 && cursor.remaining() >= 4 {
+        let forgotten = cursor.get_i32();
+        for _ in 0..forgotten.max(0) {
+            let _ = read_kafka_string(cursor)?;
+            let n = cursor.get_i32();
+            for _ in 0..n.max(0) {
+                if cursor.remaining() >= 4 {
+                    let _ = cursor.get_i32();
+                }
+            }
+        }
+    }
+    // rack_id (v11, KIP-392): the client's rack, used to pick the closest replica.
+    let client_rack = if api_version >= 11 { read_kafka_string(cursor)? } else { None };
+
+    let my_id = cfg.id as i32;
+    let selector = crate::topology::ReplicaSelector::parse(&cfg.replica_selector);
+
+    for (topic_name, parts) in requested {
+        let mut part_results = Vec::new();
+
+        for (partition_index, fetch_offset, partition_max_bytes) in parts {
             let mut high_watermark = 0i64;
             let mut last_stable_offset = 0i64;
             let mut aborted: Option<Vec<(i64, i64)>> = None;
             let mut record_set = Vec::new();
             let mut error_code = 0i16;
+            let mut preferred_replica = -1i32;
+            let mut hw_cap: Option<i64> = None;
+
+            // KIP-392 routing (consumers only: replica_id == -1) using the controller-fed topology.
+            if replica_id < 0 {
+                if let Some(info) = topo.partition(&topic_name, partition_index) {
+                    if info.leader == my_id {
+                        let snap = topo.snapshot();
+                        let choice = crate::topology::select_replica(selector, client_rack.as_deref(), &info, &snap.brokers, fetch_offset);
+                        if choice != my_id && choice > 0 {
+                            // Tell the client to read from the closer replica; no records from the leader.
+                            preferred_replica = choice;
+                        }
+                    } else if info.replicas.contains(&my_id) {
+                        // Follower read: only expose data known to be committed (<= partition high watermark).
+                        hw_cap = Some(info.high_watermark);
+                    } else if info.leader != 0 {
+                        error_code = 6; // NOT_LEADER_OR_FOLLOWER
+                    }
+                }
+            }
 
             match log_manager.get_partition(&topic_name, partition_index as u32).await {
+                Ok(_) if error_code != 0 => {}
                 Ok(part_log) => {
                     let mut guard = part_log.lock().await;
                     // Transaction-aware visibility: read_committed is capped at the LSO and
                     // receives the list of aborted transactions overlapping the fetch.
+                    // Followers additionally cap everything at the controller-reported high watermark.
                     let view = crate::txn::produce::fetch_view(&guard, fetch_offset, isolation_level);
                     high_watermark = view.high_watermark;
                     last_stable_offset = view.last_stable_offset;
+                    let mut upper_bound = view.upper_bound;
+                    if let Some(cap) = hw_cap {
+                        high_watermark = high_watermark.min(cap);
+                        last_stable_offset = last_stable_offset.min(cap);
+                        upper_bound = upper_bound.min(cap);
+                    }
                     aborted = view.aborted;
 
-                    if fetch_offset >= 0 && fetch_offset < view.upper_bound {
+                    if preferred_replica < 0 && fetch_offset >= 0 && fetch_offset < upper_bound {
                         let max_read = (partition_max_bytes as u32).min(32 * 1024 * 1024);
                         if let Ok(Some((mut file, position, bytes_to_read))) =
                             guard.read_from_offset(fetch_offset as u64, max_read)
@@ -581,7 +720,7 @@ async fn handle_fetch(
                 }
             }
 
-            part_results.push((partition_index, error_code, high_watermark, last_stable_offset, aborted, record_set));
+            part_results.push((partition_index, error_code, high_watermark, last_stable_offset, aborted, record_set, preferred_replica));
         }
 
         topic_results.push((topic_name, part_results));
@@ -593,7 +732,7 @@ async fn handle_fetch(
         let served: usize = topic_results
             .iter()
             .flat_map(|(_, parts)| parts.iter())
-            .map(|(_, _, _, r)| r.len())
+            .map(|(_, _, _, _, _, r, _)| r.len())
             .sum();
         let t = quota::manager().record(quota::Metric::Fetch, &ctx.user, &ctx.client_id, served as f64);
         throttle_ms = throttle_ms.max(t);
@@ -616,7 +755,7 @@ async fn handle_fetch(
     for (topic, parts) in topic_results {
         put_kafka_string(&mut buf, Some(&topic));
         buf.put_i32(parts.len() as i32);
-        for (part_idx, err_code, hw, lso, aborted, records) in parts {
+        for (part_idx, err_code, hw, lso, aborted, records, preferred) in parts {
             buf.put_i32(part_idx);
             buf.put_i16(err_code);
             buf.put_i64(hw);
@@ -639,92 +778,11 @@ async fn handle_fetch(
                     }
                 }
             }
+            if api_version >= 11 {
+                buf.put_i32(preferred); // PreferredReadReplica (-1 = none)
+            }
             buf.put_i32(records.len() as i32);
             buf.put_slice(&records);
-        }
-    }
-
-    Ok(buf.to_vec())
-}
-
-/// Handler for ListOffsets (API Key 2)
-async fn handle_list_offsets(
-    correlation_id: i32,
-    api_version: i16,
-    cursor: &mut io::Cursor<&[u8]>,
-    log_manager: &Arc<LogManager>,
-) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    if cursor.remaining() < 8 {
-        return Err("ListOffsets request truncated".into());
-    }
-
-    let _replica_id = cursor.get_i32();
-    let mut isolation_level = 0i8;
-    if api_version >= 2 && cursor.remaining() >= 1 {
-        isolation_level = cursor.get_i8();
-    }
-
-    let topics_count = cursor.get_i32();
-    let mut topic_results = Vec::new();
-
-    for _ in 0..topics_count {
-        let topic_name = read_kafka_string(cursor)?.unwrap_or_default();
-        let partitions_count = cursor.get_i32();
-        let mut part_results = Vec::new();
-
-        for _ in 0..partitions_count {
-            let partition_index = cursor.get_i32();
-            let timestamp = cursor.get_i64();
-            if api_version == 0 && cursor.remaining() >= 4 {
-                let _max_num_offsets = cursor.get_i32();
-            }
-
-            let mut offset = 0i64;
-            if let Ok(part_log) = log_manager.get_partition(&topic_name, partition_index as u32).await {
-                let guard = part_log.lock().await;
-                if timestamp == -2 {
-                    // Earliest offset
-                    offset = 0;
-                } else {
-                    // Latest offset (timestamp == -1 or current); read_committed => LSO
-                    offset = if isolation_level == 1 {
-                        guard.txn_index.lso(guard.high_watermark) as i64
-                    } else {
-                        guard.next_offset as i64
-                    };
-                }
-            }
-
-            part_results.push((partition_index, 0i16, offset));
-        }
-
-        topic_results.push((topic_name, part_results));
-    }
-
-    let mut buf = BytesMut::new();
-    buf.put_i32(correlation_id);
-
-    if api_version >= 2 {
-        buf.put_i32(0); // ThrottleTimeMs
-    }
-
-    buf.put_i32(topic_results.len() as i32);
-    for (topic, parts) in topic_results {
-        put_kafka_string(&mut buf, Some(&topic));
-        buf.put_i32(parts.len() as i32);
-        for (part_idx, err_code, off) in parts {
-            buf.put_i32(part_idx);
-            buf.put_i16(err_code);
-            if api_version == 0 {
-                buf.put_i32(1); // Offsets array len = 1
-                buf.put_i64(off);
-            } else {
-                buf.put_i64(-1); // Timestamp
-                buf.put_i64(off);
-                if api_version >= 4 {
-                    buf.put_i32(0); // LeaderEpoch: 0
-                }
-            }
         }
     }
 
@@ -884,7 +942,12 @@ mod tests {
         assert_eq!(cursor.get_i32(), 1234); // correlation_id
         assert_eq!(cursor.get_i16(), 0);    // error_code: NONE
         let num_keys = cursor.get_i32();
-        assert!(num_keys >= 6);
+        assert_eq!(
+            num_keys as usize,
+            4 + crate::kafka::admin::ADMIN_APIS.len()
+                + crate::txn::api::TXN_API_VERSIONS.len()
+                + crate::share::api::SHARE_API_VERSIONS.len()
+        );
         let mut keys = Vec::new();
         for _ in 0..num_keys {
             keys.push(cursor.get_i16());
@@ -1068,7 +1131,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_compressed_batches_produce_fetch_all_codecs() {
-        use crate::kafka::compression::{batch_codec, recompress_batch, Codec};
+        use crate::kafka::compression::{recompress_batch, Codec};
         use crate::kafka::handlers::{encode_records_batch, parse_records, KafkaRecord};
         let dir = tempdir().unwrap();
         let log_mgr = Arc::new(LogManager::new(dir.path(), 1));
@@ -1082,19 +1145,22 @@ mod tests {
             let z = recompress_batch(&plain, codec).unwrap();
             let resp = handle_kafka_frame(&produce_frame_v3("c", &topic, &z, 3), &log_mgr, &cfg).await.unwrap().unwrap();
             assert_eq!(produce_error_code(&resp), 0);
-            let fr = handle_kafka_frame(&fetch_frame_v4("c", &topic, 0), &log_mgr, &cfg).await.unwrap().unwrap();
-            let got = fetch_records_v4(&fr);
-            // stored verbatim: codec preserved, consumer can decode
-            assert_eq!(batch_codec(&got).unwrap(), codec);
-            let parsed = parse_records(&got).unwrap();
-            assert_eq!(parsed.len(), 10);
-            assert_eq!(parsed[3].value, recs[3].value);
+            // The broker decompresses multi-record batches on produce so every record keeps its own
+            // offset (see txn::batch::to_entries); each one must be fetchable and decodable.
+            let part = log_mgr.get_partition(&topic, 0).await.unwrap();
+            assert_eq!(part.lock().await.next_offset, 10, "{:?}: one offset per record", codec);
+            for i in [0usize, 3, 9] {
+                let fr = handle_kafka_frame(&fetch_frame_v4("c", &topic, i as i64), &log_mgr, &cfg).await.unwrap().unwrap();
+                let got = fetch_records_v4(&fr);
+                let parsed = parse_records(&got).unwrap();
+                assert_eq!(parsed[0].value, recs[i].value, "{:?} offset {}", codec, i);
+            }
         }
     }
 
     #[tokio::test]
     async fn test_topic_compression_type_recompresses_and_unsupported_rejected() {
-        use crate::kafka::compression::{batch_codec, registry, Codec, CompressionType};
+        use crate::kafka::compression::{registry, Codec, CompressionType};
         use crate::kafka::handlers::{encode_records_batch, parse_records, KafkaRecord};
         let dir = tempdir().unwrap();
         let log_mgr = Arc::new(LogManager::new(dir.path(), 1));
@@ -1106,10 +1172,14 @@ mod tests {
         registry().set_topic("force-zstd-topic", CompressionType::Codec(Codec::Zstd));
         let resp = handle_kafka_frame(&produce_frame_v3("c", "force-zstd-topic", &plain, 3), &log_mgr, &cfg).await.unwrap().unwrap();
         assert_eq!(produce_error_code(&resp), 0);
-        let fr = handle_kafka_frame(&fetch_frame_v4("c", "force-zstd-topic", 0), &log_mgr, &cfg).await.unwrap().unwrap();
-        let got = fetch_records_v4(&fr);
-        assert_eq!(batch_codec(&got).unwrap(), Codec::Zstd);
-        assert_eq!(parse_records(&got).unwrap().len(), 10);
+        // Recompressed to zstd on the wire path, then split into one entry (offset) per record.
+        let part = log_mgr.get_partition("force-zstd-topic", 0).await.unwrap();
+        assert_eq!(part.lock().await.next_offset, 10);
+        for i in [0usize, 9] {
+            let fr = handle_kafka_frame(&fetch_frame_v4("c", "force-zstd-topic", i as i64), &log_mgr, &cfg).await.unwrap().unwrap();
+            let got = fetch_records_v4(&fr);
+            assert_eq!(parse_records(&got).unwrap()[0].value, recs[i].value);
+        }
 
         // unsupported codec id 7 -> UNSUPPORTED_COMPRESSION_TYPE (76)
         let mut bad = plain.clone();
@@ -1297,5 +1367,315 @@ mod tests {
             let guard = part_log.lock().await;
             assert_eq!(guard.next_offset, 1);
         }
+    }
+}
+
+#[cfg(test)]
+mod topology_tests {
+    use super::*;
+    use crate::kafka::admin::ADMIN_APIS;
+    use crate::kafka::codec::Rd;
+    use crate::topology::{BrokerNode, PartitionInfo, Snapshot, TopicInfo, TopologyCache};
+    use std::collections::{BTreeMap, HashMap};
+
+    fn cluster_snapshot() -> Snapshot {
+        let mut s = Snapshot::default();
+        for (id, rack) in [(1, "rack-a"), (2, "rack-b"), (3, "rack-c")] {
+            s.brokers.insert(
+                id,
+                BrokerNode { id, host: format!("broker-{id}"), kafka_port: 9092, rack: Some(rack.to_string()) },
+            );
+        }
+        let mut ti = TopicInfo::default();
+        ti.partitions.insert(
+            0,
+            PartitionInfo {
+                leader: 1,
+                replicas: vec![1, 2],
+                isr: vec![1, 2],
+                high_watermark: 1,
+                replica_offsets: HashMap::from([(1, 1), (2, 1)]),
+            },
+        );
+        ti.partitions.insert(
+            1,
+            PartitionInfo { leader: 0, replicas: vec![3, 1], isr: vec![], high_watermark: 0, replica_offsets: HashMap::new() },
+        );
+        s.topics.insert("rt".into(), ti);
+        s
+    }
+
+    fn cfg_for(id: u32) -> Arc<BrokerConfig> {
+        Arc::new(BrokerConfig { id, host: "127.0.0.1".into(), kafka_port: 9092, rack: Some("rack-x".into()), ..Default::default() })
+    }
+
+    #[tokio::test]
+    async fn api_versions_v0_lists_every_admin_api() {
+        let resp = handle_api_versions(7, 0).unwrap();
+        let mut c = io::Cursor::new(resp.as_slice());
+        assert_eq!(c.get_i32(), 7);
+        assert_eq!(c.get_i16(), 0);
+        let n = c.get_i32();
+        let mut got = BTreeMap::new();
+        for _ in 0..n {
+            got.insert(c.get_i16(), (c.get_i16(), c.get_i16()));
+        }
+        for (k, lo, hi) in ADMIN_APIS {
+            assert_eq!(got.get(k), Some(&(*lo, *hi)), "api {k}");
+        }
+        assert_eq!(got[&1], (0, 11), "Fetch v11 advertised for KIP-392");
+        assert_eq!(c.remaining(), 0, "v0 has no throttle/tagged trailer");
+    }
+
+    #[tokio::test]
+    async fn api_versions_v3_uses_flexible_encoding() {
+        let resp = handle_api_versions(8, 3).unwrap();
+        let mut r = Rd::new(&resp[4..], true);
+        assert_eq!(i32::from_be_bytes(resp[..4].try_into().unwrap()), 8);
+        assert_eq!(r.i16().unwrap(), 0);
+        let n = r.arr().unwrap();
+        assert_eq!(
+            n,
+            4 + ADMIN_APIS.len()
+                + crate::txn::api::TXN_API_VERSIONS.len()
+                + crate::share::api::SHARE_API_VERSIONS.len()
+        );
+        let mut keys = vec![];
+        for _ in 0..n {
+            keys.push(r.i16().unwrap());
+            r.i16().unwrap();
+            r.i16().unwrap();
+            r.tagged().unwrap();
+        }
+        assert!(keys.windows(2).all(|w| w[0] < w[1]), "sorted and unique");
+        assert_eq!(r.i32().unwrap(), 0);
+        r.tagged().unwrap();
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[tokio::test]
+    async fn api_versions_unsupported_version_falls_back_to_v0_error() {
+        let resp = handle_api_versions(9, 42).unwrap();
+        let mut c = io::Cursor::new(resp.as_slice());
+        assert_eq!(c.get_i32(), 9);
+        assert_eq!(c.get_i16(), 35);
+        assert_eq!(c.get_i32(), 1);
+        assert_eq!((c.get_i16(), c.get_i16(), c.get_i16()), (18, 0, 3));
+    }
+
+    #[tokio::test]
+    async fn metadata_reports_racks_and_real_partition_layout() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1));
+        let cfg = cfg_for(1);
+        let mut req = BytesMut::new();
+        req.put_i32(1);
+        put_kafka_string(&mut req, Some("rt"));
+        let mut cur = io::Cursor::new(req.as_ref());
+        let resp = handle_metadata_with_snapshot(1, 5, &mut cur, &log_mgr, &cfg, cluster_snapshot()).await.unwrap();
+
+        let mut c = io::Cursor::new(resp.as_slice());
+        assert_eq!(c.get_i32(), 1);
+        assert_eq!(c.get_i32(), 0); // throttle
+        assert_eq!(c.get_i32(), 3); // brokers
+        let mut racks = vec![];
+        for _ in 0..3 {
+            let id = c.get_i32();
+            let host = read_kafka_string(&mut c).unwrap().unwrap();
+            assert_eq!(host, format!("broker-{id}"));
+            assert_eq!(c.get_i32(), 9092);
+            racks.push(read_kafka_string(&mut c).unwrap().unwrap());
+        }
+        assert_eq!(racks, vec!["rack-a", "rack-b", "rack-c"]);
+        assert_eq!(read_kafka_string(&mut c).unwrap().as_deref(), Some("aerostream-cluster")); // cluster_id (v2+)
+        assert_eq!(c.get_i32(), 1); // controller = lowest broker id
+        assert_eq!(c.get_i32(), 1); // topics
+        assert_eq!(c.get_i16(), 0);
+        assert_eq!(read_kafka_string(&mut c).unwrap().unwrap(), "rt");
+        assert_eq!(c.get_u8(), 0);
+        assert_eq!(c.get_i32(), 2); // partitions
+        // p0
+        assert_eq!(c.get_i16(), 0);
+        assert_eq!(c.get_i32(), 0);
+        assert_eq!(c.get_i32(), 1); // leader
+        assert_eq!(c.get_i32(), 2);
+        assert_eq!((c.get_i32(), c.get_i32()), (1, 2)); // replicas
+        assert_eq!(c.get_i32(), 2);
+        assert_eq!((c.get_i32(), c.get_i32()), (1, 2)); // isr
+        assert_eq!(c.get_i32(), 0); // offline
+        // p1 has no leader yet -> LEADER_NOT_AVAILABLE (5), leader -1
+        assert_eq!(c.get_i16(), 5);
+        assert_eq!(c.get_i32(), 1);
+        assert_eq!(c.get_i32(), -1);
+    }
+
+    #[tokio::test]
+    async fn metadata_without_controller_view_keeps_local_single_broker_behaviour() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1));
+        let cfg = cfg_for(1);
+        let mut req = BytesMut::new();
+        req.put_i32(1);
+        put_kafka_string(&mut req, Some("adhoc"));
+        let mut cur = io::Cursor::new(req.as_ref());
+        let resp = handle_metadata_with_snapshot(1, 1, &mut cur, &log_mgr, &cfg, Snapshot::default()).await.unwrap();
+        let mut c = io::Cursor::new(resp.as_slice());
+        c.get_i32();
+        c.get_i32();
+        assert_eq!(c.get_i32(), 1);
+        assert_eq!(c.get_i32(), 1);
+        read_kafka_string(&mut c).unwrap();
+        assert_eq!(c.get_i32(), 9092);
+        assert_eq!(read_kafka_string(&mut c).unwrap().as_deref(), Some("rack-x"), "own broker.rack advertised");
+    }
+
+    fn fetch_v11(rack: &str, replica_id: i32, topic: &str, partition: i32, offset: i64) -> Vec<u8> {
+        // body only (the frame header is consumed by the dispatcher)
+        let mut b = BytesMut::new();
+        b.put_i32(replica_id);
+        b.put_i32(100); // max_wait
+        b.put_i32(1); // min_bytes
+        b.put_i32(1 << 20); // max_bytes
+        b.put_i8(0); // isolation
+        b.put_i32(0); // session_id
+        b.put_i32(-1); // session_epoch
+        b.put_i32(1);
+        put_kafka_string(&mut b, Some(topic));
+        b.put_i32(1);
+        b.put_i32(partition);
+        b.put_i32(-1); // current_leader_epoch (v9+)
+        b.put_i64(offset);
+        b.put_i64(0); // log_start_offset
+        b.put_i32(65536);
+        b.put_i32(0); // forgotten topics
+        put_kafka_string(&mut b, Some(rack));
+        b.to_vec()
+    }
+
+    /// (error, high watermark, preferred replica, records length)
+    fn parse_fetch_v11(resp: &[u8]) -> (i16, i64, i32, i32) {
+        let mut c = io::Cursor::new(resp);
+        assert_eq!(c.get_i32(), 55);
+        c.get_i32(); // throttle
+        assert_eq!(c.get_i16(), 0);
+        c.get_i32(); // session id
+        assert_eq!(c.get_i32(), 1);
+        read_kafka_string(&mut c).unwrap();
+        assert_eq!(c.get_i32(), 1);
+        c.get_i32(); // partition
+        let err = c.get_i16();
+        let hw = c.get_i64();
+        c.get_i64(); // lso
+        c.get_i64(); // log start
+        assert_eq!(c.get_i32(), -1); // aborted txns: null under read_uncommitted
+        let preferred = c.get_i32();
+        let len = c.get_i32();
+        (err, hw, preferred, len)
+    }
+
+    async fn do_fetch(id: u32, topo: &TopologyCache, log_mgr: &Arc<LogManager>, body: &[u8]) -> Vec<u8> {
+        let cfg = cfg_for(id);
+        let mut cur = io::Cursor::new(body);
+        handle_fetch_with_topo(55, 11, &mut cur, log_mgr, &mut RequestCtx::default(), &cfg, topo).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn fetch_v11_leader_redirects_rack_local_consumer_to_follower() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1));
+        {
+            let p = log_mgr.get_partition("rt", 0).await.unwrap();
+            p.lock().await.append(&[9u8; 32]).unwrap();
+        }
+        let topo = TopologyCache::default();
+        topo.update(cluster_snapshot());
+
+        // consumer in rack-b (follower 2's rack): leader answers with preferred_read_replica=2 and no records
+        let r = do_fetch(1, &topo, &log_mgr, &fetch_v11("rack-b", -1, "rt", 0, 0)).await;
+        assert_eq!(parse_fetch_v11(&r), (0, 1, 2, 0));
+
+        // consumer in the leader's rack, unknown rack, or empty rack: served by the leader (-1)
+        for rack in ["rack-a", "rack-zzz", ""] {
+            let r = do_fetch(1, &topo, &log_mgr, &fetch_v11(rack, -1, "rt", 0, 0)).await;
+            let (err, hw, pref, len) = parse_fetch_v11(&r);
+            assert_eq!((err, hw, pref), (0, 1, -1), "rack {rack:?}");
+            assert!(len > 0, "leader must return records for rack {rack:?}");
+        }
+
+        // replica fetchers (replica_id >= 0) are never redirected
+        let r = do_fetch(1, &topo, &log_mgr, &fetch_v11("rack-b", 2, "rt", 0, 0)).await;
+        assert_eq!(parse_fetch_v11(&r).2, -1);
+    }
+
+    #[tokio::test]
+    async fn fetch_v11_follower_serves_only_committed_data_and_rejects_non_replicas() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 2));
+        {
+            let p = log_mgr.get_partition("rt", 0).await.unwrap();
+            p.lock().await.append(&[9u8; 32]).unwrap();
+        }
+        let topo = TopologyCache::default();
+        let mut snap = cluster_snapshot();
+        snap.topics.get_mut("rt").unwrap().partitions.get_mut(&0).unwrap().high_watermark = 0;
+        topo.update(snap);
+
+        // follower (broker 2) has 1 local entry but the partition HW is 0 -> nothing exposed yet
+        let r = do_fetch(2, &topo, &log_mgr, &fetch_v11("rack-b", -1, "rt", 0, 0)).await;
+        assert_eq!(parse_fetch_v11(&r), (0, 0, -1, 0));
+
+        // once the leader advances the HW the follower serves the record itself
+        topo.update(cluster_snapshot());
+        let r = do_fetch(2, &topo, &log_mgr, &fetch_v11("rack-b", -1, "rt", 0, 0)).await;
+        let (err, hw, pref, len) = parse_fetch_v11(&r);
+        assert_eq!((err, hw, pref), (0, 1, -1));
+        assert!(len > 0);
+
+        // broker 3 is not a replica of partition 0 -> NOT_LEADER_OR_FOLLOWER
+        let dir3 = tempfile::tempdir().unwrap();
+        let lm3 = Arc::new(LogManager::new(dir3.path(), 3));
+        let r = do_fetch(3, &topo, &lm3, &fetch_v11("rack-c", -1, "rt", 0, 0)).await;
+        let mut c = io::Cursor::new(r.as_slice());
+        c.advance(4 + 4 + 2 + 4 + 4); // corr, throttle, error, session, topic count
+        read_kafka_string(&mut c).unwrap();
+        c.advance(4 + 4); // partition count, partition index
+        assert_eq!(c.get_i16(), 6);
+    }
+
+    #[tokio::test]
+    async fn fetch_v7_partition_layout_has_no_leader_epoch() {
+        // v5-v8 partitions carry log_start_offset but NO current_leader_epoch (that arrives in v9).
+        let dir = tempfile::tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1));
+        {
+            let p = log_mgr.get_partition("v7t", 0).await.unwrap();
+            p.lock().await.append(&[1u8; 16]).unwrap();
+        }
+        let cfg = cfg_for(1);
+        let mut b = BytesMut::new();
+        b.put_i32(-1);
+        b.put_i32(100);
+        b.put_i32(1);
+        b.put_i32(1 << 20);
+        b.put_i8(0);
+        b.put_i32(0);
+        b.put_i32(-1);
+        b.put_i32(1);
+        put_kafka_string(&mut b, Some("v7t"));
+        b.put_i32(1);
+        b.put_i32(0); // partition
+        b.put_i64(0); // fetch_offset
+        b.put_i64(0); // log_start_offset
+        b.put_i32(65536);
+        b.put_i32(0); // forgotten
+        let topo = TopologyCache::default();
+        let mut cur = io::Cursor::new(b.as_ref());
+        let resp = handle_fetch_with_topo(3, 7, &mut cur, &log_mgr, &mut RequestCtx::default(), &cfg, &topo).await.unwrap();
+        let mut c = io::Cursor::new(resp.as_slice());
+        c.advance(4 + 4 + 2 + 4 + 4);
+        read_kafka_string(&mut c).unwrap();
+        c.advance(4 + 4);
+        assert_eq!(c.get_i16(), 0);
+        assert_eq!(c.get_i64(), 1);
     }
 }

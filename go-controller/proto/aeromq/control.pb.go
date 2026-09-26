@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v5.28.2
-// source: proto/control.proto
+// source: control.proto
 
 package aeromq
 
@@ -54,11 +54,11 @@ func (x HeartbeatGroupResponse_Status) String() string {
 }
 
 func (HeartbeatGroupResponse_Status) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_control_proto_enumTypes[0].Descriptor()
+	return file_control_proto_enumTypes[0].Descriptor()
 }
 
 func (HeartbeatGroupResponse_Status) Type() protoreflect.EnumType {
-	return &file_proto_control_proto_enumTypes[0]
+	return &file_control_proto_enumTypes[0]
 }
 
 func (x HeartbeatGroupResponse_Status) Number() protoreflect.EnumNumber {
@@ -67,7 +67,7 @@ func (x HeartbeatGroupResponse_Status) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HeartbeatGroupResponse_Status.Descriptor instead.
 func (HeartbeatGroupResponse_Status) EnumDescriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{16, 0}
+	return file_control_proto_rawDescGZIP(), []int{16, 0}
 }
 
 type BrokerInfo struct {
@@ -75,13 +75,15 @@ type BrokerInfo struct {
 	BrokerId      uint32                 `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
 	Host          string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
 	Port          int32                  `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	Rack          string                 `protobuf:"bytes,300,opt,name=rack,proto3" json:"rack,omitempty"`                             // [topology] broker.rack (empty = none)
+	KafkaPort     int32                  `protobuf:"varint,301,opt,name=kafka_port,json=kafkaPort,proto3" json:"kafka_port,omitempty"` // [topology] Kafka wire-protocol port
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BrokerInfo) Reset() {
 	*x = BrokerInfo{}
-	mi := &file_proto_control_proto_msgTypes[0]
+	mi := &file_control_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -93,7 +95,7 @@ func (x *BrokerInfo) String() string {
 func (*BrokerInfo) ProtoMessage() {}
 
 func (x *BrokerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[0]
+	mi := &file_control_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -106,7 +108,7 @@ func (x *BrokerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrokerInfo.ProtoReflect.Descriptor instead.
 func (*BrokerInfo) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{0}
+	return file_control_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *BrokerInfo) GetBrokerId() uint32 {
@@ -130,6 +132,20 @@ func (x *BrokerInfo) GetPort() int32 {
 	return 0
 }
 
+func (x *BrokerInfo) GetRack() string {
+	if x != nil {
+		return x.Rack
+	}
+	return ""
+}
+
+func (x *BrokerInfo) GetKafkaPort() int32 {
+	if x != nil {
+		return x.KafkaPort
+	}
+	return 0
+}
+
 type PartitionAssignment struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
@@ -142,7 +158,7 @@ type PartitionAssignment struct {
 
 func (x *PartitionAssignment) Reset() {
 	*x = PartitionAssignment{}
-	mi := &file_proto_control_proto_msgTypes[1]
+	mi := &file_control_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -154,7 +170,7 @@ func (x *PartitionAssignment) String() string {
 func (*PartitionAssignment) ProtoMessage() {}
 
 func (x *PartitionAssignment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[1]
+	mi := &file_control_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -167,7 +183,7 @@ func (x *PartitionAssignment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PartitionAssignment.ProtoReflect.Descriptor instead.
 func (*PartitionAssignment) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{1}
+	return file_control_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *PartitionAssignment) GetTopic() string {
@@ -203,14 +219,16 @@ type RegisterBrokerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	BrokerId      uint32                 `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
 	Host          string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
-	DataPort      int32                  `protobuf:"varint,3,opt,name=data_port,json=dataPort,proto3" json:"data_port,omitempty"` // The port where the Rust broker listens for TCP data connections
+	DataPort      int32                  `protobuf:"varint,3,opt,name=data_port,json=dataPort,proto3" json:"data_port,omitempty"`      // The port where the Rust broker listens for TCP data connections
+	Rack          string                 `protobuf:"bytes,300,opt,name=rack,proto3" json:"rack,omitempty"`                             // [topology] broker.rack
+	KafkaPort     int32                  `protobuf:"varint,301,opt,name=kafka_port,json=kafkaPort,proto3" json:"kafka_port,omitempty"` // [topology] Kafka wire-protocol port
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RegisterBrokerRequest) Reset() {
 	*x = RegisterBrokerRequest{}
-	mi := &file_proto_control_proto_msgTypes[2]
+	mi := &file_control_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -222,7 +240,7 @@ func (x *RegisterBrokerRequest) String() string {
 func (*RegisterBrokerRequest) ProtoMessage() {}
 
 func (x *RegisterBrokerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[2]
+	mi := &file_control_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,7 +253,7 @@ func (x *RegisterBrokerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterBrokerRequest.ProtoReflect.Descriptor instead.
 func (*RegisterBrokerRequest) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{2}
+	return file_control_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RegisterBrokerRequest) GetBrokerId() uint32 {
@@ -259,6 +277,20 @@ func (x *RegisterBrokerRequest) GetDataPort() int32 {
 	return 0
 }
 
+func (x *RegisterBrokerRequest) GetRack() string {
+	if x != nil {
+		return x.Rack
+	}
+	return ""
+}
+
+func (x *RegisterBrokerRequest) GetKafkaPort() int32 {
+	if x != nil {
+		return x.KafkaPort
+	}
+	return 0
+}
+
 type RegisterBrokerResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
@@ -269,7 +301,7 @@ type RegisterBrokerResponse struct {
 
 func (x *RegisterBrokerResponse) Reset() {
 	*x = RegisterBrokerResponse{}
-	mi := &file_proto_control_proto_msgTypes[3]
+	mi := &file_control_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -281,7 +313,7 @@ func (x *RegisterBrokerResponse) String() string {
 func (*RegisterBrokerResponse) ProtoMessage() {}
 
 func (x *RegisterBrokerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[3]
+	mi := &file_control_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -294,7 +326,7 @@ func (x *RegisterBrokerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterBrokerResponse.ProtoReflect.Descriptor instead.
 func (*RegisterBrokerResponse) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{3}
+	return file_control_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RegisterBrokerResponse) GetSuccess() bool {
@@ -322,7 +354,7 @@ type ReplicaOffset struct {
 
 func (x *ReplicaOffset) Reset() {
 	*x = ReplicaOffset{}
-	mi := &file_proto_control_proto_msgTypes[4]
+	mi := &file_control_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -334,7 +366,7 @@ func (x *ReplicaOffset) String() string {
 func (*ReplicaOffset) ProtoMessage() {}
 
 func (x *ReplicaOffset) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[4]
+	mi := &file_control_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -347,7 +379,7 @@ func (x *ReplicaOffset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplicaOffset.ProtoReflect.Descriptor instead.
 func (*ReplicaOffset) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{4}
+	return file_control_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ReplicaOffset) GetTopic() string {
@@ -383,7 +415,7 @@ type HeartbeatRequest struct {
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_proto_control_proto_msgTypes[5]
+	mi := &file_control_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -395,7 +427,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[5]
+	mi := &file_control_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -408,7 +440,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{5}
+	return file_control_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *HeartbeatRequest) GetBrokerId() uint32 {
@@ -458,7 +490,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_proto_control_proto_msgTypes[6]
+	mi := &file_control_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -470,7 +502,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[6]
+	mi := &file_control_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -483,7 +515,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{6}
+	return file_control_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *HeartbeatResponse) GetSuccess() bool {
@@ -538,7 +570,7 @@ type MetadataRequest struct {
 
 func (x *MetadataRequest) Reset() {
 	*x = MetadataRequest{}
-	mi := &file_proto_control_proto_msgTypes[7]
+	mi := &file_control_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -550,7 +582,7 @@ func (x *MetadataRequest) String() string {
 func (*MetadataRequest) ProtoMessage() {}
 
 func (x *MetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[7]
+	mi := &file_control_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -563,7 +595,7 @@ func (x *MetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetadataRequest.ProtoReflect.Descriptor instead.
 func (*MetadataRequest) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{7}
+	return file_control_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *MetadataRequest) GetTopics() []string {
@@ -583,7 +615,7 @@ type MetadataResponse struct {
 
 func (x *MetadataResponse) Reset() {
 	*x = MetadataResponse{}
-	mi := &file_proto_control_proto_msgTypes[8]
+	mi := &file_control_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -595,7 +627,7 @@ func (x *MetadataResponse) String() string {
 func (*MetadataResponse) ProtoMessage() {}
 
 func (x *MetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[8]
+	mi := &file_control_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -608,7 +640,7 @@ func (x *MetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetadataResponse.ProtoReflect.Descriptor instead.
 func (*MetadataResponse) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{8}
+	return file_control_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *MetadataResponse) GetBrokers() []*BrokerInfo {
@@ -629,13 +661,14 @@ type TopicMetadata struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
 	Partitions    []*PartitionMetadata   `protobuf:"bytes,2,rep,name=partitions,proto3" json:"partitions,omitempty"`
+	Configs       map[string]string      `protobuf:"bytes,300,rep,name=configs,proto3" json:"configs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // [topology] per-topic config overrides
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TopicMetadata) Reset() {
 	*x = TopicMetadata{}
-	mi := &file_proto_control_proto_msgTypes[9]
+	mi := &file_control_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -647,7 +680,7 @@ func (x *TopicMetadata) String() string {
 func (*TopicMetadata) ProtoMessage() {}
 
 func (x *TopicMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[9]
+	mi := &file_control_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -660,7 +693,7 @@ func (x *TopicMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TopicMetadata.ProtoReflect.Descriptor instead.
 func (*TopicMetadata) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{9}
+	return file_control_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *TopicMetadata) GetTopic() string {
@@ -673,6 +706,13 @@ func (x *TopicMetadata) GetTopic() string {
 func (x *TopicMetadata) GetPartitions() []*PartitionMetadata {
 	if x != nil {
 		return x.Partitions
+	}
+	return nil
+}
+
+func (x *TopicMetadata) GetConfigs() map[string]string {
+	if x != nil {
+		return x.Configs
 	}
 	return nil
 }
@@ -691,7 +731,7 @@ type PartitionMetadata struct {
 
 func (x *PartitionMetadata) Reset() {
 	*x = PartitionMetadata{}
-	mi := &file_proto_control_proto_msgTypes[10]
+	mi := &file_control_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -703,7 +743,7 @@ func (x *PartitionMetadata) String() string {
 func (*PartitionMetadata) ProtoMessage() {}
 
 func (x *PartitionMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[10]
+	mi := &file_control_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -716,7 +756,7 @@ func (x *PartitionMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PartitionMetadata.ProtoReflect.Descriptor instead.
 func (*PartitionMetadata) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{10}
+	return file_control_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *PartitionMetadata) GetPartitionId() uint32 {
@@ -767,13 +807,17 @@ type CreateTopicRequest struct {
 	Topic             string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
 	Partitions        uint32                 `protobuf:"varint,2,opt,name=partitions,proto3" json:"partitions,omitempty"`
 	ReplicationFactor uint32                 `protobuf:"varint,3,opt,name=replication_factor,json=replicationFactor,proto3" json:"replication_factor,omitempty"`
+	Configs           map[string]string      `protobuf:"bytes,300,rep,name=configs,proto3" json:"configs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // [topology]
+	ManualAssignments []*ReplicaAssignment   `protobuf:"bytes,301,rep,name=manual_assignments,json=manualAssignments,proto3" json:"manual_assignments,omitempty"`                              // [topology] explicit placement
+	ValidateOnly      bool                   `protobuf:"varint,302,opt,name=validate_only,json=validateOnly,proto3" json:"validate_only,omitempty"`                                            // [topology]
+	FailIfExists      bool                   `protobuf:"varint,303,opt,name=fail_if_exists,json=failIfExists,proto3" json:"fail_if_exists,omitempty"`                                          // [topology] Kafka semantics: duplicate => TOPIC_ALREADY_EXISTS
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
 func (x *CreateTopicRequest) Reset() {
 	*x = CreateTopicRequest{}
-	mi := &file_proto_control_proto_msgTypes[11]
+	mi := &file_control_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -785,7 +829,7 @@ func (x *CreateTopicRequest) String() string {
 func (*CreateTopicRequest) ProtoMessage() {}
 
 func (x *CreateTopicRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[11]
+	mi := &file_control_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -798,7 +842,7 @@ func (x *CreateTopicRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTopicRequest.ProtoReflect.Descriptor instead.
 func (*CreateTopicRequest) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{11}
+	return file_control_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateTopicRequest) GetTopic() string {
@@ -822,17 +866,46 @@ func (x *CreateTopicRequest) GetReplicationFactor() uint32 {
 	return 0
 }
 
+func (x *CreateTopicRequest) GetConfigs() map[string]string {
+	if x != nil {
+		return x.Configs
+	}
+	return nil
+}
+
+func (x *CreateTopicRequest) GetManualAssignments() []*ReplicaAssignment {
+	if x != nil {
+		return x.ManualAssignments
+	}
+	return nil
+}
+
+func (x *CreateTopicRequest) GetValidateOnly() bool {
+	if x != nil {
+		return x.ValidateOnly
+	}
+	return false
+}
+
+func (x *CreateTopicRequest) GetFailIfExists() bool {
+	if x != nil {
+		return x.FailIfExists
+	}
+	return false
+}
+
 type CreateTopicResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	ErrorCode     int32                  `protobuf:"varint,300,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"` // [topology] Kafka error code (0 = none)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateTopicResponse) Reset() {
 	*x = CreateTopicResponse{}
-	mi := &file_proto_control_proto_msgTypes[12]
+	mi := &file_control_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -844,7 +917,7 @@ func (x *CreateTopicResponse) String() string {
 func (*CreateTopicResponse) ProtoMessage() {}
 
 func (x *CreateTopicResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[12]
+	mi := &file_control_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -857,7 +930,7 @@ func (x *CreateTopicResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTopicResponse.ProtoReflect.Descriptor instead.
 func (*CreateTopicResponse) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{12}
+	return file_control_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CreateTopicResponse) GetSuccess() bool {
@@ -874,6 +947,13 @@ func (x *CreateTopicResponse) GetMessage() string {
 	return ""
 }
 
+func (x *CreateTopicResponse) GetErrorCode() int32 {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return 0
+}
+
 // Consumer Group management
 type JoinGroupRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -886,7 +966,7 @@ type JoinGroupRequest struct {
 
 func (x *JoinGroupRequest) Reset() {
 	*x = JoinGroupRequest{}
-	mi := &file_proto_control_proto_msgTypes[13]
+	mi := &file_control_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -898,7 +978,7 @@ func (x *JoinGroupRequest) String() string {
 func (*JoinGroupRequest) ProtoMessage() {}
 
 func (x *JoinGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[13]
+	mi := &file_control_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -911,7 +991,7 @@ func (x *JoinGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinGroupRequest.ProtoReflect.Descriptor instead.
 func (*JoinGroupRequest) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{13}
+	return file_control_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *JoinGroupRequest) GetGroupId() string {
@@ -946,7 +1026,7 @@ type JoinGroupResponse struct {
 
 func (x *JoinGroupResponse) Reset() {
 	*x = JoinGroupResponse{}
-	mi := &file_proto_control_proto_msgTypes[14]
+	mi := &file_control_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -958,7 +1038,7 @@ func (x *JoinGroupResponse) String() string {
 func (*JoinGroupResponse) ProtoMessage() {}
 
 func (x *JoinGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[14]
+	mi := &file_control_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -971,7 +1051,7 @@ func (x *JoinGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinGroupResponse.ProtoReflect.Descriptor instead.
 func (*JoinGroupResponse) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{14}
+	return file_control_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *JoinGroupResponse) GetMemberId() string {
@@ -1006,7 +1086,7 @@ type HeartbeatGroupRequest struct {
 
 func (x *HeartbeatGroupRequest) Reset() {
 	*x = HeartbeatGroupRequest{}
-	mi := &file_proto_control_proto_msgTypes[15]
+	mi := &file_control_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1018,7 +1098,7 @@ func (x *HeartbeatGroupRequest) String() string {
 func (*HeartbeatGroupRequest) ProtoMessage() {}
 
 func (x *HeartbeatGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[15]
+	mi := &file_control_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1031,7 +1111,7 @@ func (x *HeartbeatGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatGroupRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatGroupRequest) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{15}
+	return file_control_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *HeartbeatGroupRequest) GetGroupId() string {
@@ -1064,7 +1144,7 @@ type HeartbeatGroupResponse struct {
 
 func (x *HeartbeatGroupResponse) Reset() {
 	*x = HeartbeatGroupResponse{}
-	mi := &file_proto_control_proto_msgTypes[16]
+	mi := &file_control_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1076,7 +1156,7 @@ func (x *HeartbeatGroupResponse) String() string {
 func (*HeartbeatGroupResponse) ProtoMessage() {}
 
 func (x *HeartbeatGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[16]
+	mi := &file_control_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1089,7 +1169,7 @@ func (x *HeartbeatGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatGroupResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatGroupResponse) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{16}
+	return file_control_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *HeartbeatGroupResponse) GetStatus() HeartbeatGroupResponse_Status {
@@ -1110,7 +1190,7 @@ type TopicPartitionOffset struct {
 
 func (x *TopicPartitionOffset) Reset() {
 	*x = TopicPartitionOffset{}
-	mi := &file_proto_control_proto_msgTypes[17]
+	mi := &file_control_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1122,7 +1202,7 @@ func (x *TopicPartitionOffset) String() string {
 func (*TopicPartitionOffset) ProtoMessage() {}
 
 func (x *TopicPartitionOffset) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[17]
+	mi := &file_control_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1135,7 +1215,7 @@ func (x *TopicPartitionOffset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TopicPartitionOffset.ProtoReflect.Descriptor instead.
 func (*TopicPartitionOffset) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{17}
+	return file_control_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *TopicPartitionOffset) GetTopic() string {
@@ -1171,7 +1251,7 @@ type CommitOffsetsRequest struct {
 
 func (x *CommitOffsetsRequest) Reset() {
 	*x = CommitOffsetsRequest{}
-	mi := &file_proto_control_proto_msgTypes[18]
+	mi := &file_control_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1183,7 +1263,7 @@ func (x *CommitOffsetsRequest) String() string {
 func (*CommitOffsetsRequest) ProtoMessage() {}
 
 func (x *CommitOffsetsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[18]
+	mi := &file_control_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1196,7 +1276,7 @@ func (x *CommitOffsetsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitOffsetsRequest.ProtoReflect.Descriptor instead.
 func (*CommitOffsetsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{18}
+	return file_control_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CommitOffsetsRequest) GetGroupId() string {
@@ -1236,7 +1316,7 @@ type CommitOffsetsResponse struct {
 
 func (x *CommitOffsetsResponse) Reset() {
 	*x = CommitOffsetsResponse{}
-	mi := &file_proto_control_proto_msgTypes[19]
+	mi := &file_control_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1248,7 +1328,7 @@ func (x *CommitOffsetsResponse) String() string {
 func (*CommitOffsetsResponse) ProtoMessage() {}
 
 func (x *CommitOffsetsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[19]
+	mi := &file_control_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1261,7 +1341,7 @@ func (x *CommitOffsetsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitOffsetsResponse.ProtoReflect.Descriptor instead.
 func (*CommitOffsetsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{19}
+	return file_control_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CommitOffsetsResponse) GetSuccess() bool {
@@ -1281,7 +1361,7 @@ type FetchOffsetsRequest struct {
 
 func (x *FetchOffsetsRequest) Reset() {
 	*x = FetchOffsetsRequest{}
-	mi := &file_proto_control_proto_msgTypes[20]
+	mi := &file_control_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1293,7 +1373,7 @@ func (x *FetchOffsetsRequest) String() string {
 func (*FetchOffsetsRequest) ProtoMessage() {}
 
 func (x *FetchOffsetsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[20]
+	mi := &file_control_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1306,7 +1386,7 @@ func (x *FetchOffsetsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchOffsetsRequest.ProtoReflect.Descriptor instead.
 func (*FetchOffsetsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{20}
+	return file_control_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *FetchOffsetsRequest) GetGroupId() string {
@@ -1332,7 +1412,7 @@ type FetchOffsetsResponse struct {
 
 func (x *FetchOffsetsResponse) Reset() {
 	*x = FetchOffsetsResponse{}
-	mi := &file_proto_control_proto_msgTypes[21]
+	mi := &file_control_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1344,7 +1424,7 @@ func (x *FetchOffsetsResponse) String() string {
 func (*FetchOffsetsResponse) ProtoMessage() {}
 
 func (x *FetchOffsetsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[21]
+	mi := &file_control_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1357,7 +1437,7 @@ func (x *FetchOffsetsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchOffsetsResponse.ProtoReflect.Descriptor instead.
 func (*FetchOffsetsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{21}
+	return file_control_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *FetchOffsetsResponse) GetOffsets() []*TopicPartitionOffset {
@@ -1386,7 +1466,7 @@ type ClientQuota struct {
 
 func (x *ClientQuota) Reset() {
 	*x = ClientQuota{}
-	mi := &file_proto_control_proto_msgTypes[22]
+	mi := &file_control_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1398,7 +1478,7 @@ func (x *ClientQuota) String() string {
 func (*ClientQuota) ProtoMessage() {}
 
 func (x *ClientQuota) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[22]
+	mi := &file_control_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1411,7 +1491,7 @@ func (x *ClientQuota) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientQuota.ProtoReflect.Descriptor instead.
 func (*ClientQuota) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{22}
+	return file_control_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ClientQuota) GetUser() string {
@@ -1470,26 +1550,393 @@ func (x *ClientQuota) GetRequestPercentage() float64 {
 	return 0
 }
 
-var File_proto_control_proto protoreflect.FileDescriptor
+// ==== topology (stream C) ====
+type ReplicaAssignment struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Partition     uint32                 `protobuf:"varint,300,opt,name=partition,proto3" json:"partition,omitempty"`
+	BrokerIds     []uint32               `protobuf:"varint,301,rep,packed,name=broker_ids,json=brokerIds,proto3" json:"broker_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
 
-const file_proto_control_proto_rawDesc = "" +
+func (x *ReplicaAssignment) Reset() {
+	*x = ReplicaAssignment{}
+	mi := &file_control_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplicaAssignment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplicaAssignment) ProtoMessage() {}
+
+func (x *ReplicaAssignment) ProtoReflect() protoreflect.Message {
+	mi := &file_control_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplicaAssignment.ProtoReflect.Descriptor instead.
+func (*ReplicaAssignment) Descriptor() ([]byte, []int) {
+	return file_control_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ReplicaAssignment) GetPartition() uint32 {
+	if x != nil {
+		return x.Partition
+	}
+	return 0
+}
+
+func (x *ReplicaAssignment) GetBrokerIds() []uint32 {
+	if x != nil {
+		return x.BrokerIds
+	}
+	return nil
+}
+
+type AdminResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,300,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,301,opt,name=message,proto3" json:"message,omitempty"`
+	ErrorCode     int32                  `protobuf:"varint,302,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"` // Kafka protocol error code (0 = none)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminResponse) Reset() {
+	*x = AdminResponse{}
+	mi := &file_control_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminResponse) ProtoMessage() {}
+
+func (x *AdminResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_control_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminResponse.ProtoReflect.Descriptor instead.
+func (*AdminResponse) Descriptor() ([]byte, []int) {
+	return file_control_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *AdminResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *AdminResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *AdminResponse) GetErrorCode() int32 {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return 0
+}
+
+type DeleteTopicRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,300,opt,name=topic,proto3" json:"topic,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteTopicRequest) Reset() {
+	*x = DeleteTopicRequest{}
+	mi := &file_control_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteTopicRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteTopicRequest) ProtoMessage() {}
+
+func (x *DeleteTopicRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_control_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteTopicRequest.ProtoReflect.Descriptor instead.
+func (*DeleteTopicRequest) Descriptor() ([]byte, []int) {
+	return file_control_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *DeleteTopicRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+type CreatePartitionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,300,opt,name=topic,proto3" json:"topic,omitempty"`
+	NewTotal      uint32                 `protobuf:"varint,301,opt,name=new_total,json=newTotal,proto3" json:"new_total,omitempty"`
+	Assignments   []*ReplicaAssignment   `protobuf:"bytes,302,rep,name=assignments,proto3" json:"assignments,omitempty"` // optional placement of the NEW partitions
+	ValidateOnly  bool                   `protobuf:"varint,303,opt,name=validate_only,json=validateOnly,proto3" json:"validate_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreatePartitionsRequest) Reset() {
+	*x = CreatePartitionsRequest{}
+	mi := &file_control_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreatePartitionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreatePartitionsRequest) ProtoMessage() {}
+
+func (x *CreatePartitionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_control_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreatePartitionsRequest.ProtoReflect.Descriptor instead.
+func (*CreatePartitionsRequest) Descriptor() ([]byte, []int) {
+	return file_control_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *CreatePartitionsRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *CreatePartitionsRequest) GetNewTotal() uint32 {
+	if x != nil {
+		return x.NewTotal
+	}
+	return 0
+}
+
+func (x *CreatePartitionsRequest) GetAssignments() []*ReplicaAssignment {
+	if x != nil {
+		return x.Assignments
+	}
+	return nil
+}
+
+func (x *CreatePartitionsRequest) GetValidateOnly() bool {
+	if x != nil {
+		return x.ValidateOnly
+	}
+	return false
+}
+
+type AlterTopicConfigsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,300,opt,name=topic,proto3" json:"topic,omitempty"`
+	Set           map[string]string      `protobuf:"bytes,301,rep,name=set,proto3" json:"set,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Delete        []string               `protobuf:"bytes,302,rep,name=delete,proto3" json:"delete,omitempty"`
+	ReplaceAll    bool                   `protobuf:"varint,303,opt,name=replace_all,json=replaceAll,proto3" json:"replace_all,omitempty"` // legacy AlterConfigs semantics
+	ValidateOnly  bool                   `protobuf:"varint,304,opt,name=validate_only,json=validateOnly,proto3" json:"validate_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AlterTopicConfigsRequest) Reset() {
+	*x = AlterTopicConfigsRequest{}
+	mi := &file_control_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AlterTopicConfigsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AlterTopicConfigsRequest) ProtoMessage() {}
+
+func (x *AlterTopicConfigsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_control_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AlterTopicConfigsRequest.ProtoReflect.Descriptor instead.
+func (*AlterTopicConfigsRequest) Descriptor() ([]byte, []int) {
+	return file_control_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *AlterTopicConfigsRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *AlterTopicConfigsRequest) GetSet() map[string]string {
+	if x != nil {
+		return x.Set
+	}
+	return nil
+}
+
+func (x *AlterTopicConfigsRequest) GetDelete() []string {
+	if x != nil {
+		return x.Delete
+	}
+	return nil
+}
+
+func (x *AlterTopicConfigsRequest) GetReplaceAll() bool {
+	if x != nil {
+		return x.ReplaceAll
+	}
+	return false
+}
+
+func (x *AlterTopicConfigsRequest) GetValidateOnly() bool {
+	if x != nil {
+		return x.ValidateOnly
+	}
+	return false
+}
+
+type ElectLeadersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,300,opt,name=topic,proto3" json:"topic,omitempty"`
+	Partition     uint32                 `protobuf:"varint,301,opt,name=partition,proto3" json:"partition,omitempty"`
+	ElectionType  int32                  `protobuf:"varint,302,opt,name=election_type,json=electionType,proto3" json:"election_type,omitempty"` // 0 = preferred, 1 = unclean
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ElectLeadersRequest) Reset() {
+	*x = ElectLeadersRequest{}
+	mi := &file_control_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ElectLeadersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ElectLeadersRequest) ProtoMessage() {}
+
+func (x *ElectLeadersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_control_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ElectLeadersRequest.ProtoReflect.Descriptor instead.
+func (*ElectLeadersRequest) Descriptor() ([]byte, []int) {
+	return file_control_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ElectLeadersRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *ElectLeadersRequest) GetPartition() uint32 {
+	if x != nil {
+		return x.Partition
+	}
+	return 0
+}
+
+func (x *ElectLeadersRequest) GetElectionType() int32 {
+	if x != nil {
+		return x.ElectionType
+	}
+	return 0
+}
+
+var File_control_proto protoreflect.FileDescriptor
+
+const file_control_proto_rawDesc = "" +
 	"\n" +
-	"\x13proto/control.proto\x12\x06aeromq\"Q\n" +
+	"\rcontrol.proto\x12\x06aeromq\"\x86\x01\n" +
 	"\n" +
 	"BrokerInfo\x12\x1b\n" +
 	"\tbroker_id\x18\x01 \x01(\rR\bbrokerId\x12\x12\n" +
 	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
-	"\x04port\x18\x03 \x01(\x05R\x04port\"\x87\x01\n" +
+	"\x04port\x18\x03 \x01(\x05R\x04port\x12\x13\n" +
+	"\x04rack\x18\xac\x02 \x01(\tR\x04rack\x12\x1e\n" +
+	"\n" +
+	"kafka_port\x18\xad\x02 \x01(\x05R\tkafkaPort\"\x87\x01\n" +
 	"\x13PartitionAssignment\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x1c\n" +
 	"\tpartition\x18\x02 \x01(\rR\tpartition\x12\x1b\n" +
 	"\tleader_id\x18\x03 \x01(\rR\bleaderId\x12\x1f\n" +
 	"\vreplica_ids\x18\x04 \x03(\rR\n" +
-	"replicaIds\"e\n" +
+	"replicaIds\"\x9a\x01\n" +
 	"\x15RegisterBrokerRequest\x12\x1b\n" +
 	"\tbroker_id\x18\x01 \x01(\rR\bbrokerId\x12\x12\n" +
 	"\x04host\x18\x02 \x01(\tR\x04host\x12\x1b\n" +
-	"\tdata_port\x18\x03 \x01(\x05R\bdataPort\"L\n" +
+	"\tdata_port\x18\x03 \x01(\x05R\bdataPort\x12\x13\n" +
+	"\x04rack\x18\xac\x02 \x01(\tR\x04rack\x12\x1e\n" +
+	"\n" +
+	"kafka_port\x18\xad\x02 \x01(\x05R\tkafkaPort\"L\n" +
 	"\x16RegisterBrokerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"[\n" +
@@ -1516,12 +1963,16 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x06topics\x18\x01 \x03(\tR\x06topics\"o\n" +
 	"\x10MetadataResponse\x12,\n" +
 	"\abrokers\x18\x01 \x03(\v2\x12.aeromq.BrokerInfoR\abrokers\x12-\n" +
-	"\x06topics\x18\x02 \x03(\v2\x15.aeromq.TopicMetadataR\x06topics\"`\n" +
+	"\x06topics\x18\x02 \x03(\v2\x15.aeromq.TopicMetadataR\x06topics\"\xdb\x01\n" +
 	"\rTopicMetadata\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x129\n" +
 	"\n" +
 	"partitions\x18\x02 \x03(\v2\x19.aeromq.PartitionMetadataR\n" +
-	"partitions\"\xc8\x02\n" +
+	"partitions\x12=\n" +
+	"\aconfigs\x18\xac\x02 \x03(\v2\".aeromq.TopicMetadata.ConfigsEntryR\aconfigs\x1a:\n" +
+	"\fConfigsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc8\x02\n" +
 	"\x11PartitionMetadata\x12!\n" +
 	"\fpartition_id\x18\x01 \x01(\rR\vpartitionId\x12\x1b\n" +
 	"\tleader_id\x18\x02 \x01(\rR\bleaderId\x12\x1f\n" +
@@ -1532,16 +1983,25 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x0freplica_offsets\x18\x06 \x03(\v2-.aeromq.PartitionMetadata.ReplicaOffsetsEntryR\x0ereplicaOffsets\x1aA\n" +
 	"\x13ReplicaOffsetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\rR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"y\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\x91\x03\n" +
 	"\x12CreateTopicRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x1e\n" +
 	"\n" +
 	"partitions\x18\x02 \x01(\rR\n" +
 	"partitions\x12-\n" +
-	"\x12replication_factor\x18\x03 \x01(\rR\x11replicationFactor\"I\n" +
+	"\x12replication_factor\x18\x03 \x01(\rR\x11replicationFactor\x12B\n" +
+	"\aconfigs\x18\xac\x02 \x03(\v2'.aeromq.CreateTopicRequest.ConfigsEntryR\aconfigs\x12I\n" +
+	"\x12manual_assignments\x18\xad\x02 \x03(\v2\x19.aeromq.ReplicaAssignmentR\x11manualAssignments\x12$\n" +
+	"\rvalidate_only\x18\xae\x02 \x01(\bR\fvalidateOnly\x12%\n" +
+	"\x0efail_if_exists\x18\xaf\x02 \x01(\bR\ffailIfExists\x1a:\n" +
+	"\fConfigsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"i\n" +
 	"\x13CreateTopicResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"b\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1e\n" +
+	"\n" +
+	"error_code\x18\xac\x02 \x01(\x05R\terrorCode\"b\n" +
 	"\x10JoinGroupRequest\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1b\n" +
 	"\tmember_id\x18\x02 \x01(\tR\bmemberId\x12\x16\n" +
@@ -1584,7 +2044,37 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x16has_consumer_byte_rate\x18h \x01(\bR\x13hasConsumerByteRate\x12,\n" +
 	"\x12consumer_byte_rate\x18i \x01(\x01R\x10consumerByteRate\x124\n" +
 	"\x16has_request_percentage\x18j \x01(\bR\x14hasRequestPercentage\x12-\n" +
-	"\x12request_percentage\x18k \x01(\x01R\x11requestPercentage2\xa3\x01\n" +
+	"\x12request_percentage\x18k \x01(\x01R\x11requestPercentage\"R\n" +
+	"\x11ReplicaAssignment\x12\x1d\n" +
+	"\tpartition\x18\xac\x02 \x01(\rR\tpartition\x12\x1e\n" +
+	"\n" +
+	"broker_ids\x18\xad\x02 \x03(\rR\tbrokerIds\"e\n" +
+	"\rAdminResponse\x12\x19\n" +
+	"\asuccess\x18\xac\x02 \x01(\bR\asuccess\x12\x19\n" +
+	"\amessage\x18\xad\x02 \x01(\tR\amessage\x12\x1e\n" +
+	"\n" +
+	"error_code\x18\xae\x02 \x01(\x05R\terrorCode\"+\n" +
+	"\x12DeleteTopicRequest\x12\x15\n" +
+	"\x05topic\x18\xac\x02 \x01(\tR\x05topic\"\xb2\x01\n" +
+	"\x17CreatePartitionsRequest\x12\x15\n" +
+	"\x05topic\x18\xac\x02 \x01(\tR\x05topic\x12\x1c\n" +
+	"\tnew_total\x18\xad\x02 \x01(\rR\bnewTotal\x12<\n" +
+	"\vassignments\x18\xae\x02 \x03(\v2\x19.aeromq.ReplicaAssignmentR\vassignments\x12$\n" +
+	"\rvalidate_only\x18\xaf\x02 \x01(\bR\fvalidateOnly\"\x88\x02\n" +
+	"\x18AlterTopicConfigsRequest\x12\x15\n" +
+	"\x05topic\x18\xac\x02 \x01(\tR\x05topic\x12<\n" +
+	"\x03set\x18\xad\x02 \x03(\v2).aeromq.AlterTopicConfigsRequest.SetEntryR\x03set\x12\x17\n" +
+	"\x06delete\x18\xae\x02 \x03(\tR\x06delete\x12 \n" +
+	"\vreplace_all\x18\xaf\x02 \x01(\bR\n" +
+	"replaceAll\x12$\n" +
+	"\rvalidate_only\x18\xb0\x02 \x01(\bR\fvalidateOnly\x1a6\n" +
+	"\bSetEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"q\n" +
+	"\x13ElectLeadersRequest\x12\x15\n" +
+	"\x05topic\x18\xac\x02 \x01(\tR\x05topic\x12\x1d\n" +
+	"\tpartition\x18\xad\x02 \x01(\rR\tpartition\x12$\n" +
+	"\relection_type\x18\xae\x02 \x01(\x05R\felectionType2\xa3\x01\n" +
 	"\x0eControlService\x12O\n" +
 	"\x0eRegisterBroker\x12\x1d.aeromq.RegisterBrokerRequest\x1a\x1e.aeromq.RegisterBrokerResponse\x12@\n" +
 	"\tHeartbeat\x12\x18.aeromq.HeartbeatRequest\x1a\x19.aeromq.HeartbeatResponse2\xc8\x03\n" +
@@ -1594,23 +2084,28 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x0eHeartbeatGroup\x12\x1d.aeromq.HeartbeatGroupRequest\x1a\x1e.aeromq.HeartbeatGroupResponse\x12L\n" +
 	"\rCommitOffsets\x12\x1c.aeromq.CommitOffsetsRequest\x1a\x1d.aeromq.CommitOffsetsResponse\x12I\n" +
 	"\fFetchOffsets\x12\x1b.aeromq.FetchOffsetsRequest\x1a\x1c.aeromq.FetchOffsetsResponse\x12F\n" +
-	"\vCreateTopic\x12\x1a.aeromq.CreateTopicRequest\x1a\x1b.aeromq.CreateTopicResponseB@Z>github.com/gradientgeeks/aerostream/go-controller/proto/aeromqb\x06proto3"
+	"\vCreateTopic\x12\x1a.aeromq.CreateTopicRequest\x1a\x1b.aeromq.CreateTopicResponse2\xae\x02\n" +
+	"\fAdminService\x12@\n" +
+	"\vDeleteTopic\x12\x1a.aeromq.DeleteTopicRequest\x1a\x15.aeromq.AdminResponse\x12J\n" +
+	"\x10CreatePartitions\x12\x1f.aeromq.CreatePartitionsRequest\x1a\x15.aeromq.AdminResponse\x12L\n" +
+	"\x11AlterTopicConfigs\x12 .aeromq.AlterTopicConfigsRequest\x1a\x15.aeromq.AdminResponse\x12B\n" +
+	"\fElectLeaders\x12\x1b.aeromq.ElectLeadersRequest\x1a\x15.aeromq.AdminResponseB@Z>github.com/gradientgeeks/aerostream/go-controller/proto/aeromqb\x06proto3"
 
 var (
-	file_proto_control_proto_rawDescOnce sync.Once
-	file_proto_control_proto_rawDescData []byte
+	file_control_proto_rawDescOnce sync.Once
+	file_control_proto_rawDescData []byte
 )
 
-func file_proto_control_proto_rawDescGZIP() []byte {
-	file_proto_control_proto_rawDescOnce.Do(func() {
-		file_proto_control_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_control_proto_rawDesc), len(file_proto_control_proto_rawDesc)))
+func file_control_proto_rawDescGZIP() []byte {
+	file_control_proto_rawDescOnce.Do(func() {
+		file_control_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_control_proto_rawDesc), len(file_control_proto_rawDesc)))
 	})
-	return file_proto_control_proto_rawDescData
+	return file_control_proto_rawDescData
 }
 
-var file_proto_control_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_control_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
-var file_proto_control_proto_goTypes = []any{
+var file_control_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_control_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_control_proto_goTypes = []any{
 	(HeartbeatGroupResponse_Status)(0), // 0: aeromq.HeartbeatGroupResponse.Status
 	(*BrokerInfo)(nil),                 // 1: aeromq.BrokerInfo
 	(*PartitionAssignment)(nil),        // 2: aeromq.PartitionAssignment
@@ -1635,67 +2130,89 @@ var file_proto_control_proto_goTypes = []any{
 	(*FetchOffsetsRequest)(nil),        // 21: aeromq.FetchOffsetsRequest
 	(*FetchOffsetsResponse)(nil),       // 22: aeromq.FetchOffsetsResponse
 	(*ClientQuota)(nil),                // 23: aeromq.ClientQuota
-	nil,                                // 24: aeromq.HeartbeatResponse.TopicCompressionEntry
-	nil,                                // 25: aeromq.PartitionMetadata.ReplicaOffsetsEntry
+	(*ReplicaAssignment)(nil),          // 24: aeromq.ReplicaAssignment
+	(*AdminResponse)(nil),              // 25: aeromq.AdminResponse
+	(*DeleteTopicRequest)(nil),         // 26: aeromq.DeleteTopicRequest
+	(*CreatePartitionsRequest)(nil),    // 27: aeromq.CreatePartitionsRequest
+	(*AlterTopicConfigsRequest)(nil),   // 28: aeromq.AlterTopicConfigsRequest
+	(*ElectLeadersRequest)(nil),        // 29: aeromq.ElectLeadersRequest
+	nil,                                // 30: aeromq.HeartbeatResponse.TopicCompressionEntry
+	nil,                                // 31: aeromq.TopicMetadata.ConfigsEntry
+	nil,                                // 32: aeromq.PartitionMetadata.ReplicaOffsetsEntry
+	nil,                                // 33: aeromq.CreateTopicRequest.ConfigsEntry
+	nil,                                // 34: aeromq.AlterTopicConfigsRequest.SetEntry
 }
-var file_proto_control_proto_depIdxs = []int32{
+var file_control_proto_depIdxs = []int32{
 	5,  // 0: aeromq.HeartbeatRequest.replica_offsets:type_name -> aeromq.ReplicaOffset
 	2,  // 1: aeromq.HeartbeatResponse.assigned_leaders:type_name -> aeromq.PartitionAssignment
 	2,  // 2: aeromq.HeartbeatResponse.assigned_followers:type_name -> aeromq.PartitionAssignment
 	23, // 3: aeromq.HeartbeatResponse.client_quotas:type_name -> aeromq.ClientQuota
-	24, // 4: aeromq.HeartbeatResponse.topic_compression:type_name -> aeromq.HeartbeatResponse.TopicCompressionEntry
+	30, // 4: aeromq.HeartbeatResponse.topic_compression:type_name -> aeromq.HeartbeatResponse.TopicCompressionEntry
 	1,  // 5: aeromq.MetadataResponse.brokers:type_name -> aeromq.BrokerInfo
 	10, // 6: aeromq.MetadataResponse.topics:type_name -> aeromq.TopicMetadata
 	11, // 7: aeromq.TopicMetadata.partitions:type_name -> aeromq.PartitionMetadata
-	25, // 8: aeromq.PartitionMetadata.replica_offsets:type_name -> aeromq.PartitionMetadata.ReplicaOffsetsEntry
-	2,  // 9: aeromq.JoinGroupResponse.assignments:type_name -> aeromq.PartitionAssignment
-	0,  // 10: aeromq.HeartbeatGroupResponse.status:type_name -> aeromq.HeartbeatGroupResponse.Status
-	18, // 11: aeromq.CommitOffsetsRequest.offsets:type_name -> aeromq.TopicPartitionOffset
-	18, // 12: aeromq.FetchOffsetsResponse.offsets:type_name -> aeromq.TopicPartitionOffset
-	3,  // 13: aeromq.ControlService.RegisterBroker:input_type -> aeromq.RegisterBrokerRequest
-	6,  // 14: aeromq.ControlService.Heartbeat:input_type -> aeromq.HeartbeatRequest
-	8,  // 15: aeromq.DiscoveryService.GetMetadata:input_type -> aeromq.MetadataRequest
-	14, // 16: aeromq.DiscoveryService.JoinGroup:input_type -> aeromq.JoinGroupRequest
-	16, // 17: aeromq.DiscoveryService.HeartbeatGroup:input_type -> aeromq.HeartbeatGroupRequest
-	19, // 18: aeromq.DiscoveryService.CommitOffsets:input_type -> aeromq.CommitOffsetsRequest
-	21, // 19: aeromq.DiscoveryService.FetchOffsets:input_type -> aeromq.FetchOffsetsRequest
-	12, // 20: aeromq.DiscoveryService.CreateTopic:input_type -> aeromq.CreateTopicRequest
-	4,  // 21: aeromq.ControlService.RegisterBroker:output_type -> aeromq.RegisterBrokerResponse
-	7,  // 22: aeromq.ControlService.Heartbeat:output_type -> aeromq.HeartbeatResponse
-	9,  // 23: aeromq.DiscoveryService.GetMetadata:output_type -> aeromq.MetadataResponse
-	15, // 24: aeromq.DiscoveryService.JoinGroup:output_type -> aeromq.JoinGroupResponse
-	17, // 25: aeromq.DiscoveryService.HeartbeatGroup:output_type -> aeromq.HeartbeatGroupResponse
-	20, // 26: aeromq.DiscoveryService.CommitOffsets:output_type -> aeromq.CommitOffsetsResponse
-	22, // 27: aeromq.DiscoveryService.FetchOffsets:output_type -> aeromq.FetchOffsetsResponse
-	13, // 28: aeromq.DiscoveryService.CreateTopic:output_type -> aeromq.CreateTopicResponse
-	21, // [21:29] is the sub-list for method output_type
-	13, // [13:21] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	31, // 8: aeromq.TopicMetadata.configs:type_name -> aeromq.TopicMetadata.ConfigsEntry
+	32, // 9: aeromq.PartitionMetadata.replica_offsets:type_name -> aeromq.PartitionMetadata.ReplicaOffsetsEntry
+	33, // 10: aeromq.CreateTopicRequest.configs:type_name -> aeromq.CreateTopicRequest.ConfigsEntry
+	24, // 11: aeromq.CreateTopicRequest.manual_assignments:type_name -> aeromq.ReplicaAssignment
+	2,  // 12: aeromq.JoinGroupResponse.assignments:type_name -> aeromq.PartitionAssignment
+	0,  // 13: aeromq.HeartbeatGroupResponse.status:type_name -> aeromq.HeartbeatGroupResponse.Status
+	18, // 14: aeromq.CommitOffsetsRequest.offsets:type_name -> aeromq.TopicPartitionOffset
+	18, // 15: aeromq.FetchOffsetsResponse.offsets:type_name -> aeromq.TopicPartitionOffset
+	24, // 16: aeromq.CreatePartitionsRequest.assignments:type_name -> aeromq.ReplicaAssignment
+	34, // 17: aeromq.AlterTopicConfigsRequest.set:type_name -> aeromq.AlterTopicConfigsRequest.SetEntry
+	3,  // 18: aeromq.ControlService.RegisterBroker:input_type -> aeromq.RegisterBrokerRequest
+	6,  // 19: aeromq.ControlService.Heartbeat:input_type -> aeromq.HeartbeatRequest
+	8,  // 20: aeromq.DiscoveryService.GetMetadata:input_type -> aeromq.MetadataRequest
+	14, // 21: aeromq.DiscoveryService.JoinGroup:input_type -> aeromq.JoinGroupRequest
+	16, // 22: aeromq.DiscoveryService.HeartbeatGroup:input_type -> aeromq.HeartbeatGroupRequest
+	19, // 23: aeromq.DiscoveryService.CommitOffsets:input_type -> aeromq.CommitOffsetsRequest
+	21, // 24: aeromq.DiscoveryService.FetchOffsets:input_type -> aeromq.FetchOffsetsRequest
+	12, // 25: aeromq.DiscoveryService.CreateTopic:input_type -> aeromq.CreateTopicRequest
+	26, // 26: aeromq.AdminService.DeleteTopic:input_type -> aeromq.DeleteTopicRequest
+	27, // 27: aeromq.AdminService.CreatePartitions:input_type -> aeromq.CreatePartitionsRequest
+	28, // 28: aeromq.AdminService.AlterTopicConfigs:input_type -> aeromq.AlterTopicConfigsRequest
+	29, // 29: aeromq.AdminService.ElectLeaders:input_type -> aeromq.ElectLeadersRequest
+	4,  // 30: aeromq.ControlService.RegisterBroker:output_type -> aeromq.RegisterBrokerResponse
+	7,  // 31: aeromq.ControlService.Heartbeat:output_type -> aeromq.HeartbeatResponse
+	9,  // 32: aeromq.DiscoveryService.GetMetadata:output_type -> aeromq.MetadataResponse
+	15, // 33: aeromq.DiscoveryService.JoinGroup:output_type -> aeromq.JoinGroupResponse
+	17, // 34: aeromq.DiscoveryService.HeartbeatGroup:output_type -> aeromq.HeartbeatGroupResponse
+	20, // 35: aeromq.DiscoveryService.CommitOffsets:output_type -> aeromq.CommitOffsetsResponse
+	22, // 36: aeromq.DiscoveryService.FetchOffsets:output_type -> aeromq.FetchOffsetsResponse
+	13, // 37: aeromq.DiscoveryService.CreateTopic:output_type -> aeromq.CreateTopicResponse
+	25, // 38: aeromq.AdminService.DeleteTopic:output_type -> aeromq.AdminResponse
+	25, // 39: aeromq.AdminService.CreatePartitions:output_type -> aeromq.AdminResponse
+	25, // 40: aeromq.AdminService.AlterTopicConfigs:output_type -> aeromq.AdminResponse
+	25, // 41: aeromq.AdminService.ElectLeaders:output_type -> aeromq.AdminResponse
+	30, // [30:42] is the sub-list for method output_type
+	18, // [18:30] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
-func init() { file_proto_control_proto_init() }
-func file_proto_control_proto_init() {
-	if File_proto_control_proto != nil {
+func init() { file_control_proto_init() }
+func file_control_proto_init() {
+	if File_control_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_control_proto_rawDesc), len(file_proto_control_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_control_proto_rawDesc), len(file_control_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   25,
+			NumMessages:   34,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
-		GoTypes:           file_proto_control_proto_goTypes,
-		DependencyIndexes: file_proto_control_proto_depIdxs,
-		EnumInfos:         file_proto_control_proto_enumTypes,
-		MessageInfos:      file_proto_control_proto_msgTypes,
+		GoTypes:           file_control_proto_goTypes,
+		DependencyIndexes: file_control_proto_depIdxs,
+		EnumInfos:         file_control_proto_enumTypes,
+		MessageInfos:      file_control_proto_msgTypes,
 	}.Build()
-	File_proto_control_proto = out.File
-	file_proto_control_proto_goTypes = nil
-	file_proto_control_proto_depIdxs = nil
+	File_control_proto = out.File
+	file_control_proto_goTypes = nil
+	file_control_proto_depIdxs = nil
 }

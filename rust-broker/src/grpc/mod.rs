@@ -99,6 +99,8 @@ pub async fn run_control_plane_loop(
             broker_id,
             host: my_host.clone(),
             data_port,
+            rack: cfg.rack.clone().unwrap_or_default(),
+            kafka_port: cfg.kafka_port,
         };
 
         match control_client.register_broker(authed(reg_req, &auth_token)).await {

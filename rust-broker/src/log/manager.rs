@@ -775,6 +775,24 @@ impl LogManager {
         })
     }
 
+    /// Drop all local partitions of `topic` and remove their on-disk directories (used by DeleteTopics).
+    /// Returns the number of partitions removed.
+    pub async fn delete_topic(&self, topic: &str) -> io::Result<usize> {
+        let mut parts = self.partitions.lock().await;
+        let keys: Vec<(String, u32)> = parts.keys().filter(|(t, _)| t == topic).cloned().collect();
+        let mut removed = 0;
+        for k in keys {
+            if let Some(log) = parts.remove(&k) {
+                let dir = log.lock().await.partition_dir.clone();
+                if dir.exists() {
+                    std::fs::remove_dir_all(&dir)?;
+                }
+                removed += 1;
+            }
+        }
+        Ok(removed)
+    }
+
     pub async fn get_partition(&self, topic: &str, partition: u32) -> io::Result<Arc<Mutex<PartitionLog>>> {
         let mut parts = self.partitions.lock().await;
         let key = (topic.to_string(), partition);

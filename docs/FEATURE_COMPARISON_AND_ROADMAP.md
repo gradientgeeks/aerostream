@@ -41,15 +41,21 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 | **Kernel Zero-Copy** | `FileChannel.transferTo()` | Direct I/O via Seastar | **Linux `sendfile(2)` + CPU-affinity pinning** | **Implemented** |
 | **Web UI Console** | External (AKHQ, Conduktor, Provectus) | External / Cloud Console | **Embedded Native Console (`/aerostream/console`)** | **Implemented** |
 | **All-In-One Container** | Complex (multiple containers) | Single binary | **Full-Stack Container (Broker + Controller + UI)** | **Implemented** |
-| **Kafka Wire Protocol** | Native | **100% Wire Compatible** | **Native TCP Shim (Port 9092, ApiKey 0,1,3,18)** | **Implemented** |
+| **Kafka Wire Protocol** | Native | **100% Wire Compatible** | **Native TCP Shim: data plane (0,1,3,18), transactions (22,24-26,28), consumer groups and admin (2,8-16,19,20,32,33,37,42-44,60), share groups (76-79)** | **Implemented** |
 | **Log Compaction** | `cleanup.policy=compact` | Supported | **Key-Hash Deduplication & Tombstone GC** | **Implemented** |
-| **Exactly-Once Semantics** | Idempotent Producer + 2PC Coordinator | Idempotent Producer + 2PC | **Idempotent Producer PID & Sequence De-dup** | **Implemented** |
+| **Exactly-Once Semantics** | Idempotent Producer + 2PC Coordinator | Idempotent Producer + 2PC | **Idempotent + Transactional Producer (KIP-98 TV1), `read_committed`, LSO, per-broker coordinator** | **Implemented (single-coordinator-broker scope)** |
 | **Cloud Object Storage Tier** | KIP-405 (S3 / GCS / Azure) | Native Shadow Indexing (S3 / GCS) | **Multi-Cloud (AWS S3, MinIO, GCS, Azure, Local)** | **Implemented** |
 | **Built-in Schema Registry** | External (Confluent / Karapace) | **Built-in Schema Registry (Avro/Proto/JSON)** | **Confluent-Compatible Schema Registry** | **Implemented** |
 | **In-Broker Stream Transforms**| External (Flink / Kafka Streams) | **Native WASM Data Transforms** | **Native WASM & Stream Data Transforms Engine + Web Console** | **Implemented** |
 | **Enterprise RBAC / ACLs** | SASL/SCRAM, Kerberos, Granular ACLs | SASL/SCRAM, OIDC, RBAC | **Granular Topic/Group ACLs, Principal Roles, REST API & Web UI** | **Implemented** |
 | **Consumer Rebalancing** | Cooperative Sticky (KIP-848) | Cooperative Sticky (KIP-848) | **Cooperative Sticky Protocol KIP-848** | **Implemented** |
 | **Connectors Ecosystem** | 300+ Kafka Connect plugins | Compatible with Kafka Connect | **Kafka Connect Compatible API + Native Connector Manager & Web UI** | **Implemented** |
+| **Compression Codecs** | gzip / snappy / lz4 / zstd | gzip / snappy / lz4 / zstd | **All four codecs validated on produce, `compression.type` per topic, decompress for compaction / Iceberg** | **Implemented (wire only: multi-record batches are stored uncompressed, see 6.1)** |
+| **Client Quotas / Throttling** | `producer_byte_rate`, `consumer_byte_rate`, `request_percentage` | Same | **Same three quotas, Kafka precedence, `throttle_time_ms`, REST `/api/quotas`** | **Implemented (client-id scope; no SASL principal yet)** |
+| **Rack Awareness / Follower Fetch** | KIP-36 / KIP-392 | Yes (Enterprise) | **`--rack`, rack-spread placement, Fetch v11 `preferred_read_replica`** | **Implemented** |
+| **Share Groups (Queues)** | KIP-932 | Under evaluation | **ShareGroupHeartbeat / ShareFetch / ShareAcknowledge, acquisition locks, DLQ** | **Implemented (v1)** |
+| **Iceberg Topics** | External | Yes (Enterprise) | **Parquet + Iceberg v2 metadata, read back by pyiceberg (`iceberg` cargo feature)** | **Implemented (unpartitioned, at-least-once)** |
+| **Stateful Stream Processing** | Kafka Streams / ksqlDB | External | **Windowed aggregations, stream-table joins, state store, interactive queries, UI page** | **Implemented (controller-side)** |
 
 ---
 
@@ -121,3 +127,17 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 ---
 
 *For detailed benchmark metrics and performance test logs across 1 MB, 10 MB, and 50 MB payloads, see [`docs/BENCHMARK_RESULTS.md`](./BENCHMARK_RESULTS.md).*
+
+---
+
+## 6. Feature-Gap Closure Notes (Phase 9)
+
+Known limitations of the features added in this phase:
+
+* **6.1 Compression at rest.** The log keeps one index entry per offset, so the broker decompresses multi-record batches on produce and stores one uncompressed single-record entry per record. Compression saves producer-to-broker bandwidth only. Storage and Fetch responses are uncompressed. Fixing this needs entries that span several offsets in the log/index layer.
+* **6.2 Quotas.** Enforced per `client-id`. The Kafka path has no SASL principal, so `user` quotas need an authenticated principal first. Quota state lives in the controller process, not Raft.
+* **6.3 Transactions.** The coordinator runs inside a broker, so a transaction can span only partitions led by that broker (no WriteTxnMarkers, ApiKey 27). No TV2 or KIP-939. Validated with synthetic frames, not a real transactional client.
+* **6.4 Share groups.** Group membership is not persisted. Metadata `topic_id` (Metadata v10+) is not served because Metadata tops out at v5.
+* **6.5 Admin / groups.** Classic group protocol only (no KIP-848). Group state is in the coordinator's memory. DeleteTopics removes controller metadata and the receiving broker's logs only. Broker-level configs are read-only.
+* **6.6 Iceberg.** Enabled from the broker `[iceberg]` config only, not per-topic from the controller. Uncompressed Parquet, no partitioning, no catalog, at-least-once commits. S3 warehouse untested.
+* **6.7 Stream processing.** Polls with the legacy fetch path, so it is not transaction-aware and has no exactly-once sink.

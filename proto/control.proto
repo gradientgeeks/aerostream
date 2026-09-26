@@ -24,6 +24,8 @@ message BrokerInfo {
   uint32 broker_id = 1;
   string host = 2;
   int32 port = 3;
+  string rack = 300;      // [topology] broker.rack (empty = none)
+  int32 kafka_port = 301; // [topology] Kafka wire-protocol port
 }
 
 message PartitionAssignment {
@@ -38,6 +40,8 @@ message RegisterBrokerRequest {
   uint32 broker_id = 1;
   string host = 2;
   int32 data_port = 3; // The port where the Rust broker listens for TCP data connections
+  string rack = 300;      // [topology] broker.rack
+  int32 kafka_port = 301; // [topology] Kafka wire-protocol port
 }
 
 message RegisterBrokerResponse {
@@ -86,6 +90,7 @@ message MetadataResponse {
 message TopicMetadata {
   string topic = 1;
   repeated PartitionMetadata partitions = 2;
+  map<string, string> configs = 300; // [topology] per-topic config overrides
 }
 
 message PartitionMetadata {
@@ -102,11 +107,16 @@ message CreateTopicRequest {
   string topic = 1;
   uint32 partitions = 2;
   uint32 replication_factor = 3;
+  map<string, string> configs = 300;               // [topology]
+  repeated ReplicaAssignment manual_assignments = 301; // [topology] explicit placement
+  bool validate_only = 302;                         // [topology]
+  bool fail_if_exists = 303;                        // [topology] Kafka semantics: duplicate => TOPIC_ALREADY_EXISTS
 }
 
 message CreateTopicResponse {
   bool success = 1;
   string message = 2;
+  int32 error_code = 300; // [topology] Kafka error code (0 = none)
 }
 
 // Consumer Group management
@@ -175,4 +185,49 @@ message ClientQuota {
   double consumer_byte_rate = 105;
   bool has_request_percentage = 106;
   double request_percentage = 107;
+}
+
+// ==== topology (stream C) ====
+message ReplicaAssignment {
+  uint32 partition = 300;
+  repeated uint32 broker_ids = 301;
+}
+
+message AdminResponse {
+  bool success = 300;
+  string message = 301;
+  int32 error_code = 302; // Kafka protocol error code (0 = none)
+}
+
+message DeleteTopicRequest {
+  string topic = 300;
+}
+
+message CreatePartitionsRequest {
+  string topic = 300;
+  uint32 new_total = 301;
+  repeated ReplicaAssignment assignments = 302; // optional placement of the NEW partitions
+  bool validate_only = 303;
+}
+
+message AlterTopicConfigsRequest {
+  string topic = 300;
+  map<string, string> set = 301;
+  repeated string delete = 302;
+  bool replace_all = 303; // legacy AlterConfigs semantics
+  bool validate_only = 304;
+}
+
+message ElectLeadersRequest {
+  string topic = 300;
+  uint32 partition = 301;
+  int32 election_type = 302; // 0 = preferred, 1 = unclean
+}
+
+// AdminService backs the Kafka admin APIs (DeleteTopics, CreatePartitions, AlterConfigs, ElectLeaders).
+service AdminService {
+  rpc DeleteTopic (DeleteTopicRequest) returns (AdminResponse);
+  rpc CreatePartitions (CreatePartitionsRequest) returns (AdminResponse);
+  rpc AlterTopicConfigs (AlterTopicConfigsRequest) returns (AdminResponse);
+  rpc ElectLeaders (ElectLeadersRequest) returns (AdminResponse);
 }
