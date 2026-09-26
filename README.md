@@ -178,6 +178,7 @@ cd client && go test -v ./...
 
 ## 📜 Documentation & Guides
 
+* **[Documentation Portal (Index & Overview)](docs/README.md)**: Centralized knowledge base, role-based reading paths, and complete document catalog.
 * **[Architecture Deep-Dive](docs/ARCHITECTURE.md)**: Dual-Engine internals, memory-mapping, zero-copy `sendfile(2)`, Raft FSM, and threading models.
 * **[Operator & Deployment Guide](docs/OPERATOR_GUIDE.md)**: Cluster bootstrapping, Kubernetes StatefulSets, automated scale-down, broker draining, and monitoring.
 * **[REST & Wire Protocol API Reference](docs/API_REFERENCE.md)**: Complete endpoint schemas, Schema Registry, Stream Transforms, ACLs, and Kafka wire framing.
