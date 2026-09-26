@@ -27,6 +27,8 @@ pub struct BrokerConfig {
     pub tiered_storage: crate::storage::TieredStorageConfig,
     pub tls: TlsConfig,
     pub auth: AuthConfig,
+    /// Iceberg topics (`[iceberg]` section).
+    pub iceberg: crate::iceberg::IcebergConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -82,6 +84,7 @@ impl Default for BrokerConfig {
             tiered_storage: crate::storage::TieredStorageConfig::default(),
             tls: TlsConfig::default(),
             auth: AuthConfig::default(),
+            iceberg: crate::iceberg::IcebergConfig::default(),
         }
     }
 }
