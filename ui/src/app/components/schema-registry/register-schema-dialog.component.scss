@@ -104,15 +104,27 @@
       }
 
       &.active-avro {
-        background: rgba(168, 85, 247, 0.18);
-        border-color: #a855f7;
-        color: #d8b4fe;
+        background: rgba(168, 85, 247, 0.14);
+        border-color: #9333ea;
+        color: #7e22ce;
+
+        :host-context(.dark-theme) & {
+          background: rgba(168, 85, 247, 0.18);
+          border-color: #a855f7;
+          color: #d8b4fe;
+        }
       }
 
       &.active-json {
-        background: rgba(249, 115, 22, 0.18);
-        border-color: #f97316;
-        color: #fdba74;
+        background: rgba(249, 115, 22, 0.14);
+        border-color: #ea580c;
+        color: #c2410c;
+
+        :host-context(.dark-theme) & {
+          background: rgba(249, 115, 22, 0.18);
+          border-color: #f97316;
+          color: #fdba74;
+        }
       }
 
       &.active-proto {
@@ -149,9 +161,30 @@
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
 
-    &.avro { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
-    &.json { background: rgba(249, 115, 22, 0.2); color: #fb923c; }
-    &.protobuf { background: var(--app-primary-bg, rgba(0, 229, 255, 0.2)); color: var(--app-primary-text, var(--app-primary)); }
+    &.avro {
+      background: rgba(168, 85, 247, 0.12);
+      color: #7e22ce;
+
+      :host-context(.dark-theme) & {
+        background: rgba(168, 85, 247, 0.2);
+        color: #c084fc;
+      }
+    }
+
+    &.json {
+      background: rgba(249, 115, 22, 0.12);
+      color: #c2410c;
+
+      :host-context(.dark-theme) & {
+        background: rgba(249, 115, 22, 0.2);
+        color: #fb923c;
+      }
+    }
+
+    &.protobuf {
+      background: var(--app-primary-bg, rgba(0, 229, 255, 0.2));
+      color: var(--app-primary-text, var(--app-primary));
+    }
   }
 
   .template-btn {

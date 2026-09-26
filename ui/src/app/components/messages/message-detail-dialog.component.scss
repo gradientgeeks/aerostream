@@ -21,8 +21,9 @@
       width: 42px;
       height: 42px;
       border-radius: 10px;
-      background: rgba(56, 189, 248, 0.15);
-      color: var(--app-code-text);
+      background: var(--app-primary-bg);
+      border: 1px solid var(--app-primary-border);
+      color: var(--app-primary-text, var(--app-primary));
       display: flex;
       align-items: center;
       justify-content: center;
@@ -50,8 +51,8 @@
       color: var(--app-text-muted);
 
       .crumb.topic {
-        color: var(--app-code-text);
-        font-weight: 500;
+        color: var(--app-primary-text, var(--app-primary));
+        font-weight: 600;
       }
 
       .crumb.offset {
@@ -98,8 +99,9 @@
         background: var(--app-surface-hover);
 
         &.json-tag {
-          background: rgba(56, 189, 248, 0.2);
-          color: var(--app-code-text);
+          background: var(--app-primary-bg);
+          border: 1px solid var(--app-primary-border);
+          color: var(--app-primary-text, var(--app-primary));
         }
       }
     }
@@ -108,7 +110,7 @@
 
 .content-box {
   background: var(--app-code-bg);
-  border: 1px solid var(--app-border);
+  border: 1px solid var(--app-code-border, var(--app-border));
   border-radius: 8px;
   overflow: hidden;
   margin-bottom: 8px;
@@ -118,8 +120,8 @@
     justify-content: space-between;
     align-items: center;
     padding: 8px 14px;
-    background: var(--app-surface);
-    border-bottom: 1px solid var(--app-border);
+    background: var(--app-code-topbar, var(--app-surface));
+    border-bottom: 1px solid var(--app-code-border, var(--app-border));
 
     .toolbar-title {
       font-size: 0.82rem;
@@ -150,14 +152,15 @@
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 0.88rem;
     line-height: 1.5;
-    color: var(--app-text);
+    color: var(--app-code-text, #f8fafc);
+    background: var(--app-code-bg);
     overflow-x: auto;
     max-height: 440px;
     white-space: pre-wrap;
     word-break: break-all;
 
     &.json-code {
-      color: var(--app-code-text);
+      color: var(--app-code-text, #f8fafc);
     }
   }
 }

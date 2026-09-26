@@ -61,6 +61,20 @@
 
 /* Metric Cards */
 .metrics-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 20px;
+  width: 100%;
+  margin-bottom: 24px;
+
+  @media (max-width: 1200px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr !important;
+  }
+
   .metric-card {
     background: var(--app-surface, #0e1524);
     border: 1px solid var(--app-border, rgba(0, 229, 255, 0.15));
@@ -167,9 +181,14 @@
           font-weight: 600;
 
           &.healthy {
-            background: rgba(16, 185, 129, 0.15);
-            color: #34d399;
+            background: rgba(16, 185, 129, 0.12);
+            color: #047857;
             border: 1px solid rgba(16, 185, 129, 0.3);
+
+            :host-context(.dark-theme) & {
+              color: #34d399;
+              background: rgba(16, 185, 129, 0.15);
+            }
           }
 
           .pulse-dot {
@@ -186,9 +205,14 @@
           border-radius: 12px;
           font-size: 11.5px;
           font-weight: 600;
-          background: rgba(168, 85, 247, 0.15);
-          color: #c084fc;
+          background: rgba(168, 85, 247, 0.12);
+          color: #7e22ce;
           border: 1px solid rgba(168, 85, 247, 0.3);
+
+          :host-context(.dark-theme) & {
+            color: #c084fc;
+            background: rgba(168, 85, 247, 0.15);
+          }
         }
 
         .compat-shield-badge {
@@ -199,9 +223,14 @@
           border-radius: 12px;
           font-size: 11.5px;
           font-weight: 600;
-          background: rgba(16, 185, 129, 0.15);
-          color: #34d399;
+          background: rgba(16, 185, 129, 0.12);
+          color: #047857;
           border: 1px solid rgba(16, 185, 129, 0.3);
+
+          :host-context(.dark-theme) & {
+            color: #34d399;
+            background: rgba(16, 185, 129, 0.15);
+          }
 
           mat-icon {
             font-size: 14px;
@@ -237,6 +266,32 @@
 }
 
 /* Master-Detail Section */
+.catalog-section {
+  display: grid !important;
+  grid-template-columns: 380px minmax(0, 1fr) !important;
+  gap: 24px;
+  width: 100%;
+  align-items: start;
+
+  @media (max-width: 1024px) {
+    grid-template-columns: 1fr !important;
+  }
+
+  .subjects-master-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  .schema-detail-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+}
+
 .subjects-list-card {
   background: var(--app-surface, #0e1524);
   border: 1px solid var(--app-border, rgba(0, 229, 255, 0.15));
@@ -245,7 +300,8 @@
 
   .list-controls-bar {
     padding: 16px;
-    background: rgba(0, 0, 0, 0.15);
+    background: var(--app-nested-bg, #f8fafc);
+    border-bottom: 1px solid var(--app-border, #e2e8f0);
 
     .search-field {
       width: 100%;
@@ -275,15 +331,27 @@
         }
 
         &.chip-avro.active {
-          background: rgba(168, 85, 247, 0.2);
-          border-color: #a855f7;
-          color: #c084fc;
+          background: rgba(168, 85, 247, 0.15);
+          border-color: #9333ea;
+          color: #7e22ce;
+
+          :host-context(.dark-theme) & {
+            color: #c084fc;
+            border-color: #a855f7;
+            background: rgba(168, 85, 247, 0.2);
+          }
         }
 
         &.chip-json.active {
-          background: rgba(249, 115, 22, 0.2);
-          border-color: #f97316;
-          color: #fdba74;
+          background: rgba(249, 115, 22, 0.15);
+          border-color: #ea580c;
+          color: #c2410c;
+
+          :host-context(.dark-theme) & {
+            color: #fdba74;
+            border-color: #f97316;
+            background: rgba(249, 115, 22, 0.2);
+          }
         }
 
         &.chip-proto.active {
@@ -352,7 +420,8 @@
             font-size: 11px;
             padding: 1px 6px;
             border-radius: 4px;
-            background: rgba(255, 255, 255, 0.08);
+            background: var(--app-pill-bg, var(--app-nested-bg));
+            border: 1px solid var(--app-border);
             color: var(--app-text-muted, #94a3b8);
             font-family: 'JetBrains Mono', monospace;
           }
@@ -444,10 +513,12 @@
         .id-pill {
           padding: 2px 8px;
           border-radius: 6px;
-          background: rgba(255, 255, 255, 0.08);
-          color: #cbd5e1;
+          background: var(--app-pill-bg, var(--app-nested-bg));
+          border: 1px solid var(--app-border);
+          color: var(--app-text);
           font-size: 12px;
           font-family: 'JetBrains Mono', monospace;
+          font-weight: 600;
         }
       }
 
@@ -666,19 +737,37 @@
 }
 
 .badge-avro {
-  background: rgba(168, 85, 247, 0.18);
-  border: 1px solid rgba(168, 85, 247, 0.4);
-  color: #c084fc;
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: #7e22ce;
+
+  :host-context(.dark-theme) & {
+    background: rgba(168, 85, 247, 0.18);
+    border-color: rgba(168, 85, 247, 0.4);
+    color: #c084fc;
+  }
 }
 
 .badge-json {
-  background: rgba(249, 115, 22, 0.18);
-  border: 1px solid rgba(249, 115, 22, 0.4);
-  color: #fb923c;
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  color: #c2410c;
+
+  :host-context(.dark-theme) & {
+    background: rgba(249, 115, 22, 0.18);
+    border-color: rgba(249, 115, 22, 0.4);
+    color: #fb923c;
+  }
 }
 
 .badge-protobuf {
-  background: rgba(0, 229, 255, 0.18);
-  border: 1px solid rgba(0, 229, 255, 0.4);
-  color: #22d3ee;
+  background: var(--app-primary-bg);
+  border: 1px solid var(--app-primary-border);
+  color: var(--app-primary-text, var(--app-primary));
+
+  :host-context(.dark-theme) & {
+    background: rgba(0, 229, 255, 0.18);
+    border-color: rgba(0, 229, 255, 0.4);
+    color: #22d3ee;
+  }
 }

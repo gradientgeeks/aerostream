@@ -118,9 +118,9 @@
   </div>
 
   <!-- Master-Detail Catalog Section -->
-  <div class="catalog-section grid grid-cols-1 lg:grid-cols-12 gap-6 w-full max-w-full">
+  <div class="catalog-section">
     <!-- Left Column: Subjects List (Master) -->
-    <div class="lg:col-span-4 xl:col-span-4 flex flex-col gap-4">
+    <div class="subjects-master-col">
       <mat-card class="subjects-list-card">
         <!-- Search and Filter Bar -->
         <div class="list-controls-bar">
@@ -222,7 +222,7 @@
     </div>
 
     <!-- Right Column: Schema Details & Code Viewer (Detail) -->
-    <div class="lg:col-span-8 xl:col-span-8 flex flex-col gap-4">
+    <div class="schema-detail-col">
       <mat-card *ngIf="activeSchema() as current" class="schema-detail-card">
         <!-- Detail Header -->
         <div class="detail-header flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
