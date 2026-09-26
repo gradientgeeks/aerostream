@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -11,12 +12,14 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/auth"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/connect"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/consensus"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/schemaregistry"
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/streams"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/transform"
 	"github.com/hashicorp/raft"
 )
@@ -28,6 +31,8 @@ type Server struct {
 	aclManager       *auth.AclManager
 	transformEngine  *transform.Engine
 	connectorManager *connect.ConnectorManager
+	streamEngine     *streams.Engine
+	streamsOnce      sync.Once
 }
 
 func NewServer(raftNode *consensus.RaftNode, httpAddr string, registry ...*schemaregistry.Registry) *Server {
@@ -37,7 +42,7 @@ func NewServer(raftNode *consensus.RaftNode, httpAddr string, registry ...*schem
 	} else {
 		reg = schemaregistry.NewRegistry()
 	}
-	return &Server{
+	srv := &Server{
 		raftNode:         raftNode,
 		httpAddr:         httpAddr,
 		schemaRegistry:   reg,
@@ -45,6 +50,8 @@ func NewServer(raftNode *consensus.RaftNode, httpAddr string, registry ...*schem
 		transformEngine:  transform.NewEngine(),
 		connectorManager: connect.NewManager(),
 	}
+	srv.initStreams()
+	return srv
 }
 
 func (s *Server) Registry() *schemaregistry.Registry {
@@ -110,6 +117,11 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	// Stream Transforms endpoints
 	mux.HandleFunc("/api/transforms", s.handleTransforms)
 	mux.HandleFunc("/api/transforms/", s.handleTransformItem)
+
+	// Stateful stream processing (windowed aggregations, stream-table joins, queries)
+	mux.HandleFunc("/api/streams", s.handleStreams)
+	mux.HandleFunc("/api/streams/", s.handleStreamItem)
+	s.streamsOnce.Do(func() { s.StartStreamPolling(context.Background()) })
 
 	// Connectors Ecosystem endpoints (Kafka Connect-compatible & Native)
 	mux.HandleFunc("/api/connectors", s.handleConnectors)
@@ -620,10 +632,10 @@ func (s *Server) handleProduce(w http.ResponseWriter, r *http.Request) {
 	assignedOffset := binary.BigEndian.Uint64(respHeader[3:11])
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"topic":   req.Topic,
+		"success":   true,
+		"topic":     req.Topic,
 		"partition": req.Partition,
-		"offset":  assignedOffset,
+		"offset":    assignedOffset,
 	})
 }
 
@@ -1660,7 +1672,3 @@ func (s *Server) handleConnectorPlugins(w http.ResponseWriter, r *http.Request) 
 	plugins := s.connectorManager.ListPlugins()
 	json.NewEncoder(w).Encode(plugins)
 }
-
-
-
-
