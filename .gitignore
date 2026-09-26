@@ -37,3 +37,12 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+.claude/
+
+# Python
+.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
