@@ -85,39 +85,18 @@ docker run -d \
 
 ## 🏗 Architecture Overview
 
-```
-                      +---------------------------------------+
-                      |         Clients & Applications        |
-                      |  (Kafka Clients, Native CLI, Web UI)  |
-                      +-------------------+-------------------+
-                                          |
-                      +-------------------+-------------------+
-                      |      AeroStream Unified Ingress       |
-                      +-------------------+-------------------+
-                               |                     |
-             (Kafka Protocol / TCP)        (Metadata / REST / gRPC)
-             Port 9092 & 9091              Port 9001 & 8001
-                               |                     |
-                               v                     v
-              +--------------------------------+   +-------------------------------+
-              |        Rust Data Plane         |   |       Go Control Plane        |
-              |       (Storage Engine)         |   |       (Cluster Manager)       |
-              +--------------------------------+   +-------------------------------+
-              | * Tokio Async I/O (sendfile)   |   | * Raft Consensus Quorum       |
-              | * Memory-Mapped Indices (mmap) |   | * Confluent Schema Registry   |
-              | * Compaction & Key Dedup       |   | * RBAC & Granular ACL Engine  |
-              | * Idempotence Tracker (EOS)    |   | * Cooperative Sticky Rebalance|
-              | * Tiered Storage Offloader     |   | * Stream Transforms (WASM/PII)|
-              +----------------+---------------+   +---------------+---------------+
-                               |                                   |
-                               +-----------------+-----------------+
-                                                 |
-                                                 v
-                               +-----------------------------------+
-                               |     Tiered Multi-Cloud Storage    |
-                               | (Local Disk | S3 | GCS | Azure)   |
-                               +-----------------------------------+
-```
+![AeroStream Dual-Engine Architecture](docs/images/dual_engine_architecture.png)
+
+AeroStream achieves its performance through strict decoupling:
+* **Go Control Plane (Ports 9001 & 8001)**: Drives distributed consensus via HashiCorp Raft, serves the Confluent-compatible Schema Registry, manages enterprise RBAC / ACL policies, stream transforms, and connector runtimes.
+* **Rust Data Plane (Ports 9091 & 9092)**: Handles high-throughput binary Kafka wire traffic and native streaming via Tokio async event loops, memory-mapped (`mmap`) sparse index search, and Linux kernel zero-copy `sendfile(2)` DMA transfers.
+* **Multi-Cloud Tiered Storage**: Automatically rolls sealed 128 MB log segments into an asynchronous offloader queue, persisting them to AWS S3, MinIO, Google Cloud Storage, or Azure Blob without blocking producer ingestion.
+
+> 📖 **Deep-Dive Diagrams**:
+> * **[Zero-Copy Produce & Fetch Pipelines](docs/images/produce_fetch_pipeline.png)**: Step-by-step kernel DMA and mmap write paths.
+> * **[Multi-Cloud Tiered Storage Pipeline](docs/images/tiered_storage_pipeline.png)**: Non-blocking offloading and safe local eviction.
+> * **[Cluster Topology & Scale-Down Protocol](docs/images/cluster_topology_scale_down.png)**: 3-Node Raft consensus and graceful broker draining.
+
 
 ---
 
@@ -197,11 +176,15 @@ cd client && go test -v ./...
 
 ---
 
-## 📜 Documentation
+## 📜 Documentation & Guides
 
-* [Comprehensive 3-Way Benchmark Results](docs/BENCHMARK_RESULTS.md)
-* [Feature Comparison & Architectural Roadmap](docs/FEATURE_COMPARISON_AND_ROADMAP.md)
-* [Kubernetes Deployment Guide](deploy/k8s/)
+* **[Architecture Deep-Dive](docs/ARCHITECTURE.md)**: Dual-Engine internals, memory-mapping, zero-copy `sendfile(2)`, Raft FSM, and threading models.
+* **[Operator & Deployment Guide](docs/OPERATOR_GUIDE.md)**: Cluster bootstrapping, Kubernetes StatefulSets, automated scale-down, broker draining, and monitoring.
+* **[REST & Wire Protocol API Reference](docs/API_REFERENCE.md)**: Complete endpoint schemas, Schema Registry, Stream Transforms, ACLs, and Kafka wire framing.
+* **[Feature Comparison & Evolution Roadmap](docs/FEATURE_COMPARISON_AND_ROADMAP.md)**: Detailed breakdown vs. Apache Kafka and Redpanda, and Next-Gen Enterprise Roadmap (Phases 9–14).
+* **[Comprehensive 3-Way Benchmark Results](docs/BENCHMARK_RESULTS.md)**: Real-world performance under strict container limits (1 MB, 10 MB, 50 MB payloads).
+* **[Python FastAPI Integration Example](examples/fastapi-app/README.md)**: Full-featured sample backend showcasing dual Kafka-wire and HTTP-REST streaming.
+* **[Kubernetes Deployment Manifests](deploy/k8s/)**: Production-ready StatefulSet and Service definitions with preStop hooks.
 
 ---
 
