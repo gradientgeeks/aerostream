@@ -664,3 +664,51 @@ func TestCooperativeStickyRebalance_UnassignedPartitionsDistributed(t *testing.T
 		t.Errorf("expected user agent aeromq-client-go/v1, got %s", c2Member.UserAgent)
 	}
 }
+
+func TestDrainBroker_ReassignsLeadersAndReplicas(t *testing.T) {
+	f := NewFSM(time.Minute, 10)
+
+	registerBroker(t, f, 1, "host1", 9001)
+	registerBroker(t, f, 2, "host2", 9002)
+	registerBroker(t, f, 3, "host3", 9003)
+
+	createTopic(t, f, "orders", 3, 2)
+
+	// Check partition 0 initially has leader and replicas
+	p0 := f.state.Topics["orders"].Partitions[0]
+	oldLeader := p0.LeaderID
+
+	// Drain oldLeader
+	applyCmd(t, f, CmdDrainBroker, struct {
+		ID uint32 `json:"id"`
+	}{ID: oldLeader})
+
+	// Old leader must no longer be active
+	if f.state.Brokers[oldLeader].Active {
+		t.Errorf("expected broker %d to be marked inactive", oldLeader)
+	}
+
+	// Partition 0 must have elected a new leader different from oldLeader
+	p0After := f.state.Topics["orders"].Partitions[0]
+	if p0After.LeaderID == oldLeader {
+		t.Errorf("expected leader to be changed away from %d, still %d", oldLeader, p0After.LeaderID)
+	}
+	if p0After.LeaderID == 0 {
+		t.Errorf("expected valid new leader, got 0")
+	}
+
+	// ReplicaIDs must no longer contain oldLeader
+	for _, rID := range p0After.ReplicaIDs {
+		if rID == oldLeader {
+			t.Errorf("drained broker %d still present in ReplicaIDs", oldLeader)
+		}
+	}
+
+	// ISR must no longer contain oldLeader
+	for _, isrID := range p0After.ISR {
+		if isrID == oldLeader {
+			t.Errorf("drained broker %d still present in ISR", oldLeader)
+		}
+	}
+}
+

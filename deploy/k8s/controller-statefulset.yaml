@@ -78,6 +78,21 @@ spec:
                   -data-dir "/data" \
                   -join "http://${BOOTSTRAP_HOST}:9001"
               fi
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - "/bin/sh"
+                  - "-c"
+                  - |
+                    ORDINAL="${HOSTNAME##*-}"
+                    NODE_ID="node$((ORDINAL + 1))"
+                    BOOTSTRAP_HOST="controller-0.controller-headless.aerostream.svc.cluster.local"
+                    if [ "${ORDINAL}" != "0" ]; then
+                      echo "Gracefully leaving Raft cluster before pod termination..."
+                      curl -s -X POST "http://${BOOTSTRAP_HOST}:9001/leave?id=${NODE_ID}" || true
+                      sleep 2
+                    fi
           ports:
             - name: raft
               containerPort: 7001

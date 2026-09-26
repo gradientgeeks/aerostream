@@ -95,6 +95,30 @@ func NewRaftNode(cfg appconfig.ControllerConfig) (*RaftNode, error) {
 // Propose applies a state change to the Raft consensus group.
 // It will fail if this node is not currently the cluster leader.
 func (rn *RaftNode) Propose(op string, payload interface{}) error {
+	if rn.Raft == nil {
+		if rn.FSM == nil {
+			return fmt.Errorf("raft node not initialized")
+		}
+		rawPayload, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		cmd := Command{
+			Op:      op,
+			Payload: rawPayload,
+		}
+		data, err := json.Marshal(cmd)
+		if err != nil {
+			return err
+		}
+		if res := rn.FSM.Apply(&raft.Log{Data: data}); res != nil {
+			if err, ok := res.(error); ok && err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	if rn.Raft.State() != raft.Leader {
 		return fmt.Errorf("not the leader (current leader is %s)", rn.Raft.Leader())
 	}
@@ -140,3 +164,18 @@ func (rn *RaftNode) Join(nodeID string, addr string) error {
 
 	return nil
 }
+
+// Leave removes a node from the cluster voter configuration.
+func (rn *RaftNode) Leave(nodeID string) error {
+	if rn.Raft.State() != raft.Leader {
+		return fmt.Errorf("cannot leave node: not the leader")
+	}
+
+	future := rn.Raft.RemoveServer(raft.ServerID(nodeID), 0, 0)
+	if err := future.Error(); err != nil {
+		return fmt.Errorf("failed to remove voter %s: %w", nodeID, err)
+	}
+
+	return nil
+}
+

@@ -110,6 +110,7 @@ const (
 	CmdRebalanceGroup     = "rebalance_group"
 	CmdCommitOffset       = "commit_offset"
 	CmdCleanInactive      = "clean_inactive"
+	CmdDrainBroker        = "drain_broker"
 )
 
 type Command struct {
@@ -173,6 +174,75 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 							partitionState.ReplicaOffsets = make(map[uint32]int64)
 						}
 						partitionState.ReplicaOffsets[payload.ID] = ro.Offset
+					}
+				}
+			}
+			f.updateISRAndHW()
+		}
+
+	case CmdDrainBroker:
+		var payload struct {
+			ID uint32 `json:"id"`
+		}
+		if err := json.Unmarshal(cmd.Payload, &payload); err == nil {
+			if broker, exists := f.state.Brokers[payload.ID]; exists {
+				broker.Active = false
+			}
+			activeBrokers := f.getActiveBrokerIDs()
+			for _, topic := range f.state.Topics {
+				for _, partition := range topic.Partitions {
+					// 1. Leader migration if leader was the draining broker
+					if partition.LeaderID == payload.ID {
+						newLeader := uint32(0)
+						for _, rID := range partition.ISR {
+							if rID != payload.ID {
+								newLeader = rID
+								break
+							}
+						}
+						if newLeader == 0 && len(activeBrokers) > 0 {
+							newLeader = activeBrokers[0]
+						}
+						partition.LeaderID = newLeader
+					}
+
+					// 2. Remove from ReplicaIDs and replace if possible
+					newReplicas := make([]uint32, 0, len(partition.ReplicaIDs))
+					hadReplica := false
+					for _, rID := range partition.ReplicaIDs {
+						if rID != payload.ID {
+							newReplicas = append(newReplicas, rID)
+						} else {
+							hadReplica = true
+						}
+					}
+					if hadReplica {
+						for _, abID := range activeBrokers {
+							alreadyIn := false
+							for _, rID := range newReplicas {
+								if rID == abID {
+									alreadyIn = true
+									break
+								}
+							}
+							if !alreadyIn {
+								newReplicas = append(newReplicas, abID)
+								break
+							}
+						}
+					}
+					partition.ReplicaIDs = newReplicas
+
+					// 3. Remove from ISR and offsets
+					newISR := make([]uint32, 0, len(partition.ISR))
+					for _, isrID := range partition.ISR {
+						if isrID != payload.ID {
+							newISR = append(newISR, isrID)
+						}
+					}
+					partition.ISR = newISR
+					if partition.ReplicaOffsets != nil {
+						delete(partition.ReplicaOffsets, payload.ID)
 					}
 				}
 			}

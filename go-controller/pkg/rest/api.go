@@ -93,6 +93,7 @@ func (s *Server) enableCORS(w http.ResponseWriter, r *http.Request) bool {
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/cluster", s.handleCluster)
 	mux.HandleFunc("/api/brokers", s.handleBrokers)
+	mux.HandleFunc("/api/brokers/", s.handleBrokerItem)
 	mux.HandleFunc("/api/topics", s.handleTopics)
 	mux.HandleFunc("/api/groups", s.handleGroups)
 	mux.HandleFunc("/api/groups/", s.handleGroups)
@@ -176,6 +177,38 @@ func (s *Server) handleBrokers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	json.NewEncoder(w).Encode(brokers)
+}
+
+func (s *Server) handleBrokerItem(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	// Expected path: api/brokers/{id}/drain
+	if len(parts) >= 4 && parts[3] == "drain" && r.Method == http.MethodPost {
+		brokerID, err := strconv.ParseUint(parts[2], 10, 32)
+		if err != nil {
+			http.Error(w, "invalid broker id", http.StatusBadRequest)
+			return
+		}
+
+		payload := struct {
+			ID uint32 `json:"id"`
+		}{ID: uint32(brokerID)}
+		if err := s.raftNode.Propose(consensus.CmdDrainBroker, payload); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"message": fmt.Sprintf("broker %d drained and partitions reassigned", brokerID),
+		})
+		return
+	}
+
+	http.NotFound(w, r)
 }
 
 func (s *Server) handleTopics(w http.ResponseWriter, r *http.Request) {

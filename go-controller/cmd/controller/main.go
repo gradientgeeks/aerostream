@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -114,6 +115,31 @@ func main() {
 			return
 		}
 		w.Write([]byte("joined successfully"))
+	})
+
+	// Handle Leave HTTP API for graceful scale-down
+	http.HandleFunc("/leave", func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Query().Get("id")
+		if id == "" && (r.Method == http.MethodPost || r.Method == http.MethodDelete) {
+			var body struct {
+				NodeID string `json:"node_id"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			id = body.NodeID
+		}
+		if id == "" {
+			http.Error(w, "missing id parameter", http.StatusBadRequest)
+			return
+		}
+
+		log.Printf("[AeroStream Controller] Leave request received for node %s", id)
+		if err := raftNode.Leave(id); err != nil {
+			log.Printf("[AeroStream Controller] Failed to remove node %s: %v", id, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success":true,"message":"node %s removed from raft configuration"}`+"\n", id)
 	})
 
 	http.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {

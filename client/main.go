@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"sort"
@@ -123,6 +124,24 @@ func main() {
 		partition := benchCmd.Int("partition", 0, "target partition")
 		_ = benchCmd.Parse(args[1:])
 		handleBenchmark(*controllerAddr, *topic, uint32(*partition), *producers, *messages, *size)
+	case "drain-broker":
+		if len(args) < 2 {
+			log.Fatalf("Usage: client drain-broker <broker_id> [http_addr]")
+		}
+		httpAddr := "http://127.0.0.1:9001"
+		if len(args) > 2 {
+			httpAddr = args[2]
+		}
+		handleDrainBroker(httpAddr, args[1])
+	case "leave-controller":
+		if len(args) < 2 {
+			log.Fatalf("Usage: client leave-controller <node_id> [http_addr]")
+		}
+		httpAddr := "http://127.0.0.1:9001"
+		if len(args) > 2 {
+			httpAddr = args[2]
+		}
+		handleLeaveController(httpAddr, args[1])
 	default:
 		printUsage()
 		os.Exit(1)
@@ -130,7 +149,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println("AeroMQ CLI Client")
+	fmt.Println("AeroStream CLI Client")
 	fmt.Println("Usage:")
 	fmt.Println("  client --controller <host:port> <command> [args]")
 	fmt.Println("\nCommands:")
@@ -139,9 +158,61 @@ func printUsage() {
 	fmt.Println("  produce <topic> <partition> <message>                      Publish a message payload to a partition")
 	fmt.Println("  consume <topic> <partition> <offset> [--follow]            Retrieve messages starting from an offset")
 	fmt.Println("  consume-group <topic> <group-id> [--follow]                Consume a topic as part of a consumer group (join/heartbeat/commit)")
+	fmt.Println("  drain-broker <broker_id> [http_addr]                       Evacuate partitions and safely drain a broker")
+	fmt.Println("  leave-controller <node_id> [http_addr]                     Remove a controller node from the Raft voter configuration")
 	fmt.Println("  bench [--producers <N>] [--messages <N>] [--size <bytes>]  Run high-concurrency producer benchmark")
 	fmt.Println("        [--topic <name>] [--partition <id>]")
 	fmt.Println("  integration-test                                           Run comprehensive integration test suite")
+}
+
+func handleDrainBroker(httpAddr, brokerID string) {
+	if !strings.HasPrefix(httpAddr, "http://") && !strings.HasPrefix(httpAddr, "https://") {
+		httpAddr = "http://" + httpAddr
+	}
+	url := fmt.Sprintf("%s/api/brokers/%s/drain", strings.TrimRight(httpAddr, "/"), brokerID)
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		log.Fatalf("Failed to create drain request: %v", err)
+	}
+	if authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatalf("Failed to send drain request: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		log.Fatalf("Drain failed (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+	fmt.Printf("Broker %s drained successfully: %s\n", brokerID, string(body))
+}
+
+func handleLeaveController(httpAddr, nodeID string) {
+	if !strings.HasPrefix(httpAddr, "http://") && !strings.HasPrefix(httpAddr, "https://") {
+		httpAddr = "http://" + httpAddr
+	}
+	url := fmt.Sprintf("%s/leave?id=%s", strings.TrimRight(httpAddr, "/"), nodeID)
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		log.Fatalf("Failed to create leave request: %v", err)
+	}
+	if authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatalf("Failed to send leave request: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		log.Fatalf("Leave failed (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+	fmt.Printf("Node %s removed from Raft configuration: %s\n", nodeID, string(body))
 }
 
 func connectController(addr string) pb.DiscoveryServiceClient {

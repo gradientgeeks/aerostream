@@ -737,4 +737,45 @@ func mustMarshalCmd(t *testing.T, op string, payload []byte) []byte {
 	return data
 }
 
+func TestDrainBrokerRESTEndpoint(t *testing.T) {
+	mux := http.NewServeMux()
+	fsm := consensus.NewFSM(time.Minute, 10)
+	rn := &consensus.RaftNode{FSM: fsm}
+	srv := rest.NewServer(rn, ":9001", schemaregistry.NewRegistry())
+	srv.RegisterRoutes(mux)
+
+	// Register broker 1 and 2
+	b1, _ := json.Marshal(struct {
+		ID   uint32 `json:"id"`
+		Host string `json:"host"`
+		Port int32  `json:"port"`
+	}{ID: 1, Host: "127.0.0.1", Port: 9001})
+	fsm.Apply(&raft.Log{Data: mustMarshalCmd(t, consensus.CmdRegisterBroker, b1)})
+
+	b2, _ := json.Marshal(struct {
+		ID   uint32 `json:"id"`
+		Host string `json:"host"`
+		Port int32  `json:"port"`
+	}{ID: 2, Host: "127.0.0.1", Port: 9002})
+	fsm.Apply(&raft.Log{Data: mustMarshalCmd(t, consensus.CmdRegisterBroker, b2)})
+
+	// Call POST /api/brokers/1/drain
+	req := httptest.NewRequest(http.MethodPost, "/api/brokers/1/drain", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil || resp["success"] != true {
+		t.Fatalf("expected success true, got %v", resp)
+	}
+
+	meta := fsm.GetMetadata(nil)
+	if meta.Brokers[1].Active {
+		t.Errorf("expected broker 1 to be marked inactive after drain")
+	}
+}
+
 
