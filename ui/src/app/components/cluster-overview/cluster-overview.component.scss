@@ -35,7 +35,7 @@
       gap: 12px;
 
       .page-icon {
-        color: #00E5FF;
+        color: var(--app-primary-text, var(--app-primary));
         font-size: 32px;
         width: 32px;
         height: 32px;
@@ -224,8 +224,8 @@
         }
 
         &.consensus-icon {
-          background: rgba(0, 229, 255, 0.15);
-          color: #00E5FF;
+          background: var(--app-primary-bg, rgba(0, 229, 255, 0.15));
+          color: var(--app-primary-text, var(--app-primary));
         }
 
         &.topics-icon {
@@ -290,15 +290,15 @@
           color: var(--app-text);
 
           &.is-leader {
-            color: #00E5FF;
-            text-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+            color: var(--app-primary-text, var(--app-primary));
+            text-shadow: var(--app-text-shadow, none);
           }
 
           &.health-text.primary {
-            color: #00E5FF;
+            color: var(--app-primary-text, var(--app-primary));
           }
           &.health-text.accent {
-            color: #FFB300;
+            color: var(--app-accent, #FFB300);
           }
           &.health-text.warn {
             color: #ef4444;
@@ -317,23 +317,23 @@
           color: var(--app-text-muted);
 
           &.healthy {
-            background: rgba(0, 229, 255, 0.12);
-            color: #00E5FF;
-            border: 1px solid rgba(0, 229, 255, 0.35);
+            background: var(--app-primary-bg, rgba(0, 229, 255, 0.12));
+            color: var(--app-primary-text, var(--app-primary));
+            border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.35));
 
             .pulse-dot {
-              background: #00E5FF;
-              box-shadow: 0 0 8px #00E5FF;
+              background: var(--app-primary);
+              box-shadow: 0 0 8px var(--app-glow, transparent);
             }
           }
 
           &.warning {
             background: rgba(255, 179, 0, 0.15);
-            color: #FFB300;
+            color: var(--app-accent, #FFB300);
             border: 1px solid rgba(255, 179, 0, 0.3);
 
             .pulse-dot {
-              background: #FFB300;
+              background: var(--app-accent, #FFB300);
             }
           }
 
@@ -352,10 +352,10 @@
           border-radius: 6px;
 
           &.leader-pill {
-            background: rgba(0, 229, 255, 0.15);
-            color: #00E5FF;
-            border: 1px solid rgba(0, 229, 255, 0.4);
-            box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+            background: var(--app-primary-bg, rgba(0, 229, 255, 0.15));
+            color: var(--app-primary-text, var(--app-primary));
+            border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.4));
+            box-shadow: 0 0 12px var(--app-glow, transparent);
           }
 
           &.follower-pill {
@@ -554,13 +554,13 @@
         letter-spacing: 0.5px;
 
         &.online {
-          background: rgba(0, 229, 255, 0.12);
-          color: #00E5FF;
-          border: 1px solid rgba(0, 229, 255, 0.35);
+          background: var(--app-primary-bg, rgba(0, 229, 255, 0.12));
+          color: var(--app-primary-text, var(--app-primary));
+          border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.35));
 
           .status-dot {
-            background: #00E5FF;
-            box-shadow: 0 0 6px #00E5FF;
+            background: var(--app-primary);
+            box-shadow: 0 0 6px var(--app-glow, transparent);
           }
         }
 
@@ -602,9 +602,9 @@
         font-weight: 500 !important;
         height: 32px !important;
         line-height: 30px !important;
-        border: 1px solid rgba(0, 229, 255, 0.35) !important;
-        color: #00E5FF !important;
-        background: rgba(0, 229, 255, 0.06) !important;
+        border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.35)) !important;
+        color: var(--app-primary-text, var(--app-primary)) !important;
+        background: var(--app-primary-bg, rgba(0, 229, 255, 0.06)) !important;
         transition: all 0.2s ease !important;
 
         mat-icon {
@@ -612,7 +612,7 @@
           width: 16px !important;
           height: 16px !important;
           margin-right: 6px !important;
-          color: #00E5FF !important;
+          color: var(--app-primary-text, var(--app-primary)) !important;
           transition: color 0.2s ease !important;
         }
 
@@ -658,7 +658,7 @@
   }
 }
 
-/* Capabilities Section (Phases 1-5) */
+/* Enterprise Capabilities Section */
 .capabilities-section {
   margin: 32px 0 28px 0;
 
@@ -687,16 +687,16 @@
       }
     }
 
-    .phase-pill {
+    .engine-pill {
       display: inline-flex;
       align-items: center;
       padding: 4px 12px;
       border-radius: 20px;
       font-size: 12px;
       font-weight: 600;
-      background: rgba(0, 229, 255, 0.12);
-      border: 1px solid rgba(0, 229, 255, 0.3);
-      color: #00e5ff;
+      background: var(--app-primary-bg, rgba(0, 229, 255, 0.12));
+      border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.3));
+      color: var(--app-primary-text, var(--app-primary));
       letter-spacing: 0.3px;
     }
   }
@@ -714,8 +714,8 @@
 
       &:hover {
         transform: translateY(-2px);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-        border-color: rgba(0, 229, 255, 0.35);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        border-color: var(--app-primary-border, rgba(0, 229, 255, 0.35));
       }
 
       mat-card-header {
@@ -726,27 +726,30 @@
         margin-bottom: 12px;
 
         .cap-card-title-group {
-          .cap-phase-tag {
+          .cap-feature-tag {
             display: inline-block;
             font-size: 10.5px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            padding: 1px 6px;
+            padding: 2px 7px;
             border-radius: 4px;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
 
-            &.phase-1 {
-              background: rgba(0, 229, 255, 0.15);
-              color: #00e5ff;
+            &.tag-protocol {
+              background: var(--app-primary-bg, rgba(0, 229, 255, 0.15));
+              color: var(--app-primary-text, var(--app-primary));
+              border: 1px solid var(--app-primary-border, transparent);
             }
-            &.phase-3 {
-              background: rgba(2, 132, 199, 0.2);
-              color: #38bdf8;
+            &.tag-storage {
+              background: rgba(2, 132, 199, 0.15);
+              color: var(--app-tertiary, #0284c7);
+              border: 1px solid rgba(2, 132, 199, 0.3);
             }
-            &.phase-2 {
-              background: rgba(255, 87, 34, 0.18);
-              color: #ff7043;
+            &.tag-engine {
+              background: var(--app-secondary-bg, rgba(255, 87, 34, 0.15));
+              color: var(--app-secondary, #ff5722);
+              border: 1px solid var(--app-secondary-border, transparent);
             }
           }
 
@@ -779,18 +782,18 @@
           }
 
           &.kafka-icon {
-            background: rgba(0, 229, 255, 0.12);
-            color: #00e5ff;
+            background: var(--app-primary-bg, rgba(0, 229, 255, 0.12));
+            color: var(--app-primary-text, var(--app-primary));
           }
 
           &.storage-icon {
             background: rgba(2, 132, 199, 0.15);
-            color: #38bdf8;
+            color: var(--app-tertiary, #0284c7);
           }
 
           &.compaction-icon {
-            background: rgba(255, 87, 34, 0.15);
-            color: #ff5722;
+            background: var(--app-secondary-bg, rgba(255, 87, 34, 0.15));
+            color: var(--app-secondary, #ff5722);
           }
         }
       }
@@ -859,9 +862,9 @@
               font-size: 11px;
               padding: 2px 8px;
               border-radius: 4px;
-              background: rgba(0, 229, 255, 0.08);
-              color: #67e8f9;
-              border: 1px solid rgba(0, 229, 255, 0.18);
+              background: var(--app-primary-bg, rgba(0, 229, 255, 0.08));
+              color: var(--app-primary-text, var(--app-primary));
+              border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.18));
             }
 
             .provider-chip {
@@ -873,9 +876,9 @@
               color: var(--app-text-muted);
 
               &.active {
-                background: rgba(2, 132, 199, 0.2);
-                color: #38bdf8;
-                border: 1px solid rgba(2, 132, 199, 0.4);
+                background: var(--app-primary-bg, rgba(2, 132, 199, 0.2));
+                color: var(--app-primary-text, var(--app-primary));
+                border: 1px solid var(--app-primary-border, rgba(2, 132, 199, 0.4));
                 font-weight: 600;
               }
             }

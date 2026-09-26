@@ -181,12 +181,13 @@
     }
 
     &.active {
-      color: var(--app-code-text);
-      background: rgba(56, 189, 248, 0.12);
+      color: var(--app-primary-text, var(--app-primary));
+      background: var(--app-primary-bg, rgba(56, 189, 248, 0.12));
+      border: 1px solid var(--app-primary-border, transparent);
       font-weight: 600;
 
       mat-icon {
-        color: var(--app-code-text);
+        color: var(--app-primary-text, var(--app-primary));
       }
     }
   }
@@ -214,7 +215,7 @@
       height: 8px;
       border-radius: 50%;
       background-color: #10b981;
-      box-shadow: 0 0 6px #10b981;
+      box-shadow: 0 0 6px var(--app-glow, transparent);
     }
   }
 

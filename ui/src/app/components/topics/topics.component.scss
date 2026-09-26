@@ -192,9 +192,9 @@
     width: 36px;
     height: 36px;
     border-radius: 8px;
-    background: rgba(0, 229, 255, 0.12);
-    border: 1px solid rgba(0, 229, 255, 0.25);
-    color: #00E5FF;
+    background: var(--app-primary-bg, rgba(0, 229, 255, 0.12));
+    border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.25));
+    color: var(--app-primary-text, var(--app-primary));
 
     mat-icon {
       font-size: 20px;
@@ -228,15 +228,15 @@
 }
 
 .count-badge {
-  background: rgba(255, 87, 34, 0.15);
-  color: #FF5722;
-  border: 1px solid rgba(255, 87, 34, 0.3);
+  background: var(--app-secondary-bg, rgba(255, 87, 34, 0.15));
+  color: var(--app-secondary, #FF5722);
+  border: 1px solid var(--app-secondary-border, rgba(255, 87, 34, 0.3));
 }
 
 .replica-badge {
-  background: rgba(0, 229, 255, 0.15);
-  color: #00E5FF;
-  border: 1px solid rgba(0, 229, 255, 0.3);
+  background: var(--app-primary-bg, rgba(0, 229, 255, 0.15));
+  color: var(--app-primary-text, var(--app-primary));
+  border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.3));
 }
 
 .hw-badge {
@@ -264,8 +264,8 @@
   }
 
   .inspect-btn.active {
-    color: #00E5FF;
-    background: rgba(0, 229, 255, 0.12);
+    color: var(--app-primary-text, var(--app-primary));
+    background: var(--app-primary-bg, rgba(0, 229, 255, 0.12));
   }
 }
 
@@ -280,7 +280,7 @@
 .partition-accordion-section {
   padding: 20px 24px 24px;
   background: var(--app-nested-bg);
-  border-top: 1px dashed rgba(0, 229, 255, 0.35);
+  border-top: 1px dashed var(--app-primary-border, rgba(0, 229, 255, 0.35));
   border-bottom: 1px solid var(--app-border);
 
   .section-title-bar {
@@ -295,7 +295,7 @@
       gap: 10px;
 
       mat-icon {
-        color: #00E5FF;
+        color: var(--app-primary-text, var(--app-primary));
       }
 
       h3 {
@@ -342,9 +342,9 @@
       align-items: center;
       gap: 4px;
       font-size: 0.84rem;
-      color: #00E5FF;
-      background: rgba(0, 229, 255, 0.12);
-      border: 1px solid rgba(0, 229, 255, 0.25);
+      color: var(--app-primary-text, var(--app-primary));
+      background: var(--app-primary-bg, rgba(0, 229, 255, 0.12));
+      border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.25));
       padding: 2px 8px;
       border-radius: 6px;
 
@@ -421,9 +421,9 @@
   font-weight: 500;
 
   &.leader {
-    background: rgba(0, 229, 255, 0.15);
-    color: #00E5FF;
-    border: 1px solid rgba(0, 229, 255, 0.35);
+    background: var(--app-primary-bg, rgba(0, 229, 255, 0.15));
+    color: var(--app-primary-text, var(--app-primary));
+    border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.35));
 
     mat-icon {
       font-size: 14px;
@@ -433,9 +433,9 @@
   }
 
   &.replica {
-    background: rgba(255, 87, 34, 0.12);
-    color: #FF5722;
-    border: 1px solid rgba(255, 87, 34, 0.3);
+    background: var(--app-secondary-bg, rgba(255, 87, 34, 0.12));
+    color: var(--app-secondary, #FF5722);
+    border: 1px solid var(--app-secondary-border, rgba(255, 87, 34, 0.3));
   }
 }
 
@@ -464,9 +464,9 @@
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
   font-size: 0.95rem;
-  color: #00E5FF;
-  background: rgba(0, 229, 255, 0.12);
-  border: 1px solid rgba(0, 229, 255, 0.25);
+  color: var(--app-primary-text, var(--app-primary));
+  background: var(--app-primary-bg, rgba(0, 229, 255, 0.12));
+  border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.25));
   padding: 4px 10px;
   border-radius: 6px;
 }
@@ -514,9 +514,9 @@
   width: 76px;
   height: 76px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(0, 229, 255, 0.18) 0%, rgba(255, 87, 34, 0.12) 100%);
-  border: 1px solid rgba(0, 229, 255, 0.35);
-  box-shadow: 0 0 24px rgba(0, 229, 255, 0.2), inset 0 0 16px rgba(255, 87, 34, 0.15);
+  background: radial-gradient(circle, var(--app-primary-bg) 0%, var(--app-secondary-bg) 100%);
+  border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.35));
+  box-shadow: var(--app-glow-subtle, none);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -526,7 +526,7 @@
     font-size: 38px;
     width: 38px;
     height: 38px;
-    color: #00E5FF;
+    color: var(--app-primary-text, var(--app-primary));
   }
 }
 
@@ -555,13 +555,13 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #00E5FF !important;
-  color: #0b1120 !important;
-  box-shadow: 0 4px 16px rgba(0, 229, 255, 0.35);
+  background: var(--app-primary, #0891b2) !important;
+  color: #ffffff !important;
+  box-shadow: var(--app-card-shadow);
 
   &:hover {
-    background: #38bdf8 !important;
-    box-shadow: 0 4px 20px rgba(0, 229, 255, 0.5);
+    background: var(--app-primary-dark, #0e7490) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
   }
 }
 
@@ -590,12 +590,12 @@
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: rgba(0, 229, 255, 0.1);
-  border: 1px solid rgba(0, 229, 255, 0.2);
+  background: var(--app-primary-bg, rgba(0, 229, 255, 0.1));
+  border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.2));
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #00E5FF;
+  color: var(--app-primary-text, var(--app-primary));
 
   mat-icon {
     font-size: 20px;
@@ -667,7 +667,7 @@
   }
 }
 
-/* Cleanup Policy Badges (Phase 2) */
+/* Cleanup Policy Badges */
 .policy-badge {
   display: inline-flex;
   align-items: center;
@@ -685,19 +685,19 @@
   }
 
   &.compact {
-    background: rgba(255, 87, 34, 0.15);
-    border: 1px solid rgba(255, 87, 34, 0.35);
-    color: #ff7043;
+    background: var(--app-secondary-bg, rgba(255, 87, 34, 0.15));
+    border: 1px solid var(--app-secondary-border, rgba(255, 87, 34, 0.35));
+    color: var(--app-secondary, #ff7043);
   }
 
   &.delete {
-    background: rgba(0, 229, 255, 0.1);
-    border: 1px solid rgba(0, 229, 255, 0.25);
-    color: #38bdf8;
+    background: var(--app-primary-bg, rgba(0, 229, 255, 0.1));
+    border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.25));
+    color: var(--app-primary-text, #38bdf8);
   }
 }
 
-/* Schema Contract Links (Phase 5) */
+/* Schema Contract Links */
 .schema-link-pill {
   display: inline-flex;
   align-items: center;
@@ -706,17 +706,16 @@
   border-radius: 6px;
   background: rgba(168, 85, 247, 0.12);
   border: 1px solid rgba(168, 85, 247, 0.3);
-  color: #d8b4fe;
+  color: #c084fc;
   text-decoration: none;
   font-size: 11.5px;
   font-family: 'JetBrains Mono', monospace;
   transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(168, 85, 247, 0.25);
+    background: rgba(168, 85, 247, 0.22);
     border-color: #c084fc;
     color: #ffffff;
-    box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
   }
 
   .schema-pill-icon {
@@ -741,7 +740,7 @@
 
     &.avro { background: rgba(168, 85, 247, 0.3); color: #e9d5ff; }
     &.json { background: rgba(249, 115, 22, 0.3); color: #fdba74; }
-    &.protobuf { background: rgba(0, 229, 255, 0.3); color: #a5f3fc; }
+    &.protobuf { background: var(--app-primary-bg, rgba(0, 229, 255, 0.3)); color: var(--app-primary-text, #a5f3fc); }
   }
 }
 
@@ -751,7 +750,7 @@
   gap: 3px;
   padding: 2px 8px;
   border-radius: 4px;
-  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border: 1px dashed var(--app-border, rgba(255, 255, 255, 0.15));
   color: var(--app-text-muted);
   font-size: 11px;
   text-decoration: none;
@@ -764,9 +763,9 @@
   }
 
   &:hover {
-    border-color: var(--app-primary, #00e5ff);
-    color: var(--app-primary, #00e5ff);
-    background: rgba(0, 229, 255, 0.05);
+    border-color: var(--app-primary);
+    color: var(--app-primary-text, var(--app-primary));
+    background: var(--app-primary-bg);
   }
 }
 

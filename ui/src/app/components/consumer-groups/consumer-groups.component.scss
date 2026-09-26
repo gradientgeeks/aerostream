@@ -34,7 +34,7 @@
       gap: 12px;
 
       .page-icon {
-        color: #00E5FF;
+        color: var(--app-primary-text, var(--app-primary));
         font-size: 32px;
         width: 32px;
         height: 32px;
@@ -172,8 +172,8 @@
         }
 
         &.groups-icon {
-          background: rgba(0, 229, 255, 0.15);
-          color: #00E5FF;
+          background: var(--app-primary-bg, rgba(0, 229, 255, 0.15));
+          color: var(--app-primary-text, var(--app-primary));
         }
 
         &.members-icon {
@@ -187,8 +187,8 @@
         }
 
         &.lag-icon-healthy {
-          background: rgba(0, 229, 255, 0.15);
-          color: #00E5FF;
+          background: var(--app-primary-bg, rgba(0, 229, 255, 0.15));
+          color: var(--app-primary-text, var(--app-primary));
         }
 
         &.lag-icon-warning {
@@ -238,12 +238,12 @@
         border-radius: 6px;
 
         &.tag-green {
-          background: rgba(0, 229, 255, 0.15);
-          color: #00E5FF;
+          background: rgba(16, 185, 129, 0.15);
+          color: #10b981;
         }
         &.tag-blue {
-          background: rgba(0, 229, 255, 0.15);
-          color: #00E5FF;
+          background: var(--app-primary-bg, rgba(0, 229, 255, 0.15));
+          color: var(--app-primary-text, var(--app-primary));
         }
         &.tag-purple {
           background: rgba(255, 87, 34, 0.15);
@@ -295,8 +295,8 @@
         letter-spacing: 0.5px;
         padding: 2px 8px;
         border-radius: 4px;
-        background: rgba(0, 229, 255, 0.15);
-        color: #00E5FF;
+        background: var(--app-primary-bg, rgba(0, 229, 255, 0.15));
+        color: var(--app-primary-text, var(--app-primary));
 
         &.lag-badge {
           background: rgba(255, 179, 0, 0.15);

@@ -17,11 +17,11 @@
     width: 44px;
     height: 44px;
     border-radius: 10px;
-    background: rgba(0, 229, 255, 0.12);
+    background: var(--app-primary-bg, rgba(0, 229, 255, 0.12));
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--app-primary, #00e5ff);
+    color: var(--app-primary-text, var(--app-primary));
 
     mat-icon {
       font-size: 26px;
@@ -95,12 +95,12 @@
 
         &.avro { background: #a855f7; }
         &.json { background: #f97316; }
-        &.proto { background: #00e5ff; }
+        &.proto { background: var(--app-primary, #0891b2); }
       }
 
       &:hover {
-        border-color: var(--app-primary, #00e5ff);
-        background: rgba(0, 229, 255, 0.05);
+        border-color: var(--app-primary, #0891b2);
+        background: var(--app-primary-bg, rgba(0, 229, 255, 0.05));
       }
 
       &.active-avro {
@@ -116,9 +116,9 @@
       }
 
       &.active-proto {
-        background: rgba(0, 229, 255, 0.18);
-        border-color: #00e5ff;
-        color: #67e8f9;
+        background: var(--app-primary-bg, rgba(0, 229, 255, 0.18));
+        border-color: var(--app-primary, #0891b2);
+        color: var(--app-primary-text, var(--app-primary));
       }
     }
   }
@@ -139,7 +139,7 @@
     font-size: 18px;
     width: 18px;
     height: 18px;
-    color: var(--app-primary, #00e5ff);
+    color: var(--app-primary-text, var(--app-primary));
   }
 
   .format-tag {
@@ -151,14 +151,14 @@
 
     &.avro { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
     &.json { background: rgba(249, 115, 22, 0.2); color: #fb923c; }
-    &.protobuf { background: rgba(0, 229, 255, 0.2); color: #22d3ee; }
+    &.protobuf { background: var(--app-primary-bg, rgba(0, 229, 255, 0.2)); color: var(--app-primary-text, var(--app-primary)); }
   }
 
   .template-btn {
     font-size: 12px;
     height: 32px;
     border-color: var(--app-border, rgba(0, 229, 255, 0.2));
-    color: var(--app-primary, #00e5ff);
+    color: var(--app-primary-text, var(--app-primary));
 
     mat-icon {
       font-size: 16px;
@@ -177,8 +177,8 @@
   transition: border-color 0.2s;
 
   &:focus-within {
-    border-color: var(--app-primary, #00e5ff);
-    box-shadow: 0 0 0 1px var(--app-primary, #00e5ff);
+    border-color: var(--app-primary, #0891b2);
+    box-shadow: 0 0 0 1px var(--app-primary, #0891b2);
   }
 
   &.has-error {
