@@ -932,3 +932,51 @@ mat-dialog-actions,
 .bg-app-nested { background-color: var(--app-nested-bg) !important; }
 
 .border-app { border-color: var(--app-border) !important; }
+
+/* ==========================================================================
+   Modern Responsive Page Layout Standard (Modern Web Guidance)
+   Fluid padding via clamp(), clean full-width containers, and no double spacing
+   ========================================================================== */
+.overview-container,
+.topics-page,
+.messages-page,
+.producer-container,
+.schema-registry-container,
+.transforms-container,
+.connectors-container,
+.groups-container,
+.acls-page-container {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 1720px !important;
+  margin: 0 auto !important;
+  padding: clamp(14px, 2.2vw, 30px) !important;
+}
+
+@media (max-width: 768px) {
+  .overview-container,
+  .topics-page,
+  .messages-page,
+  .producer-container,
+  .schema-registry-container,
+  .transforms-container,
+  .connectors-container,
+  .groups-container,
+  .acls-page-container {
+    padding: 14px 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .overview-container,
+  .topics-page,
+  .messages-page,
+  .producer-container,
+  .schema-registry-container,
+  .transforms-container,
+  .connectors-container,
+  .groups-container,
+  .acls-page-container {
+    padding: 10px 8px !important;
+  }
+}

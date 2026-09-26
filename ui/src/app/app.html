@@ -1,150 +1,170 @@
-<mat-sidenav-container class="app-layout w-full max-w-full overflow-x-hidden" [hasBackdrop]="true">
-  <!-- Mobile & Tablet Responsive Sidenav Drawer -->
-  <mat-sidenav #mobileNav mode="over" position="start" class="mobile-sidenav">
-    <div class="mobile-sidenav-header">
-      <div class="brand-container" (click)="mobileNav.close()" routerLink="/topics">
-        <div class="brand-logo">
-          <app-turbine-logo [size]="32" [glow]="false"></app-turbine-logo>
-        </div>
-        <div class="brand-titles">
-              <span class="brand-name">Aero<span class="brand-mq">Stream</span></span>
-          <span class="brand-badge mq-badge">Console</span>
-        </div>
-      </div>
-      <button mat-icon-button (click)="mobileNav.close()" aria-label="Close navigation menu" class="close-menu-btn">
-        <mat-icon>close</mat-icon>
-      </button>
-    </div>
+<mat-sidenav-container class="app-layout w-full max-w-full overflow-x-hidden" [hasBackdrop]="isMobile()">
+  <!-- Enterprise Sidenav: Persistent Side on Desktop, Drawer Over on Mobile/Tablet -->
+  <mat-sidenav
+    #sidenav
+    [mode]="isMobile() ? 'over' : 'side'"
+    [opened]="isMobile() ? isMobileDrawerOpen() : true"
+    (closed)="isMobileDrawerOpen.set(false)"
+    [class.sidebar-collapsed]="!isMobile() && isSidebarCollapsed()"
+    class="app-sidebar"
+  >
+    <div class="sidebar-wrapper">
+      <!-- Sidebar Brand Header -->
+      <div class="sidebar-header">
+        <a class="brand-link" routerLink="/cluster" (click)="closeMobileDrawer()">
+          <div class="brand-logo">
+            <app-turbine-logo [size]="28" [glow]="false"></app-turbine-logo>
+          </div>
+          <div class="brand-titles" *ngIf="isMobile() || !isSidebarCollapsed()">
+            <span class="brand-name">Aero<span class="brand-mq">Stream</span></span>
+            <span class="brand-badge mq-badge">Console</span>
+          </div>
+        </a>
 
-    <mat-divider></mat-divider>
+        <!-- Mobile Drawer Close Button -->
+        <button
+          *ngIf="isMobile()"
+          mat-icon-button
+          (click)="closeMobileDrawer()"
+          class="sidebar-action-btn"
+          aria-label="Close navigation drawer"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
 
-    <!-- Mobile Nav List -->
-    <mat-nav-list class="mobile-nav-list">
-      <a mat-list-item routerLink="/cluster" routerLinkActive="active-link" (click)="mobileNav.close()">
-        <mat-icon matListItemIcon>dashboard</mat-icon>
-        <span matListItemTitle>Cluster Overview</span>
-      </a>
-      <a mat-list-item routerLink="/topics" routerLinkActive="active-link" (click)="mobileNav.close()">
-        <mat-icon matListItemIcon>folder_open</mat-icon>
-        <span matListItemTitle>Topics & Partitions</span>
-      </a>
-      <a mat-list-item routerLink="/schemas" routerLinkActive="active-link" (click)="mobileNav.close()">
-        <mat-icon matListItemIcon>schema</mat-icon>
-        <span matListItemTitle>Schema Registry</span>
-      </a>
-      <a mat-list-item routerLink="/messages" routerLinkActive="active-link" (click)="mobileNav.close()">
-        <mat-icon matListItemIcon>mail</mat-icon>
-        <span matListItemTitle>Message Explorer</span>
-      </a>
-      <a mat-list-item routerLink="/groups" routerLinkActive="active-link" (click)="mobileNav.close()">
-        <mat-icon matListItemIcon>group_work</mat-icon>
-        <span matListItemTitle>Consumer Groups</span>
-      </a>
-      <a mat-list-item routerLink="/producer" routerLinkActive="active-link" (click)="mobileNav.close()">
-        <mat-icon matListItemIcon>send</mat-icon>
-        <span matListItemTitle>Web Producer</span>
-      </a>
-      <a mat-list-item routerLink="/transforms" routerLinkActive="active-link" (click)="mobileNav.close()">
-        <mat-icon matListItemIcon>transform</mat-icon>
-        <span matListItemTitle>Transforms</span>
-      </a>
-      <a mat-list-item routerLink="/connectors" routerLinkActive="active-link" (click)="mobileNav.close()">
-        <mat-icon matListItemIcon>cable</mat-icon>
-        <span matListItemTitle>Connectors</span>
-      </a>
-      <a mat-list-item routerLink="/acls" routerLinkActive="active-link" (click)="mobileNav.close()">
-        <mat-icon matListItemIcon>admin_panel_settings</mat-icon>
-        <span matListItemTitle>Security / ACLs</span>
-      </a>
-    </mat-nav-list>
-
-    <mat-divider></mat-divider>
-
-    <!-- Mobile Sidenav Footer -->
-    <div class="mobile-sidenav-footer">
-      <div class="cluster-status-pill">
-        <span class="status-dot"></span>
-        <span class="status-text">Controller Online</span>
+        <!-- Desktop Mini-Sidebar Collapse Button -->
+        <button
+          *ngIf="!isMobile() && !isSidebarCollapsed()"
+          mat-icon-button
+          (click)="toggleSidebar()"
+          class="sidebar-action-btn"
+          matTooltip="Collapse sidebar"
+          aria-label="Collapse sidebar"
+        >
+          <mat-icon>chevron_left</mat-icon>
+        </button>
       </div>
 
-      <button mat-stroked-button (click)="themeService.toggleTheme()" class="mobile-theme-toggle-btn">
-        <mat-icon>{{ themeService.isDark() ? 'light_mode' : 'dark_mode' }}</mat-icon>
-        <span>Switch to {{ themeService.isDark() ? 'Light Mode' : 'Dark Mode' }}</span>
-      </button>
+      <mat-divider></mat-divider>
+
+      <!-- Scrollable Navigation Categories -->
+      <div class="sidebar-scroll-container">
+        <nav class="sidebar-nav" aria-label="Console Navigation">
+          <div *ngFor="let section of navSections" class="nav-section">
+            <div class="section-header" *ngIf="isMobile() || !isSidebarCollapsed()">
+              <span class="section-title">{{ section.title }}</span>
+            </div>
+            <mat-divider *ngIf="!isMobile() && isSidebarCollapsed()" class="section-divider"></mat-divider>
+
+            <div class="nav-items-group">
+              <a
+                *ngFor="let item of section.items"
+                [routerLink]="item.path"
+                routerLinkActive="active-link"
+                (click)="closeMobileDrawer()"
+                class="nav-link-item"
+                [matTooltip]="(!isMobile() && isSidebarCollapsed()) ? item.label : ''"
+                matTooltipPosition="right"
+              >
+                <div class="nav-icon-wrap">
+                  <mat-icon>{{ item.icon }}</mat-icon>
+                </div>
+                <span class="nav-label" *ngIf="isMobile() || !isSidebarCollapsed()">
+                  {{ item.label }}
+                </span>
+                <span
+                  class="nav-badge"
+                  *ngIf="(isMobile() || !isSidebarCollapsed()) && item.badge"
+                  [ngClass]="item.badge.toLowerCase()"
+                >
+                  {{ item.badge }}
+                </span>
+              </a>
+            </div>
+          </div>
+        </nav>
+      </div>
+
+      <mat-divider></mat-divider>
+
+      <!-- Sidebar Footer (Cluster Status & Theme Switcher) -->
+      <div class="sidebar-footer">
+        <div class="footer-cluster-info" *ngIf="isMobile() || !isSidebarCollapsed()">
+          <div class="cluster-status-pill">
+            <span class="status-dot"></span>
+            <span class="status-text">Controller Online</span>
+          </div>
+          <span class="engine-tag">Dual Engine Go + Rust</span>
+        </div>
+
+        <!-- Expanded Theme Toggle Button -->
+        <button
+          mat-stroked-button
+          (click)="themeService.toggleTheme()"
+          class="theme-toggle-wide-btn"
+          *ngIf="isMobile() || !isSidebarCollapsed()"
+        >
+          <mat-icon>{{ themeService.isDark() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+          <span>Switch to {{ themeService.isDark() ? 'Light Mode' : 'Dark Mode' }}</span>
+        </button>
+
+        <!-- Mini-Sidebar Collapsed Theme Button -->
+        <button
+          mat-icon-button
+          (click)="themeService.toggleTheme()"
+          class="theme-toggle-icon-btn"
+          *ngIf="!isMobile() && isSidebarCollapsed()"
+          [matTooltip]="themeService.isDark() ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
+          matTooltipPosition="right"
+          aria-label="Toggle theme"
+        >
+          <mat-icon>{{ themeService.isDark() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+        </button>
+      </div>
     </div>
   </mat-sidenav>
 
   <!-- Main Sidenav Content Shell -->
   <mat-sidenav-content class="app-sidenav-content w-full max-w-full overflow-x-hidden">
-    <!-- Top Navigation Header -->
+    <!-- Top Control Bar (Breadcrumbs & Cluster Header) -->
     <header class="app-header w-full max-w-full">
       <div class="header-inner w-full max-w-full">
-        <!-- Left: Hamburger Menu (Mobile/Tablet) + Logo Brand -->
+        <!-- Left: Toggle & Breadcrumb -->
         <div class="header-left">
           <button
             mat-icon-button
-            class="mobile-menu-btn"
-            (click)="mobileNav.toggle()"
-            aria-label="Toggle navigation menu">
-            <mat-icon>menu</mat-icon>
+            (click)="toggleSidebar()"
+            class="header-toggle-btn"
+            [matTooltip]="isMobile() ? 'Open Navigation' : (isSidebarCollapsed() ? 'Expand Sidebar' : 'Collapse Sidebar')"
+            aria-label="Toggle sidebar navigation"
+          >
+            <mat-icon>{{ isMobile() ? 'menu' : (isSidebarCollapsed() ? 'menu' : 'menu_open') }}</mat-icon>
           </button>
 
-          <div class="brand-container" routerLink="/topics">
-            <div class="brand-logo">
-              <app-turbine-logo [size]="32" [glow]="false"></app-turbine-logo>
-            </div>
-            <div class="brand-titles">
-                  <span class="brand-name">Aero<span class="brand-mq">Stream</span></span>
-              <span class="brand-badge mq-badge">Console</span>
-            </div>
+          <!-- Mobile Brand Indicator -->
+          <div class="mobile-brand-title" *ngIf="isMobile()" routerLink="/cluster">
+            <app-turbine-logo [size]="24" [glow]="false"></app-turbine-logo>
+            <span class="brand-text">AeroStream</span>
+          </div>
+
+          <!-- Desktop Breadcrumbs -->
+          <div class="breadcrumb-trail" *ngIf="!isMobile()">
+            <span class="crumb-root" routerLink="/cluster">AeroStream</span>
+            <mat-icon class="crumb-sep">chevron_right</mat-icon>
+            <span class="crumb-current">{{ currentSectionTitle() }}</span>
           </div>
         </div>
 
-        <!-- Center: Desktop Nav Links (Hidden on Tablets & Mobile) -->
-        <nav class="nav-links desktop-only">
-          <a routerLink="/cluster" routerLinkActive="active" class="nav-link">
-            <mat-icon>dashboard</mat-icon>
-            <span>Cluster</span>
-          </a>
-          <a routerLink="/topics" routerLinkActive="active" class="nav-link">
-            <mat-icon>folder_open</mat-icon>
-            <span>Topics</span>
-          </a>
-          <a routerLink="/schemas" routerLinkActive="active" class="nav-link">
-            <mat-icon>schema</mat-icon>
-            <span>Schema Registry</span>
-          </a>
-          <a routerLink="/messages" routerLinkActive="active" class="nav-link">
-            <mat-icon>mail</mat-icon>
-            <span>Message Explorer</span>
-          </a>
-          <a routerLink="/groups" routerLinkActive="active" class="nav-link">
-            <mat-icon>group_work</mat-icon>
-            <span>Consumer Groups</span>
-          </a>
-          <a routerLink="/producer" routerLinkActive="active" class="nav-link">
-            <mat-icon>send</mat-icon>
-            <span>Producer</span>
-          </a>
-          <a routerLink="/transforms" routerLinkActive="active" class="nav-link">
-            <mat-icon>transform</mat-icon>
-            <span>Transforms</span>
-          </a>
-          <a routerLink="/connectors" routerLinkActive="active" class="nav-link">
-            <mat-icon>cable</mat-icon>
-            <span>Connectors</span>
-          </a>
-          <a routerLink="/acls" routerLinkActive="active" class="nav-link">
-            <mat-icon>admin_panel_settings</mat-icon>
-            <span>Security / ACLs</span>
-          </a>
-        </nav>
-
-        <!-- Right: Status Pill & Theme Toggle Button -->
+        <!-- Right: Status Badges & Controls -->
         <div class="header-right">
           <div class="cluster-status-pill desktop-only">
             <span class="status-dot"></span>
             <span class="status-text">Controller Online</span>
+          </div>
+
+          <div class="kafka-port-tag desktop-only" matTooltip="Standard Kafka Protocol TCP Listener Active">
+            <mat-icon class="port-icon">cable</mat-icon>
+            <span>Port 9092</span>
           </div>
 
           <button
@@ -152,16 +172,19 @@
             (click)="themeService.toggleTheme()"
             [matTooltip]="themeService.isDark() ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
             class="theme-toggle-btn"
-            aria-label="Toggle theme">
+            aria-label="Toggle theme"
+          >
             <mat-icon>{{ themeService.isDark() ? 'light_mode' : 'dark_mode' }}</mat-icon>
           </button>
         </div>
       </div>
     </header>
 
-    <!-- Main Page Content -->
+    <!-- Main Page Content Outlet -->
     <main class="main-content w-full max-w-full overflow-x-hidden">
-      <router-outlet></router-outlet>
+      <div class="content-container w-full max-w-full">
+        <router-outlet></router-outlet>
+      </div>
     </main>
   </mat-sidenav-content>
 </mat-sidenav-container>
