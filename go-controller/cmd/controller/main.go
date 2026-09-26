@@ -90,6 +90,7 @@ func main() {
 	
 	pb.RegisterControlServiceServer(grpcServer, serverImpl)
 	pb.RegisterDiscoveryServiceServer(grpcServer, serverImpl)
+	pb.RegisterAdminServiceServer(grpcServer, serverImpl)
 
 	// Run gRPC Server in background
 	go func() {

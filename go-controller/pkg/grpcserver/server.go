@@ -2,6 +2,7 @@ package grpcserver
 
 import (
 	"context"
+	"errors"
 	"crypto/rand"
 	"fmt"
 	"sync"
@@ -17,6 +18,7 @@ import (
 type Server struct {
 	pb.UnimplementedControlServiceServer
 	pb.UnimplementedDiscoveryServiceServer
+	pb.UnimplementedAdminServiceServer
 	RaftNode                 *consensus.RaftNode
 	failureDetectionInterval time.Duration
 	mu                       sync.Mutex
@@ -65,13 +67,17 @@ func (s *Server) RegisterBroker(ctx context.Context, req *pb.RegisterBrokerReque
 	}
 
 	payload := struct {
-		ID   uint32 `json:"id"`
-		Host string `json:"host"`
-		Port int32  `json:"port"`
+		ID        uint32 `json:"id"`
+		Host      string `json:"host"`
+		Port      int32  `json:"port"`
+		Rack      string `json:"rack"`
+		KafkaPort int32  `json:"kafka_port"`
 	}{
-		ID:   req.BrokerId,
-		Host: req.Host,
-		Port: req.DataPort,
+		ID:        req.BrokerId,
+		Host:      req.Host,
+		Port:      req.DataPort,
+		Rack:      req.Rack,
+		KafkaPort: req.KafkaPort,
 	}
 
 	err := s.RaftNode.Propose(consensus.CmdRegisterBroker, payload)
@@ -167,9 +173,11 @@ func (s *Server) GetMetadata(ctx context.Context, req *pb.MetadataRequest) (*pb.
 	for _, b := range meta.Brokers {
 		if b.Active {
 			brokers = append(brokers, &pb.BrokerInfo{
-				BrokerId: b.ID,
-				Host:     b.Host,
-				Port:     b.Port,
+				BrokerId:  b.ID,
+				Host:      b.Host,
+				Port:      b.Port,
+				Rack:      b.Rack,
+				KafkaPort: b.KafkaPort,
 			})
 		}
 	}
@@ -194,6 +202,7 @@ func (s *Server) GetMetadata(ctx context.Context, req *pb.MetadataRequest) (*pb.
 		topics = append(topics, &pb.TopicMetadata{
 			Topic:      topicName,
 			Partitions: pMetaList,
+			Configs:    tState.Configs,
 		})
 	}
 
@@ -209,24 +218,130 @@ func (s *Server) CreateTopic(ctx context.Context, req *pb.CreateTopicRequest) (*
 	}
 
 	payload := struct {
-		Name              string `json:"name"`
-		Partitions        uint32 `json:"partitions"`
-		ReplicationFactor uint32 `json:"replication_factor"`
+		Name              string              `json:"name"`
+		Partitions        uint32              `json:"partitions"`
+		ReplicationFactor uint32              `json:"replication_factor"`
+		Configs           map[string]string   `json:"configs,omitempty"`
+		Manual            map[uint32][]uint32 `json:"manual,omitempty"`
+		FailIfExists      bool                `json:"fail_if_exists,omitempty"`
 	}{
 		Name:              req.Topic,
 		Partitions:        req.Partitions,
 		ReplicationFactor: req.ReplicationFactor,
+		Configs:           req.Configs,
+		FailIfExists:      req.FailIfExists,
+	}
+	if len(req.ManualAssignments) > 0 {
+		payload.Manual = map[uint32][]uint32{}
+		for _, a := range req.ManualAssignments {
+			payload.Manual[a.Partition] = a.BrokerIds
+		}
+	}
+
+	if req.ValidateOnly {
+		meta := s.RaftNode.FSM.GetMetadata([]string{req.Topic})
+		if _, exists := meta.Topics[req.Topic]; exists && req.FailIfExists {
+			return &pb.CreateTopicResponse{Success: false, Message: "topic already exists", ErrorCode: consensus.ErrTopicAlreadyExists}, nil
+		}
+		return &pb.CreateTopicResponse{Success: true, Message: "validated"}, nil
 	}
 
 	err := s.RaftNode.Propose(consensus.CmdCreateTopic, payload)
 	if err != nil {
-		return &pb.CreateTopicResponse{Success: false, Message: err.Error()}, nil
+		return &pb.CreateTopicResponse{Success: false, Message: err.Error(), ErrorCode: adminCode(err)}, nil
 	}
 
 	return &pb.CreateTopicResponse{
 		Success: true,
 		Message: fmt.Sprintf("Topic '%s' created successfully", req.Topic),
 	}, nil
+}
+
+// adminCode extracts the Kafka error code from an FSM AdminError (or -1 UNKNOWN_SERVER_ERROR).
+func adminCode(err error) int32 {
+	var ae *consensus.AdminError
+	if errors.As(err, &ae) {
+		return ae.Code
+	}
+	return -1
+}
+
+func adminResp(err error) *pb.AdminResponse {
+	if err != nil {
+		return &pb.AdminResponse{Success: false, Message: err.Error(), ErrorCode: adminCode(err)}
+	}
+	return &pb.AdminResponse{Success: true}
+}
+
+// AdminService implementation (backs Kafka DeleteTopics / CreatePartitions / AlterConfigs / ElectLeaders).
+// The Server type embeds UnimplementedAdminServiceServer so it can be registered directly.
+
+func (s *Server) DeleteTopic(ctx context.Context, req *pb.DeleteTopicRequest) (*pb.AdminResponse, error) {
+	if err := s.checkLeader(); err != nil {
+		return nil, err
+	}
+	return adminResp(s.RaftNode.Propose(consensus.CmdDeleteTopic, map[string]string{"name": req.Topic})), nil
+}
+
+func (s *Server) CreatePartitions(ctx context.Context, req *pb.CreatePartitionsRequest) (*pb.AdminResponse, error) {
+	if err := s.checkLeader(); err != nil {
+		return nil, err
+	}
+	if req.ValidateOnly {
+		meta := s.RaftNode.FSM.GetMetadata([]string{req.Topic})
+		t, ok := meta.Topics[req.Topic]
+		if !ok {
+			return &pb.AdminResponse{Message: "unknown topic", ErrorCode: consensus.ErrUnknownTopicOrPartition}, nil
+		}
+		if req.NewTotal <= uint32(len(t.Partitions)) {
+			return &pb.AdminResponse{Message: "invalid partition count", ErrorCode: consensus.ErrInvalidPartitions}, nil
+		}
+		return &pb.AdminResponse{Success: true}, nil
+	}
+	payload := struct {
+		Name     string              `json:"name"`
+		NewTotal uint32              `json:"new_total"`
+		Manual   map[uint32][]uint32 `json:"manual,omitempty"`
+	}{Name: req.Topic, NewTotal: req.NewTotal}
+	if len(req.Assignments) > 0 {
+		payload.Manual = map[uint32][]uint32{}
+		for _, a := range req.Assignments {
+			payload.Manual[a.Partition] = a.BrokerIds
+		}
+	}
+	return adminResp(s.RaftNode.Propose(consensus.CmdCreatePartitions, payload)), nil
+}
+
+func (s *Server) AlterTopicConfigs(ctx context.Context, req *pb.AlterTopicConfigsRequest) (*pb.AdminResponse, error) {
+	if err := s.checkLeader(); err != nil {
+		return nil, err
+	}
+	if req.ValidateOnly {
+		meta := s.RaftNode.FSM.GetMetadata([]string{req.Topic})
+		if _, ok := meta.Topics[req.Topic]; !ok {
+			return &pb.AdminResponse{Message: "unknown topic", ErrorCode: consensus.ErrUnknownTopicOrPartition}, nil
+		}
+		return &pb.AdminResponse{Success: true}, nil
+	}
+	payload := struct {
+		Name       string            `json:"name"`
+		Set        map[string]string `json:"set"`
+		Delete     []string          `json:"delete"`
+		ReplaceAll bool              `json:"replace_all"`
+	}{req.Topic, req.Set, req.Delete, req.ReplaceAll}
+	return adminResp(s.RaftNode.Propose(consensus.CmdAlterTopicConfig, payload)), nil
+}
+
+func (s *Server) ElectLeaders(ctx context.Context, req *pb.ElectLeadersRequest) (*pb.AdminResponse, error) {
+	if err := s.checkLeader(); err != nil {
+		return nil, err
+	}
+	payload := struct {
+		Topic     string `json:"topic"`
+		Partition uint32 `json:"partition"`
+		Unclean   bool   `json:"unclean"`
+	}{req.Topic, req.Partition, req.ElectionType == 1}
+	return adminResp(s.RaftNode.Propose(consensus.CmdElectLeader, payload)), nil
 }
 
 func (s *Server) JoinGroup(ctx context.Context, req *pb.JoinGroupRequest) (*pb.JoinGroupResponse, error) {

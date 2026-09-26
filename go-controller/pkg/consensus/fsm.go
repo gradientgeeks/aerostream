@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/placement"
 	"github.com/hashicorp/raft"
 )
 
@@ -24,22 +26,27 @@ type BrokerStatus struct {
 	Port     int32     `json:"port"`
 	LastSeen time.Time `json:"last_seen"`
 	Active   bool      `json:"active"`
+	// Rack is the broker.rack label (empty = none). KafkaPort is the Kafka wire-protocol port.
+	Rack      string `json:"rack,omitempty"`
+	KafkaPort int32  `json:"kafka_port,omitempty"`
 }
 
 // PartitionState tracks partition leader and replicas
 type PartitionState struct {
-	PartitionID    uint32            `json:"partition_id"`
-	LeaderID       uint32            `json:"leader_id"`
-	ReplicaIDs     []uint32          `json:"replica_ids"`
-	ISR            []uint32          `json:"isr"`
-	HighWatermark  int64             `json:"high_watermark"`
-	ReplicaOffsets map[uint32]int64  `json:"replica_offsets"` // key: broker_id -> offset
+	PartitionID    uint32           `json:"partition_id"`
+	LeaderID       uint32           `json:"leader_id"`
+	ReplicaIDs     []uint32         `json:"replica_ids"`
+	ISR            []uint32         `json:"isr"`
+	HighWatermark  int64            `json:"high_watermark"`
+	ReplicaOffsets map[uint32]int64 `json:"replica_offsets"` // key: broker_id -> offset
 }
 
 // TopicState tracks topic metadata
 type TopicState struct {
 	Name       string                     `json:"name"`
 	Partitions map[uint32]*PartitionState `json:"partitions"`
+	// Configs holds per-topic config overrides (Kafka DescribeConfigs/AlterConfigs).
+	Configs map[string]string `json:"configs,omitempty"`
 }
 
 // GroupMember tracks a consumer in a consumer group
@@ -68,10 +75,10 @@ type ConsumerGroupState struct {
 
 // ClusterState is the state replicated by Raft
 type ClusterState struct {
-	Brokers        map[uint32]*BrokerStatus        `json:"brokers"`
-	Topics         map[string]*TopicState          `json:"topics"`
-	ConsumerGroups map[string]*ConsumerGroupState  `json:"consumer_groups"`
-	Offsets        map[string]int64                `json:"offsets"` // key: "group_id/topic/partition" (see offsetKey)
+	Brokers        map[uint32]*BrokerStatus       `json:"brokers"`
+	Topics         map[string]*TopicState         `json:"topics"`
+	ConsumerGroups map[string]*ConsumerGroupState `json:"consumer_groups"`
+	Offsets        map[string]int64               `json:"offsets"` // key: "group_id/topic/partition" (see offsetKey)
 }
 
 // FSM implements raft.FSM
@@ -102,15 +109,41 @@ func NewFSM(brokerInactiveTimeout time.Duration, replicaLagTolerance int64) *FSM
 
 // Command types
 const (
-	CmdRegisterBroker     = "register_broker"
-	CmdBrokerHeartbeat    = "broker_heartbeat"
-	CmdCreateTopic        = "create_topic"
-	CmdAssignPartitions   = "assign_partitions"
-	CmdJoinConsumerGroup  = "join_consumer_group"
-	CmdRebalanceGroup     = "rebalance_group"
-	CmdCommitOffset       = "commit_offset"
-	CmdCleanInactive      = "clean_inactive"
-	CmdDrainBroker        = "drain_broker"
+	CmdRegisterBroker    = "register_broker"
+	CmdBrokerHeartbeat   = "broker_heartbeat"
+	CmdCreateTopic       = "create_topic"
+	CmdAssignPartitions  = "assign_partitions"
+	CmdJoinConsumerGroup = "join_consumer_group"
+	CmdRebalanceGroup    = "rebalance_group"
+	CmdCommitOffset      = "commit_offset"
+	CmdCleanInactive     = "clean_inactive"
+	CmdDrainBroker       = "drain_broker"
+
+	// Topology / admin (stream C)
+	CmdDeleteTopic      = "delete_topic"
+	CmdCreatePartitions = "create_partitions"
+	CmdAlterTopicConfig = "alter_topic_config"
+	CmdElectLeader      = "elect_leader"
+)
+
+// AdminError is returned from Apply for admin commands; Code is the Kafka protocol error code.
+type AdminError struct {
+	Code int32
+	Msg  string
+}
+
+func (e *AdminError) Error() string { return e.Msg }
+
+// Kafka error codes used by admin commands.
+const (
+	ErrUnknownTopicOrPartition int32 = 3
+	ErrTopicAlreadyExists      int32 = 36
+	ErrInvalidPartitions       int32 = 37
+	ErrInvalidReplicaAssign    int32 = 39
+	ErrInvalidConfig           int32 = 40
+	ErrInvalidRequest          int32 = 42
+	ErrElectionNotNeeded       int32 = 84
+	ErrEligibleLeadersNA       int32 = 83
 )
 
 type Command struct {
@@ -138,17 +171,21 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 	switch cmd.Op {
 	case CmdRegisterBroker:
 		var payload struct {
-			ID   uint32 `json:"id"`
-			Host string `json:"host"`
-			Port int32  `json:"port"`
+			ID        uint32 `json:"id"`
+			Host      string `json:"host"`
+			Port      int32  `json:"port"`
+			Rack      string `json:"rack"`
+			KafkaPort int32  `json:"kafka_port"`
 		}
 		if err := json.Unmarshal(cmd.Payload, &payload); err == nil {
 			f.state.Brokers[payload.ID] = &BrokerStatus{
-				ID:       payload.ID,
-				Host:     payload.Host,
-				Port:     payload.Port,
-				LastSeen: time.Now(),
-				Active:   true,
+				ID:        payload.ID,
+				Host:      payload.Host,
+				Port:      payload.Port,
+				LastSeen:  time.Now(),
+				Active:    true,
+				Rack:      payload.Rack,
+				KafkaPort: payload.KafkaPort,
 			}
 		}
 
@@ -251,50 +288,72 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 
 	case CmdCreateTopic:
 		var payload struct {
-			Name              string `json:"name"`
-			Partitions        uint32 `json:"partitions"`
-			ReplicationFactor uint32 `json:"replication_factor"`
+			Name              string              `json:"name"`
+			Partitions        uint32              `json:"partitions"`
+			ReplicationFactor uint32              `json:"replication_factor"`
+			Configs           map[string]string   `json:"configs,omitempty"`
+			Manual            map[uint32][]uint32 `json:"manual,omitempty"`
+			FailIfExists      bool                `json:"fail_if_exists,omitempty"`
 		}
 		if err := json.Unmarshal(cmd.Payload, &payload); err == nil {
-			if _, exists := f.state.Topics[payload.Name]; !exists {
-				topic := &TopicState{
-					Name:       payload.Name,
-					Partitions: make(map[uint32]*PartitionState),
+			if _, exists := f.state.Topics[payload.Name]; exists {
+				if payload.FailIfExists {
+					return &AdminError{Code: ErrTopicAlreadyExists, Msg: fmt.Sprintf("Topic '%s' already exists.", payload.Name)}
 				}
-				
-				// Pick active brokers to distribute partitions
-				activeBrokers := f.getActiveBrokerIDs()
-				
-				for i := uint32(0); i < payload.Partitions; i++ {
-					leaderID := uint32(0)
-					replicas := []uint32{}
-					
-					if len(activeBrokers) > 0 {
-						// Simple round robin selection
-						leaderID = activeBrokers[int(i)%len(activeBrokers)]
-						
-						// Pick replication factor replicas
-						for r := uint32(0); r < payload.ReplicationFactor && r < uint32(len(activeBrokers)); r++ {
-							replicaIdx := (int(i) + int(r)) % len(activeBrokers)
-							replicas = append(replicas, activeBrokers[replicaIdx])
-						}
-					}
-					
-					topic.Partitions[i] = &PartitionState{
-						PartitionID:    i,
-						LeaderID:       leaderID,
-						ReplicaIDs:     replicas,
-						ISR:            append([]uint32(nil), replicas...),
-						HighWatermark:  0,
-						ReplicaOffsets: make(map[uint32]int64),
-					}
-					for _, rID := range replicas {
-						topic.Partitions[i].ReplicaOffsets[rID] = 0
-					}
-				}
-				f.state.Topics[payload.Name] = topic
-				f.updateISRAndHW()
+				break
 			}
+			topic := &TopicState{
+				Name:       payload.Name,
+				Partitions: make(map[uint32]*PartitionState),
+			}
+			if len(payload.Configs) > 0 {
+				topic.Configs = make(map[string]string, len(payload.Configs))
+				for k, v := range payload.Configs {
+					topic.Configs[k] = v
+				}
+			}
+
+			var assignment [][]uint32
+			if len(payload.Manual) > 0 {
+				known := map[uint32]bool{}
+				for _, id := range f.getActiveBrokerIDs() {
+					known[id] = true
+				}
+				assignment = make([][]uint32, len(payload.Manual))
+				for pid, reps := range payload.Manual {
+					if int(pid) >= len(assignment) {
+						return &AdminError{Code: ErrInvalidReplicaAssign, Msg: "manual assignment partitions must be contiguous from 0"}
+					}
+					if err := placement.ValidateManual(reps, known); err != nil {
+						return &AdminError{Code: ErrInvalidReplicaAssign, Msg: err.Error()}
+					}
+					assignment[pid] = reps
+				}
+				payload.Partitions = uint32(len(assignment))
+			} else {
+				assignment, _ = placement.Assign(f.placementBrokers(), 0, int(payload.Partitions), int(payload.ReplicationFactor))
+			}
+
+			for i := uint32(0); i < payload.Partitions; i++ {
+				replicas := assignment[i]
+				leaderID := uint32(0)
+				if len(replicas) > 0 {
+					leaderID = replicas[0]
+				}
+				topic.Partitions[i] = &PartitionState{
+					PartitionID:    i,
+					LeaderID:       leaderID,
+					ReplicaIDs:     replicas,
+					ISR:            append([]uint32(nil), replicas...),
+					HighWatermark:  0,
+					ReplicaOffsets: make(map[uint32]int64),
+				}
+				for _, rID := range replicas {
+					topic.Partitions[i].ReplicaOffsets[rID] = 0
+				}
+			}
+			f.state.Topics[payload.Name] = topic
+			f.updateISRAndHW()
 		}
 
 	case CmdAssignPartitions:
@@ -336,7 +395,7 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 				}
 				f.state.ConsumerGroups[payload.GroupID] = g
 			}
-			
+
 			m, mExists := g.Members[payload.MemberID]
 			if !mExists {
 				m = &GroupMember{
@@ -359,7 +418,7 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 					m.UserAgent = payload.UserAgent
 				}
 			}
-			
+
 			// Trigger a rebalance!
 			f.rebalanceGroup(g)
 		}
@@ -386,6 +445,71 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 			f.state.Offsets[key] = payload.Offset
 		}
 
+	case CmdDeleteTopic:
+		var payload struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(cmd.Payload, &payload); err == nil {
+			if _, ok := f.state.Topics[payload.Name]; !ok {
+				return &AdminError{Code: ErrUnknownTopicOrPartition, Msg: fmt.Sprintf("This server does not host topic '%s'.", payload.Name)}
+			}
+			delete(f.state.Topics, payload.Name)
+			mid := "/" + payload.Name + "/"
+			for k := range f.state.Offsets {
+				if strings.Contains(k, mid) {
+					delete(f.state.Offsets, k)
+				}
+			}
+			for _, g := range f.state.ConsumerGroups {
+				for id, pts := range g.Assignments {
+					g.Assignments[id] = filterTopic(pts, payload.Name)
+				}
+			}
+		}
+
+	case CmdCreatePartitions:
+		var payload struct {
+			Name     string              `json:"name"`
+			NewTotal uint32              `json:"new_total"`
+			Manual   map[uint32][]uint32 `json:"manual,omitempty"`
+		}
+		if err := json.Unmarshal(cmd.Payload, &payload); err == nil {
+			return f.applyCreatePartitions(payload.Name, payload.NewTotal, payload.Manual)
+		}
+
+	case CmdAlterTopicConfig:
+		var payload struct {
+			Name       string            `json:"name"`
+			Set        map[string]string `json:"set"`
+			Delete     []string          `json:"delete"`
+			ReplaceAll bool              `json:"replace_all"`
+		}
+		if err := json.Unmarshal(cmd.Payload, &payload); err == nil {
+			t, ok := f.state.Topics[payload.Name]
+			if !ok {
+				return &AdminError{Code: ErrUnknownTopicOrPartition, Msg: fmt.Sprintf("This server does not host topic '%s'.", payload.Name)}
+			}
+			if payload.ReplaceAll || t.Configs == nil {
+				t.Configs = map[string]string{}
+			}
+			for _, k := range payload.Delete {
+				delete(t.Configs, k)
+			}
+			for k, v := range payload.Set {
+				t.Configs[k] = v
+			}
+		}
+
+	case CmdElectLeader:
+		var payload struct {
+			Topic     string `json:"topic"`
+			Partition uint32 `json:"partition"`
+			Unclean   bool   `json:"unclean"`
+		}
+		if err := json.Unmarshal(cmd.Payload, &payload); err == nil {
+			return f.applyElectLeader(payload.Topic, payload.Partition, payload.Unclean)
+		}
+
 	case CmdCleanInactive:
 		// Clean inactive brokers and trigger failover if they were partition leaders
 		now := time.Now()
@@ -406,16 +530,16 @@ func (f *FSM) updateISRAndHW() {
 	for _, topic := range f.state.Topics {
 		for _, partition := range topic.Partitions {
 			leaderID := partition.LeaderID
-			
+
 			if partition.ReplicaOffsets == nil {
 				partition.ReplicaOffsets = make(map[uint32]int64)
 			}
-			
+
 			leaderOffset := int64(0)
 			if val, ok := partition.ReplicaOffsets[leaderID]; ok {
 				leaderOffset = val
 			}
-			
+
 			newISR := []uint32{}
 			leaderBroker, leaderExists := f.state.Brokers[leaderID]
 			if leaderExists && leaderBroker.Active && now.Sub(leaderBroker.LastSeen) <= f.brokerInactiveTimeout {
@@ -436,9 +560,9 @@ func (f *FSM) updateISRAndHW() {
 					newISR = append(newISR, rID)
 				}
 			}
-			
+
 			partition.ISR = newISR
-			
+
 			if len(newISR) > 0 {
 				var minOffset int64
 				for i, rID := range newISR {
@@ -751,11 +875,13 @@ func (f *FSM) GetMetadata(topics []string) ClusterState {
 
 	for k, v := range f.state.Brokers {
 		res.Brokers[k] = &BrokerStatus{
-			ID:       v.ID,
-			Host:     v.Host,
-			Port:     v.Port,
-			LastSeen: v.LastSeen,
-			Active:   v.Active,
+			ID:        v.ID,
+			Host:      v.Host,
+			Port:      v.Port,
+			LastSeen:  v.LastSeen,
+			Active:    v.Active,
+			Rack:      v.Rack,
+			KafkaPort: v.KafkaPort,
 		}
 	}
 
@@ -773,6 +899,12 @@ func (f *FSM) GetMetadata(topics []string) ClusterState {
 		tState := &TopicState{
 			Name:       v.Name,
 			Partitions: make(map[uint32]*PartitionState),
+		}
+		if len(v.Configs) > 0 {
+			tState.Configs = make(map[string]string, len(v.Configs))
+			for ck, cv := range v.Configs {
+				tState.Configs[ck] = cv
+			}
 		}
 		for pID, pVal := range v.Partitions {
 			replicaOffsetsCopy := make(map[uint32]int64)
@@ -841,7 +973,7 @@ func (f *FSM) GetOffset(groupID string, topic string, partition uint32) int64 {
 func (f *FSM) Snapshot() (raft.FSMSnapshot, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	// Create a backup of state
 	data, err := json.Marshal(f.state)
 	if err != nil {
@@ -857,12 +989,12 @@ func (f *FSM) Restore(rc io.ReadCloser) error {
 	if err != nil {
 		return err
 	}
-	
+
 	var state ClusterState
 	if err := json.Unmarshal(data, &state); err != nil {
 		return err
 	}
-	
+
 	f.mu.Lock()
 	f.state = state
 	f.mu.Unlock()
@@ -887,3 +1019,131 @@ func (s *fsmSnapshot) Persist(sink raft.SnapshotSink) error {
 }
 
 func (s *fsmSnapshot) Release() {}
+
+func filterTopic(pts []PartitionTopic, topic string) []PartitionTopic {
+	out := make([]PartitionTopic, 0, len(pts))
+	for _, p := range pts {
+		if p.Topic != topic {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// placementBrokers returns the active brokers (deterministically ordered) with their racks.
+func (f *FSM) placementBrokers() []placement.Broker {
+	ids := f.getActiveBrokerIDs()
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	out := make([]placement.Broker, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, placement.Broker{ID: id, Rack: f.state.Brokers[id].Rack})
+	}
+	return out
+}
+
+func (f *FSM) applyCreatePartitions(name string, newTotal uint32, manual map[uint32][]uint32) interface{} {
+	t, ok := f.state.Topics[name]
+	if !ok {
+		return &AdminError{Code: ErrUnknownTopicOrPartition, Msg: fmt.Sprintf("This server does not host topic '%s'.", name)}
+	}
+	cur := uint32(len(t.Partitions))
+	if newTotal <= cur {
+		return &AdminError{Code: ErrInvalidPartitions, Msg: fmt.Sprintf("Topic already has %d partitions.", cur)}
+	}
+	add := int(newTotal - cur)
+	rf := 1
+	if p0, ok := t.Partitions[0]; ok && len(p0.ReplicaIDs) > 0 {
+		rf = len(p0.ReplicaIDs)
+	}
+	var assignment [][]uint32
+	if len(manual) > 0 {
+		if len(manual) != add {
+			return &AdminError{Code: ErrInvalidReplicaAssign, Msg: fmt.Sprintf("Increasing the number of partitions by %d but %d assignments provided.", add, len(manual))}
+		}
+		known := map[uint32]bool{}
+		for _, id := range f.getActiveBrokerIDs() {
+			known[id] = true
+		}
+		assignment = make([][]uint32, add)
+		for i := 0; i < add; i++ {
+			reps, ok := manual[uint32(i)]
+			if !ok {
+				return &AdminError{Code: ErrInvalidReplicaAssign, Msg: "manual assignments must be indexed 0..n-1 for the new partitions"}
+			}
+			if err := placement.ValidateManual(reps, known); err != nil {
+				return &AdminError{Code: ErrInvalidReplicaAssign, Msg: err.Error()}
+			}
+			assignment[i] = reps
+		}
+	} else {
+		assignment, _ = placement.Assign(f.placementBrokers(), int(cur), add, rf)
+	}
+	for i := 0; i < add; i++ {
+		pid := cur + uint32(i)
+		reps := assignment[i]
+		leader := uint32(0)
+		if len(reps) > 0 {
+			leader = reps[0]
+		}
+		ps := &PartitionState{PartitionID: pid, LeaderID: leader, ReplicaIDs: reps,
+			ISR: append([]uint32(nil), reps...), ReplicaOffsets: map[uint32]int64{}}
+		for _, r := range reps {
+			ps.ReplicaOffsets[r] = 0
+		}
+		t.Partitions[pid] = ps
+	}
+	f.updateISRAndHW()
+	return nil
+}
+
+func (f *FSM) applyElectLeader(topic string, partition uint32, unclean bool) interface{} {
+	t, ok := f.state.Topics[topic]
+	if !ok {
+		return &AdminError{Code: ErrUnknownTopicOrPartition, Msg: "unknown topic"}
+	}
+	p, ok := t.Partitions[partition]
+	if !ok {
+		return &AdminError{Code: ErrUnknownTopicOrPartition, Msg: "unknown partition"}
+	}
+	if len(p.ReplicaIDs) == 0 {
+		return &AdminError{Code: ErrEligibleLeadersNA, Msg: "partition has no replicas"}
+	}
+	active := func(id uint32) bool { b, ok := f.state.Brokers[id]; return ok && b.Active }
+	inISR := func(id uint32) bool {
+		for _, i := range p.ISR {
+			if i == id {
+				return true
+			}
+		}
+		return false
+	}
+	preferred := p.ReplicaIDs[0]
+	if !unclean {
+		if p.LeaderID == preferred {
+			return &AdminError{Code: ErrElectionNotNeeded, Msg: "Leader is already the preferred replica."}
+		}
+		if !active(preferred) || !inISR(preferred) {
+			return &AdminError{Code: ErrEligibleLeadersNA, Msg: "Preferred replica is not in sync or not alive."}
+		}
+		p.LeaderID = preferred
+		f.updateISRAndHW()
+		return nil
+	}
+	// Unclean: pick the most caught-up live replica.
+	best := uint32(0)
+	bestOff := int64(-1)
+	for _, id := range p.ReplicaIDs {
+		if active(id) && p.ReplicaOffsets[id] > bestOff {
+			best, bestOff = id, p.ReplicaOffsets[id]
+		}
+	}
+	if best == 0 {
+		return &AdminError{Code: ErrEligibleLeadersNA, Msg: "No live replica available."}
+	}
+	if best == p.LeaderID {
+		return &AdminError{Code: ErrElectionNotNeeded, Msg: "Leader is already the best available replica."}
+	}
+	p.LeaderID = best
+	f.updateISRAndHW()
+	return nil
+}
