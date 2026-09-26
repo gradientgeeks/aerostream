@@ -14,19 +14,19 @@ Built with a **Dual-Engine Architecture**—pairing a resilient **Go-based Raft 
 
 ## ⚡ Key Highlights & Benchmark Comparison
 
-Under strict hardware constraints (`--cpus=2.0 --memory=2g`), AeroStream significantly outperforms Apache Kafka and Redpanda in both throughput and memory footprint:
+Single node, strict limits per broker (`--cpus=2.0 --memory=2g`), median of 3 runs, produce path only. AeroStream is shown on its **native data-plane port** and on its **Kafka port** (what Kafka clients use):
 
-| Benchmark Scenario | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++/Seastar) | AeroStream (Rust Data Plane) | AeroStream Advantage |
-| :--- | :--- | :--- | :--- | :--- |
-| **50 MB Messages (Throughput)** | `48.64 MB/s` | `50.20 MB/s` | **`666.30 MB/s`** | **13.3x vs Redpanda, 13.7x vs Kafka** |
-| **50 MB Messages (p50 Latency)** | `5,606 ms` | `5,212 ms` | **`353 ms`** | **14.8x lower latency** |
-| **1 MB Messages (Throughput)** | `127.62 MB/s` | `333.78 MB/s` | **`687.08 MB/s`** | **2.06x vs Redpanda, 5.38x vs Kafka** |
-| **100-Byte High-Frequency** | `13,446 msgs/s` | `10,800 msgs/s` | **`103,890 msgs/s`** | **7.7x to 9.6x higher throughput** |
-| **Memory Footprint (50MB Stream)**| `1,212 MiB` (60.6%) | `839.3 MiB` (41.0%) | **`1.54 MiB` (0.08%)** | **545x to 787x lower RAM** |
-| **Thread Count** | 130 JVM threads | 5 OS threads | **3 OS pinned threads** | **Zero thread thrashing** |
-| **Cold Boot Time** | `3.80 s` | `680 ms` | **`1.8 ms`** | **377x to 2,100x faster startup** |
+| Benchmark scenario | Apache Kafka 4.3.1 | Redpanda 26.2 | Apache Pulsar 4.2 | AeroStream (native port) | AeroStream (Kafka port) |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| **50 MB messages (MB/s)** | 54.7 | 52.6 | 284.1 (chunked) | **719.4** | 25.3 |
+| **1 MB messages (MB/s)** | 287.2 | 343.2 | 124.4 | **1,018.3** | 299.9 |
+| **1 KB messages (msgs/s)** | 178,571 | 122,850 | 179,413 | 72,569 (closed loop) | 82,440 |
+| **100 B messages (msgs/s)** | 487,329 | **533,618** | 254,160 | 97,125 (closed loop) | 222,618 |
+| **Idle memory** | 369 MiB | 213 MiB | 708 MiB | **8.8 MiB** | 9.1 MiB |
+| **Peak memory under load** | 1,798 MiB | 909 MiB | 980 MiB | **145 MiB** | 345 MiB |
+| **Time until usable** | 2.7 s | **0.7 s** | 6.3 s | 3.4 s | 3.4 s |
 
-*For the complete methodology and detailed benchmark traces, see [BENCHMARK_RESULTS.md](docs/BENCHMARK_RESULTS.md).*
+AeroStream leads on large messages over its native port and on memory footprint. Over the Kafka protocol it is not yet competitive on small messages or at 10-50 MB, and Redpanda / Pulsar acknowledge after fsync while AeroStream and Kafka do not. Read the caveats in [BENCHMARK_RESULTS.md](docs/BENCHMARK_RESULTS.md) (methodology, durability differences, closed-loop native client) before drawing conclusions.
 
 ---
 

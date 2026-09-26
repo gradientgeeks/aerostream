@@ -1,0 +1,1329 @@
+{
+  "kafka": {
+    "label": "Apache Kafka (KRaft)",
+    "cold_boot_s": 2.6750870190007845,
+    "idle_mem_mib": 369.0,
+    "idle_pids": 105,
+    "workloads": {
+      "100B": {
+        "runs": [
+          {
+            "records": 500000,
+            "rec_per_sec": 487329.434698,
+            "mb_per_sec": 46.48,
+            "avg_ms": 36.26,
+            "p50_ms": 30.0,
+            "p95_ms": 80.0,
+            "p99_ms": 88.0,
+            "max_ms": 248.0,
+            "seconds": 1.0259999999996963
+          },
+          {
+            "records": 500000,
+            "rec_per_sec": 416319.733555,
+            "mb_per_sec": 39.7,
+            "avg_ms": 3.72,
+            "p50_ms": 3.0,
+            "p95_ms": 9.0,
+            "p99_ms": 16.0,
+            "max_ms": 231.0,
+            "seconds": 1.201000000001069
+          },
+          {
+            "records": 500000,
+            "rec_per_sec": 495540.138751,
+            "mb_per_sec": 47.26,
+            "avg_ms": 2.72,
+            "p50_ms": 2.0,
+            "p95_ms": 5.0,
+            "p99_ms": 7.0,
+            "max_ms": 212.0,
+            "seconds": 1.0090000000004864
+          }
+        ],
+        "median": {
+          "records": 500000,
+          "rec_per_sec": 487329.434698,
+          "mb_per_sec": 46.48,
+          "avg_ms": 36.26,
+          "p50_ms": 30.0,
+          "p95_ms": 80.0,
+          "p99_ms": 88.0,
+          "max_ms": 248.0,
+          "seconds": 1.0259999999996963
+        },
+        "failed": 0
+      },
+      "1KB": {
+        "runs": [
+          {
+            "records": 300000,
+            "rec_per_sec": 178571.428571,
+            "mb_per_sec": 174.39,
+            "avg_ms": 26.48,
+            "p50_ms": 18.0,
+            "p95_ms": 67.0,
+            "p99_ms": 72.0,
+            "max_ms": 228.0,
+            "seconds": 1.680000000004032
+          },
+          {
+            "records": 300000,
+            "rec_per_sec": 148367.952522,
+            "mb_per_sec": 144.89,
+            "avg_ms": 116.49,
+            "p50_ms": 46.0,
+            "p95_ms": 602.0,
+            "p99_ms": 618.0,
+            "max_ms": 620.0,
+            "seconds": 2.022000000003478
+          },
+          {
+            "records": 300000,
+            "rec_per_sec": 218340.611354,
+            "mb_per_sec": 213.22,
+            "avg_ms": 7.04,
+            "p50_ms": 3.0,
+            "p95_ms": 34.0,
+            "p99_ms": 46.0,
+            "max_ms": 215.0,
+            "seconds": 1.3739999999981864
+          }
+        ],
+        "median": {
+          "records": 300000,
+          "rec_per_sec": 178571.428571,
+          "mb_per_sec": 174.39,
+          "avg_ms": 26.48,
+          "p50_ms": 18.0,
+          "p95_ms": 67.0,
+          "p99_ms": 72.0,
+          "max_ms": 228.0,
+          "seconds": 1.680000000004032
+        },
+        "failed": 0
+      },
+      "1MB": {
+        "runs": [
+          {
+            "records": 500,
+            "rec_per_sec": 341.06412,
+            "mb_per_sec": 341.06,
+            "avg_ms": 92.77,
+            "p50_ms": 102.0,
+            "p95_ms": 131.0,
+            "p99_ms": 134.0,
+            "max_ms": 213.0,
+            "seconds": 1.46600000023456
+          },
+          {
+            "records": 500,
+            "rec_per_sec": 254.841998,
+            "mb_per_sec": 254.84,
+            "avg_ms": 168.0,
+            "p50_ms": 84.0,
+            "p95_ms": 575.0,
+            "p99_ms": 577.0,
+            "max_ms": 577.0,
+            "seconds": 1.961999999701776
+          },
+          {
+            "records": 500,
+            "rec_per_sec": 287.191269,
+            "mb_per_sec": 287.19,
+            "avg_ms": 155.4,
+            "p50_ms": 50.0,
+            "p95_ms": 395.0,
+            "p99_ms": 414.0,
+            "max_ms": 414.0,
+            "seconds": 1.741000002336422
+          }
+        ],
+        "median": {
+          "records": 500,
+          "rec_per_sec": 287.191269,
+          "mb_per_sec": 287.19,
+          "avg_ms": 155.4,
+          "p50_ms": 50.0,
+          "p95_ms": 395.0,
+          "p99_ms": 414.0,
+          "max_ms": 414.0,
+          "seconds": 1.741000002336422
+        },
+        "failed": 0
+      },
+      "10MB": {
+        "runs": [
+          {
+            "records": 50,
+            "rec_per_sec": 15.151515,
+            "mb_per_sec": 151.52,
+            "avg_ms": 1019.1,
+            "p50_ms": 1405.0,
+            "p95_ms": 1792.0,
+            "p99_ms": 1799.0,
+            "max_ms": 1799.0,
+            "seconds": 3.3000000330000003
+          },
+          {
+            "records": 50,
+            "rec_per_sec": 21.088148,
+            "mb_per_sec": 210.88,
+            "avg_ms": 668.66,
+            "p50_ms": 732.0,
+            "p95_ms": 932.0,
+            "p99_ms": 948.0,
+            "max_ms": 948.0,
+            "seconds": 2.3710000517826413
+          },
+          {
+            "records": 50,
+            "rec_per_sec": 15.356265,
+            "mb_per_sec": 153.56,
+            "avg_ms": 984.86,
+            "p50_ms": 712.0,
+            "p95_ms": 1810.0,
+            "p99_ms": 1814.0,
+            "max_ms": 1814.0,
+            "seconds": 3.256000075539202
+          }
+        ],
+        "median": {
+          "records": 50,
+          "rec_per_sec": 15.356265,
+          "mb_per_sec": 153.56,
+          "avg_ms": 984.86,
+          "p50_ms": 712.0,
+          "p95_ms": 1810.0,
+          "p99_ms": 1814.0,
+          "max_ms": 1814.0,
+          "seconds": 3.256000075539202
+        },
+        "failed": 0
+      },
+      "50MB": {
+        "runs": [
+          {
+            "records": 10,
+            "rec_per_sec": 1.077586,
+            "mb_per_sec": 53.88,
+            "avg_ms": 3907.1,
+            "p50_ms": 4976.0,
+            "p95_ms": 5195.0,
+            "p99_ms": 5195.0,
+            "max_ms": 5195.0,
+            "seconds": 9.280001781760342
+          },
+          {
+            "records": 10,
+            "rec_per_sec": 1.094212,
+            "mb_per_sec": 54.71,
+            "avg_ms": 3847.8,
+            "p50_ms": 4900.0,
+            "p95_ms": 5127.0,
+            "p99_ms": 5127.0,
+            "max_ms": 5127.0,
+            "seconds": 9.1389968305959
+          },
+          {
+            "records": 10,
+            "rec_per_sec": 1.09505,
+            "mb_per_sec": 54.75,
+            "avg_ms": 3847.2,
+            "p50_ms": 4877.0,
+            "p95_ms": 5132.0,
+            "p99_ms": 5132.0,
+            "max_ms": 5132.0,
+            "seconds": 9.132003104881054
+          }
+        ],
+        "median": {
+          "records": 10,
+          "rec_per_sec": 1.094212,
+          "mb_per_sec": 54.71,
+          "avg_ms": 3847.8,
+          "p50_ms": 4900.0,
+          "p95_ms": 5127.0,
+          "p99_ms": 5127.0,
+          "max_ms": 5127.0,
+          "seconds": 9.1389968305959
+        },
+        "failed": 0
+      }
+    },
+    "peak_mem_mib": 1798.144,
+    "peak_pids": 105,
+    "peak_cpu_pct": 153.04,
+    "cold_boot_runs_s": [
+      2.822910819988465,
+      2.642144201003248,
+      2.6750870190007845
+    ]
+  },
+  "redpanda": {
+    "label": "Redpanda",
+    "cold_boot_s": 0.7309155580005608,
+    "idle_mem_mib": 213.0,
+    "idle_pids": 5,
+    "workloads": {
+      "100B": {
+        "runs": [
+          {
+            "records": 500000,
+            "rec_per_sec": 550055.005501,
+            "mb_per_sec": 52.46,
+            "avg_ms": 2.19,
+            "p50_ms": 2.0,
+            "p95_ms": 5.0,
+            "p99_ms": 6.0,
+            "max_ms": 244.0,
+            "seconds": 0.9089999999992565
+          },
+          {
+            "records": 500000,
+            "rec_per_sec": 533617.929562,
+            "mb_per_sec": 50.89,
+            "avg_ms": 1.77,
+            "p50_ms": 2.0,
+            "p95_ms": 3.0,
+            "p99_ms": 5.0,
+            "max_ms": 224.0,
+            "seconds": 0.9370000000007609
+          },
+          {
+            "records": 500000,
+            "rec_per_sec": 321130.378934,
+            "mb_per_sec": 30.63,
+            "avg_ms": 4.06,
+            "p50_ms": 3.0,
+            "p95_ms": 8.0,
+            "p99_ms": 12.0,
+            "max_ms": 492.0,
+            "seconds": 1.556999999999259
+          }
+        ],
+        "median": {
+          "records": 500000,
+          "rec_per_sec": 533617.929562,
+          "mb_per_sec": 50.89,
+          "avg_ms": 1.77,
+          "p50_ms": 2.0,
+          "p95_ms": 3.0,
+          "p99_ms": 5.0,
+          "max_ms": 224.0,
+          "seconds": 0.9370000000007609
+        },
+        "failed": 0
+      },
+      "1KB": {
+        "runs": [
+          {
+            "records": 300000,
+            "rec_per_sec": 81743.86921,
+            "mb_per_sec": 79.83,
+            "avg_ms": 27.89,
+            "p50_ms": 20.0,
+            "p95_ms": 82.0,
+            "p99_ms": 89.0,
+            "max_ms": 869.0,
+            "seconds": 3.6699999999914366
+          },
+          {
+            "records": 300000,
+            "rec_per_sec": 122850.12285,
+            "mb_per_sec": 119.97,
+            "avg_ms": 3.25,
+            "p50_ms": 2.0,
+            "p95_ms": 9.0,
+            "p99_ms": 22.0,
+            "max_ms": 508.0,
+            "seconds": 2.442000000002442
+          },
+          {
+            "records": 300000,
+            "rec_per_sec": 156168.662155,
+            "mb_per_sec": 152.51,
+            "avg_ms": 2.19,
+            "p50_ms": 2.0,
+            "p95_ms": 5.0,
+            "p99_ms": 9.0,
+            "max_ms": 405.0,
+            "seconds": 1.9210000000015688
+          }
+        ],
+        "median": {
+          "records": 300000,
+          "rec_per_sec": 122850.12285,
+          "mb_per_sec": 119.97,
+          "avg_ms": 3.25,
+          "p50_ms": 2.0,
+          "p95_ms": 9.0,
+          "p99_ms": 22.0,
+          "max_ms": 508.0,
+          "seconds": 2.442000000002442
+        },
+        "failed": 0
+      },
+      "1MB": {
+        "runs": [
+          {
+            "records": 500,
+            "rec_per_sec": 350.140056,
+            "mb_per_sec": 350.14,
+            "avg_ms": 8.95,
+            "p50_ms": 5.0,
+            "p95_ms": 34.0,
+            "p99_ms": 37.0,
+            "max_ms": 211.0,
+            "seconds": 1.428000000091392
+          },
+          {
+            "records": 500,
+            "rec_per_sec": 343.170899,
+            "mb_per_sec": 343.17,
+            "avg_ms": 9.54,
+            "p50_ms": 4.0,
+            "p95_ms": 38.0,
+            "p99_ms": 65.0,
+            "max_ms": 238.0,
+            "seconds": 1.457000000457498
+          },
+          {
+            "records": 500,
+            "rec_per_sec": 194.099379,
+            "mb_per_sec": 194.1,
+            "avg_ms": 19.79,
+            "p50_ms": 9.0,
+            "p95_ms": 62.0,
+            "p99_ms": 67.0,
+            "max_ms": 211.0,
+            "seconds": 2.575999998433792
+          }
+        ],
+        "median": {
+          "records": 500,
+          "rec_per_sec": 343.170899,
+          "mb_per_sec": 343.17,
+          "avg_ms": 9.54,
+          "p50_ms": 4.0,
+          "p95_ms": 38.0,
+          "p99_ms": 65.0,
+          "max_ms": 238.0,
+          "seconds": 1.457000000457498
+        },
+        "failed": 0
+      },
+      "10MB": {
+        "runs": [
+          {
+            "records": 50,
+            "rec_per_sec": 20.990764,
+            "mb_per_sec": 209.91,
+            "avg_ms": 658.96,
+            "p50_ms": 696.0,
+            "p95_ms": 923.0,
+            "p99_ms": 929.0,
+            "max_ms": 929.0,
+            "seconds": 2.38200000724128
+          },
+          {
+            "records": 50,
+            "rec_per_sec": 21.598272,
+            "mb_per_sec": 215.98,
+            "avg_ms": 509.16,
+            "p50_ms": 555.0,
+            "p95_ms": 784.0,
+            "p99_ms": 809.0,
+            "max_ms": 809.0,
+            "seconds": 2.315000014816
+          },
+          {
+            "records": 50,
+            "rec_per_sec": 21.968366,
+            "mb_per_sec": 219.68,
+            "avg_ms": 453.62,
+            "p50_ms": 510.0,
+            "p95_ms": 689.0,
+            "p99_ms": 695.0,
+            "max_ms": 695.0,
+            "seconds": 2.275999953751681
+          }
+        ],
+        "median": {
+          "records": 50,
+          "rec_per_sec": 21.598272,
+          "mb_per_sec": 215.98,
+          "avg_ms": 509.16,
+          "p50_ms": 555.0,
+          "p95_ms": 784.0,
+          "p99_ms": 809.0,
+          "max_ms": 809.0,
+          "seconds": 2.315000014816
+        },
+        "failed": 0
+      },
+      "50MB": {
+        "runs": [
+          {
+            "records": 10,
+            "rec_per_sec": 1.05241,
+            "mb_per_sec": 52.62,
+            "avg_ms": 4006.1,
+            "p50_ms": 5097.0,
+            "p95_ms": 5470.0,
+            "p99_ms": 5470.0,
+            "max_ms": 5470.0,
+            "seconds": 9.502000171036002
+          },
+          {
+            "records": 10,
+            "rec_per_sec": 1.003613,
+            "mb_per_sec": 50.18,
+            "avg_ms": 4020.8,
+            "p50_ms": 4788.0,
+            "p95_ms": 5897.0,
+            "p99_ms": 5897.0,
+            "max_ms": 5897.0,
+            "seconds": 9.9640000677552
+          },
+          {
+            "records": 10,
+            "rec_per_sec": 1.154601,
+            "mb_per_sec": 57.73,
+            "avg_ms": 3688.4,
+            "p50_ms": 4714.0,
+            "p95_ms": 4949.0,
+            "p99_ms": 4949.0,
+            "max_ms": 4949.0,
+            "seconds": 8.661000640047947
+          }
+        ],
+        "median": {
+          "records": 10,
+          "rec_per_sec": 1.05241,
+          "mb_per_sec": 52.62,
+          "avg_ms": 4006.1,
+          "p50_ms": 5097.0,
+          "p95_ms": 5470.0,
+          "p99_ms": 5470.0,
+          "max_ms": 5470.0,
+          "seconds": 9.502000171036002
+        },
+        "failed": 0
+      }
+    },
+    "peak_mem_mib": 908.6,
+    "peak_pids": 10,
+    "peak_cpu_pct": 73.07,
+    "cold_boot_runs_s": [
+      0.7309155580005608,
+      0.7172597180033335,
+      0.760750937013654
+    ]
+  },
+  "pulsar": {
+    "label": "Apache Pulsar (standalone)",
+    "cold_boot_s": 6.314510056006839,
+    "idle_mem_mib": 707.9,
+    "idle_pids": 165,
+    "workloads": {
+      "100B": {
+        "runs": [
+          {
+            "records": 500000,
+            "errors": 0,
+            "seconds": 1.9673,
+            "rec_per_sec": 254160.12,
+            "mb_per_sec": 24.24,
+            "avg_ms": 3.448,
+            "p50_ms": 3.381,
+            "p95_ms": 4.644,
+            "p99_ms": 5.997,
+            "max_ms": 21.336
+          },
+          {
+            "records": 500000,
+            "errors": 0,
+            "seconds": 3.0584,
+            "rec_per_sec": 163483.47,
+            "mb_per_sec": 15.59,
+            "avg_ms": 5.016,
+            "p50_ms": 4.728,
+            "p95_ms": 6.902,
+            "p99_ms": 10.821,
+            "max_ms": 62.001
+          },
+          {
+            "records": 500000,
+            "errors": 0,
+            "seconds": 1.6206,
+            "rec_per_sec": 308522.88,
+            "mb_per_sec": 29.42,
+            "avg_ms": 2.741,
+            "p50_ms": 2.539,
+            "p95_ms": 3.876,
+            "p99_ms": 5.06,
+            "max_ms": 24.711
+          }
+        ],
+        "median": {
+          "records": 500000,
+          "errors": 0,
+          "seconds": 1.9673,
+          "rec_per_sec": 254160.12,
+          "mb_per_sec": 24.24,
+          "avg_ms": 3.448,
+          "p50_ms": 3.381,
+          "p95_ms": 4.644,
+          "p99_ms": 5.997,
+          "max_ms": 21.336
+        },
+        "failed": 0
+      },
+      "1KB": {
+        "runs": [
+          {
+            "records": 300000,
+            "errors": 0,
+            "seconds": 1.6721,
+            "rec_per_sec": 179413.1,
+            "mb_per_sec": 175.21,
+            "avg_ms": 4.999,
+            "p50_ms": 2.981,
+            "p95_ms": 8.517,
+            "p99_ms": 47.797,
+            "max_ms": 52.197
+          },
+          {
+            "records": 300000,
+            "errors": 0,
+            "seconds": 2.2961,
+            "rec_per_sec": 130656.12,
+            "mb_per_sec": 127.59,
+            "avg_ms": 6.918,
+            "p50_ms": 3.215,
+            "p95_ms": 45.99,
+            "p99_ms": 65.892,
+            "max_ms": 72.818
+          },
+          {
+            "records": 300000,
+            "errors": 0,
+            "seconds": 1.5169,
+            "rec_per_sec": 197767.25,
+            "mb_per_sec": 193.13,
+            "avg_ms": 4.675,
+            "p50_ms": 2.934,
+            "p95_ms": 7.115,
+            "p99_ms": 50.619,
+            "max_ms": 64.864
+          }
+        ],
+        "median": {
+          "records": 300000,
+          "errors": 0,
+          "seconds": 1.6721,
+          "rec_per_sec": 179413.1,
+          "mb_per_sec": 175.21,
+          "avg_ms": 4.999,
+          "p50_ms": 2.981,
+          "p95_ms": 8.517,
+          "p99_ms": 47.797,
+          "max_ms": 52.197
+        },
+        "failed": 0
+      },
+      "1MB": {
+        "runs": [
+          {
+            "records": 500,
+            "errors": 0,
+            "seconds": 4.0187,
+            "rec_per_sec": 124.42,
+            "mb_per_sec": 124.42,
+            "avg_ms": 267.228,
+            "p50_ms": 287.531,
+            "p95_ms": 398.256,
+            "p99_ms": 483.373,
+            "max_ms": 584.071
+          },
+          {
+            "records": 500,
+            "errors": 0,
+            "seconds": 3.8481,
+            "rec_per_sec": 129.93,
+            "mb_per_sec": 129.93,
+            "avg_ms": 252.552,
+            "p50_ms": 262.915,
+            "p95_ms": 401.645,
+            "p99_ms": 471.626,
+            "max_ms": 483.873
+          },
+          {
+            "records": 500,
+            "errors": 0,
+            "seconds": 4.2179,
+            "rec_per_sec": 118.54,
+            "mb_per_sec": 118.54,
+            "avg_ms": 280.93,
+            "p50_ms": 286.852,
+            "p95_ms": 409.186,
+            "p99_ms": 485.737,
+            "max_ms": 561.976
+          }
+        ],
+        "median": {
+          "records": 500,
+          "errors": 0,
+          "seconds": 4.0187,
+          "rec_per_sec": 124.42,
+          "mb_per_sec": 124.42,
+          "avg_ms": 267.228,
+          "p50_ms": 287.531,
+          "p95_ms": 398.256,
+          "p99_ms": 483.373,
+          "max_ms": 584.071
+        },
+        "failed": 0
+      },
+      "10MB": {
+        "runs": [
+          {
+            "records": 50,
+            "errors": 0,
+            "seconds": 1.981,
+            "rec_per_sec": 25.24,
+            "mb_per_sec": 252.4,
+            "avg_ms": 45.944,
+            "p50_ms": 36.028,
+            "p95_ms": 49.418,
+            "p99_ms": 495.636,
+            "max_ms": 495.636
+          },
+          {
+            "records": 50,
+            "errors": 0,
+            "seconds": 2.0195,
+            "rec_per_sec": 24.76,
+            "mb_per_sec": 247.59,
+            "avg_ms": 46.255,
+            "p50_ms": 34.738,
+            "p95_ms": 43.872,
+            "p99_ms": 580.434,
+            "max_ms": 580.434
+          },
+          {
+            "records": 50,
+            "errors": 0,
+            "seconds": 2.6135,
+            "rec_per_sec": 19.13,
+            "mb_per_sec": 191.31,
+            "avg_ms": 58.541,
+            "p50_ms": 37.292,
+            "p95_ms": 59.471,
+            "p99_ms": 1049.87,
+            "max_ms": 1049.87
+          }
+        ],
+        "median": {
+          "records": 50,
+          "errors": 0,
+          "seconds": 2.0195,
+          "rec_per_sec": 24.76,
+          "mb_per_sec": 247.59,
+          "avg_ms": 46.255,
+          "p50_ms": 34.738,
+          "p95_ms": 43.872,
+          "p99_ms": 580.434,
+          "max_ms": 580.434
+        },
+        "failed": 0
+      },
+      "50MB": {
+        "runs": [
+          {
+            "records": 10,
+            "errors": 0,
+            "seconds": 1.4239,
+            "rec_per_sec": 7.02,
+            "mb_per_sec": 351.15,
+            "avg_ms": 151.829,
+            "p50_ms": 143.438,
+            "p95_ms": 242.343,
+            "p99_ms": 242.343,
+            "max_ms": 242.343
+          },
+          {
+            "records": 10,
+            "errors": 0,
+            "seconds": 2.0279,
+            "rec_per_sec": 4.93,
+            "mb_per_sec": 246.56,
+            "avg_ms": 213.228,
+            "p50_ms": 150.329,
+            "p95_ms": 789.838,
+            "p99_ms": 789.838,
+            "max_ms": 789.838
+          },
+          {
+            "records": 10,
+            "errors": 0,
+            "seconds": 1.7602,
+            "rec_per_sec": 5.68,
+            "mb_per_sec": 284.06,
+            "avg_ms": 185.658,
+            "p50_ms": 147.725,
+            "p95_ms": 467.236,
+            "p99_ms": 467.236,
+            "max_ms": 467.236
+          }
+        ],
+        "median": {
+          "records": 10,
+          "errors": 0,
+          "seconds": 1.7602,
+          "rec_per_sec": 5.68,
+          "mb_per_sec": 284.06,
+          "avg_ms": 185.658,
+          "p50_ms": 147.725,
+          "p95_ms": 467.236,
+          "p99_ms": 467.236,
+          "max_ms": 467.236
+        },
+        "failed": 0
+      }
+    },
+    "peak_mem_mib": 979.9,
+    "peak_pids": 172,
+    "peak_cpu_pct": 204.5,
+    "cold_boot_runs_s": [
+      6.061277697997866,
+      6.348278048011707,
+      6.314510056006839
+    ]
+  },
+  "aerostream-kafka": {
+    "label": "AeroStream (Kafka port)",
+    "cold_boot_s": 3.41,
+    "idle_mem_mib": 9.117,
+    "idle_pids": 11,
+    "workloads": {
+      "100B": {
+        "runs": [
+          {
+            "records": 500000,
+            "rec_per_sec": 222617.987533,
+            "mb_per_sec": 21.23,
+            "avg_ms": 653.85,
+            "p50_ms": 682.0,
+            "p95_ms": 1028.0,
+            "p99_ms": 1091.0,
+            "max_ms": 1097.0,
+            "seconds": 2.2460000000039617
+          },
+          {
+            "records": 500000,
+            "rec_per_sec": 218722.659668,
+            "mb_per_sec": 20.86,
+            "avg_ms": 586.36,
+            "p50_ms": 625.0,
+            "p95_ms": 991.0,
+            "p99_ms": 1030.0,
+            "max_ms": 1081.0,
+            "seconds": 2.2859999999952083
+          },
+          {
+            "records": 500000,
+            "rec_per_sec": 224719.101124,
+            "mb_per_sec": 21.43,
+            "avg_ms": 512.82,
+            "p50_ms": 569.0,
+            "p95_ms": 894.0,
+            "p99_ms": 968.0,
+            "max_ms": 974.0,
+            "seconds": 2.224999999995995
+          }
+        ],
+        "median": {
+          "records": 500000,
+          "rec_per_sec": 222617.987533,
+          "mb_per_sec": 21.23,
+          "avg_ms": 653.85,
+          "p50_ms": 682.0,
+          "p95_ms": 1028.0,
+          "p99_ms": 1091.0,
+          "max_ms": 1097.0,
+          "seconds": 2.2460000000039617
+        },
+        "failed": 0
+      },
+      "1KB": {
+        "runs": [
+          {
+            "records": 300000,
+            "rec_per_sec": 83892.61745,
+            "mb_per_sec": 81.93,
+            "avg_ms": 929.37,
+            "p50_ms": 907.0,
+            "p95_ms": 1942.0,
+            "p99_ms": 2036.0,
+            "max_ms": 2096.0,
+            "seconds": 3.575999999985696
+          },
+          {
+            "records": 300000,
+            "rec_per_sec": 82440.230833,
+            "mb_per_sec": 80.51,
+            "avg_ms": 723.02,
+            "p50_ms": 672.0,
+            "p95_ms": 1634.0,
+            "p99_ms": 1701.0,
+            "max_ms": 1761.0,
+            "seconds": 3.638999999984389
+          },
+          {
+            "records": 300000,
+            "rec_per_sec": 71513.706794,
+            "mb_per_sec": 69.84,
+            "avg_ms": 870.63,
+            "p50_ms": 795.0,
+            "p95_ms": 1888.0,
+            "p99_ms": 1984.0,
+            "max_ms": 2045.0,
+            "seconds": 4.194999999988394
+          }
+        ],
+        "median": {
+          "records": 300000,
+          "rec_per_sec": 82440.230833,
+          "mb_per_sec": 80.51,
+          "avg_ms": 723.02,
+          "p50_ms": 672.0,
+          "p95_ms": 1634.0,
+          "p99_ms": 1701.0,
+          "max_ms": 1761.0,
+          "seconds": 3.638999999984389
+        },
+        "failed": 0
+      },
+      "1MB": {
+        "runs": [
+          {
+            "records": 500,
+            "rec_per_sec": 224.215247,
+            "mb_per_sec": 224.22,
+            "avg_ms": 249.3,
+            "p50_ms": 48.0,
+            "p95_ms": 655.0,
+            "p99_ms": 661.0,
+            "max_ms": 663.0,
+            "seconds": 2.2299999963874
+          },
+          {
+            "records": 500,
+            "rec_per_sec": 302.297461,
+            "mb_per_sec": 302.3,
+            "avg_ms": 43.95,
+            "p50_ms": 48.0,
+            "p95_ms": 90.0,
+            "p99_ms": 93.0,
+            "max_ms": 369.0,
+            "seconds": 1.653999998365848
+          },
+          {
+            "records": 500,
+            "rec_per_sec": 299.940012,
+            "mb_per_sec": 299.94,
+            "avg_ms": 28.1,
+            "p50_ms": 26.0,
+            "p95_ms": 68.0,
+            "p99_ms": 93.0,
+            "max_ms": 355.0,
+            "seconds": 1.6669999999866638
+          }
+        ],
+        "median": {
+          "records": 500,
+          "rec_per_sec": 299.940012,
+          "mb_per_sec": 299.94,
+          "avg_ms": 28.1,
+          "p50_ms": 26.0,
+          "p95_ms": 68.0,
+          "p99_ms": 93.0,
+          "max_ms": 355.0,
+          "seconds": 1.6669999999866638
+        },
+        "failed": 0
+      },
+      "10MB": {
+        "runs": [
+          {
+            "records": 50,
+            "rec_per_sec": 7.053181,
+            "mb_per_sec": 70.53,
+            "avg_ms": 932.32,
+            "p50_ms": 1167.0,
+            "p95_ms": 1713.0,
+            "p99_ms": 4041.0,
+            "max_ms": 4041.0,
+            "seconds": 7.088999984545979
+          },
+          {
+            "records": 50,
+            "rec_per_sec": 10.222858,
+            "mb_per_sec": 102.23,
+            "avg_ms": 1563.46,
+            "p50_ms": 1953.0,
+            "p95_ms": 2267.0,
+            "p99_ms": 2338.0,
+            "max_ms": 2338.0,
+            "seconds": 4.8910001488820445
+          },
+          {
+            "records": 50,
+            "rec_per_sec": 16.545334,
+            "mb_per_sec": 165.45,
+            "avg_ms": 814.1,
+            "p50_ms": 907.0,
+            "p95_ms": 1123.0,
+            "p99_ms": 1210.0,
+            "max_ms": 1210.0,
+            "seconds": 3.0220000394068802
+          }
+        ],
+        "median": {
+          "records": 50,
+          "rec_per_sec": 10.222858,
+          "mb_per_sec": 102.23,
+          "avg_ms": 1563.46,
+          "p50_ms": 1953.0,
+          "p95_ms": 2267.0,
+          "p99_ms": 2338.0,
+          "max_ms": 2338.0,
+          "seconds": 4.8910001488820445
+        },
+        "failed": 0
+      },
+      "50MB": {
+        "runs": [
+          {
+            "records": 10,
+            "rec_per_sec": 0.505459,
+            "mb_per_sec": 25.27,
+            "avg_ms": 9991.0,
+            "p50_ms": 14925.0,
+            "p95_ms": 15111.0,
+            "p99_ms": 15111.0,
+            "max_ms": 15111.0,
+            "seconds": 19.783998306489746
+          },
+          {
+            "records": 10,
+            "rec_per_sec": 0.997208,
+            "mb_per_sec": 49.86,
+            "avg_ms": 4292.1,
+            "p50_ms": 5526.0,
+            "p95_ms": 5803.0,
+            "p99_ms": 5803.0,
+            "max_ms": 5803.0,
+            "seconds": 10.027998170893134
+          },
+          {
+            "records": 10,
+            "rec_per_sec": 0.430942,
+            "mb_per_sec": 21.55,
+            "avg_ms": 5555.0,
+            "p50_ms": 5663.0,
+            "p95_ms": 13447.0,
+            "p99_ms": 13447.0,
+            "max_ms": 13447.0,
+            "seconds": 23.20497886026426
+          }
+        ],
+        "median": {
+          "records": 10,
+          "rec_per_sec": 0.505459,
+          "mb_per_sec": 25.27,
+          "avg_ms": 9991.0,
+          "p50_ms": 14925.0,
+          "p95_ms": 15111.0,
+          "p99_ms": 15111.0,
+          "max_ms": 15111.0,
+          "seconds": 19.783998306489746
+        },
+        "failed": 0
+      }
+    },
+    "peak_mem_mib": 344.9,
+    "peak_pids": 13,
+    "peak_cpu_pct": 111.71,
+    "cold_boot_runs_s": [
+      3.45,
+      3.41,
+      3.41
+    ],
+    "cold_boot_port_open_s": 0.24108220401103608
+  },
+  "aerostream-native": {
+    "label": "AeroStream (native port)",
+    "cold_boot_s": 3.41,
+    "idle_mem_mib": 8.766,
+    "idle_pids": 11,
+    "workloads": {
+      "100B": {
+        "runs": [
+          {
+            "records": 500000,
+            "seconds": 5.148,
+            "rec_per_sec": 97125.09712509713,
+            "mb_per_sec": 9.262571060666764,
+            "avg_ms": 0.01026,
+            "p50_ms": 0.01,
+            "p95_ms": 0.01125,
+            "p99_ms": 0.01408,
+            "max_ms": 0.29681
+          },
+          {
+            "records": 500000,
+            "seconds": 5.189,
+            "rec_per_sec": 96357.67970707265,
+            "mb_per_sec": 9.18938443251349,
+            "avg_ms": 0.01034,
+            "p50_ms": 0.01002,
+            "p95_ms": 0.01162,
+            "p99_ms": 0.01495,
+            "max_ms": 1.72
+          },
+          {
+            "records": 500000,
+            "seconds": 5.096,
+            "rec_per_sec": 98116.16954474097,
+            "mb_per_sec": 9.357087091898057,
+            "avg_ms": 0.01016,
+            "p50_ms": 0.009980000000000001,
+            "p95_ms": 0.01084,
+            "p99_ms": 0.012310000000000001,
+            "max_ms": 1.84
+          }
+        ],
+        "median": {
+          "records": 500000,
+          "seconds": 5.148,
+          "rec_per_sec": 97125.09712509713,
+          "mb_per_sec": 9.262571060666764,
+          "avg_ms": 0.01026,
+          "p50_ms": 0.01,
+          "p95_ms": 0.01125,
+          "p99_ms": 0.01408,
+          "max_ms": 0.29681
+        },
+        "failed": 0
+      },
+      "1KB": {
+        "runs": [
+          {
+            "records": 300000,
+            "seconds": 4.12,
+            "rec_per_sec": 72815.53398058252,
+            "mb_per_sec": 71.10891990291262,
+            "avg_ms": 0.0137,
+            "p50_ms": 0.014,
+            "p95_ms": 0.01647,
+            "p99_ms": 0.02078,
+            "max_ms": 40.87
+          },
+          {
+            "records": 300000,
+            "seconds": 4.134,
+            "rec_per_sec": 72568.94049346879,
+            "mb_per_sec": 70.86810595065312,
+            "avg_ms": 0.01374,
+            "p50_ms": 0.01401,
+            "p95_ms": 0.016730000000000002,
+            "p99_ms": 0.02299,
+            "max_ms": 54.93
+          },
+          {
+            "records": 300000,
+            "seconds": 5.95,
+            "rec_per_sec": 50420.16806722689,
+            "mb_per_sec": 49.23844537815126,
+            "avg_ms": 0.01977,
+            "p50_ms": 0.01465,
+            "p95_ms": 0.038689999999999995,
+            "p99_ms": 0.04968,
+            "max_ms": 43.65
+          }
+        ],
+        "median": {
+          "records": 300000,
+          "seconds": 4.134,
+          "rec_per_sec": 72568.94049346879,
+          "mb_per_sec": 70.86810595065312,
+          "avg_ms": 0.01374,
+          "p50_ms": 0.01401,
+          "p95_ms": 0.016730000000000002,
+          "p99_ms": 0.02299,
+          "max_ms": 54.93
+        },
+        "failed": 0
+      },
+      "1MB": {
+        "runs": [
+          {
+            "records": 500,
+            "seconds": 0.49,
+            "rec_per_sec": 1020.4081632653061,
+            "mb_per_sec": 1020.4081632653061,
+            "avg_ms": 0.97921,
+            "p50_ms": 0.64834,
+            "p95_ms": 1.04,
+            "p99_ms": 1.62,
+            "max_ms": 49.34
+          },
+          {
+            "records": 500,
+            "seconds": 0.519,
+            "rec_per_sec": 963.3911368015414,
+            "mb_per_sec": 963.3911368015414,
+            "avg_ms": 1.04,
+            "p50_ms": 0.68414,
+            "p95_ms": 0.98797,
+            "p99_ms": 2.32,
+            "max_ms": 51.69
+          },
+          {
+            "records": 500,
+            "seconds": 0.491,
+            "rec_per_sec": 1018.3299389002037,
+            "mb_per_sec": 1018.3299389002037,
+            "avg_ms": 0.982,
+            "p50_ms": 0.6530800000000001,
+            "p95_ms": 0.9047000000000001,
+            "p99_ms": 2.13,
+            "max_ms": 49.6
+          }
+        ],
+        "median": {
+          "records": 500,
+          "seconds": 0.491,
+          "rec_per_sec": 1018.3299389002037,
+          "mb_per_sec": 1018.3299389002037,
+          "avg_ms": 0.982,
+          "p50_ms": 0.6530800000000001,
+          "p95_ms": 0.9047000000000001,
+          "p99_ms": 2.13,
+          "max_ms": 49.6
+        },
+        "failed": 0
+      },
+      "10MB": {
+        "runs": [
+          {
+            "records": 50,
+            "seconds": 4.047,
+            "rec_per_sec": 12.35483073881888,
+            "mb_per_sec": 123.54830738818879,
+            "avg_ms": 80.93,
+            "p50_ms": 9.67,
+            "p95_ms": 67.26,
+            "p99_ms": 2375.49,
+            "max_ms": 2375.49
+          },
+          {
+            "records": 50,
+            "seconds": 1.674,
+            "rec_per_sec": 29.868578255675033,
+            "mb_per_sec": 298.6857825567503,
+            "avg_ms": 33.47,
+            "p50_ms": 9.72,
+            "p95_ms": 53.15,
+            "p99_ms": 1019.86,
+            "max_ms": 1019.86
+          },
+          {
+            "records": 50,
+            "seconds": 1.675,
+            "rec_per_sec": 29.850746268656717,
+            "mb_per_sec": 298.5074626865672,
+            "avg_ms": 33.49,
+            "p50_ms": 9.72,
+            "p95_ms": 53.99,
+            "p99_ms": 1019.9,
+            "max_ms": 1019.9
+          }
+        ],
+        "median": {
+          "records": 50,
+          "seconds": 1.675,
+          "rec_per_sec": 29.850746268656717,
+          "mb_per_sec": 298.5074626865672,
+          "avg_ms": 33.49,
+          "p50_ms": 9.72,
+          "p95_ms": 53.99,
+          "p99_ms": 1019.9,
+          "max_ms": 1019.9
+        },
+        "failed": 0
+      },
+      "50MB": {
+        "runs": [
+          {
+            "records": 10,
+            "seconds": 0.695,
+            "rec_per_sec": 14.388489208633095,
+            "mb_per_sec": 719.4244604316548,
+            "avg_ms": 69.53,
+            "p50_ms": 62.14,
+            "p95_ms": 101.65,
+            "p99_ms": 101.65,
+            "max_ms": 101.65
+          },
+          {
+            "records": 10,
+            "seconds": 0.662,
+            "rec_per_sec": 15.105740181268882,
+            "mb_per_sec": 755.2870090634441,
+            "avg_ms": 66.15,
+            "p50_ms": 54.43,
+            "p95_ms": 92.68,
+            "p99_ms": 92.68,
+            "max_ms": 92.68
+          },
+          {
+            "records": 10,
+            "seconds": 1.427,
+            "rec_per_sec": 7.00770847932726,
+            "mb_per_sec": 350.38542396636296,
+            "avg_ms": 142.69,
+            "p50_ms": 56.99,
+            "p95_ms": 857.31,
+            "p99_ms": 857.31,
+            "max_ms": 857.31
+          }
+        ],
+        "median": {
+          "records": 10,
+          "seconds": 0.695,
+          "rec_per_sec": 14.388489208633095,
+          "mb_per_sec": 719.4244604316548,
+          "avg_ms": 69.53,
+          "p50_ms": 62.14,
+          "p95_ms": 101.65,
+          "p99_ms": 101.65,
+          "max_ms": 101.65
+        },
+        "failed": 0
+      }
+    },
+    "peak_mem_mib": 144.7,
+    "peak_pids": 15,
+    "peak_cpu_pct": 81.44,
+    "cold_boot_runs_s": [
+      3.45,
+      3.41,
+      3.41
+    ],
+    "cold_boot_port_open_s": 0.2186691380047705
+  }
+}

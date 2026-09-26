@@ -13,4 +13,4 @@ keywords:
   - raft
 home: https://quay.io/repository/gradientgeeks/aerostream
 sources:
-  - https://github.com/Uttam-Mahata/AeroMQ
+  - https://github.com/gradientgeeks/aerostream
