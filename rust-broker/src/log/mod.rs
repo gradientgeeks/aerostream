@@ -1,2 +1,7 @@
+pub mod compactor;
 pub mod manager;
-pub use manager::LogManager;
+
+#[allow(unused_imports)]
+pub use compactor::{CompactionStats, ExtractedKey, extract_key};
+#[allow(unused_imports)]
+pub use manager::{LogManager, LogSegment, PartitionLog};

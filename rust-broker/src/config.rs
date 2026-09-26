@@ -24,6 +24,7 @@ pub struct BrokerConfig {
     pub storage_dir: Option<PathBuf>,
 
     pub storage: StorageConfig,
+    pub tiered_storage: crate::storage::TieredStorageConfig,
     pub tls: TlsConfig,
     pub auth: AuthConfig,
 }
@@ -37,6 +38,12 @@ pub struct StorageConfig {
     pub max_retention_size: Option<u64>,
     /// Max age of a segment before it is eligible for deletion, in seconds.
     pub max_retention_age_secs: Option<u64>,
+    /// Enable log compaction for closed segments.
+    pub compaction_enabled: bool,
+    /// Dirty ratio threshold to trigger compaction (default 0.5).
+    pub dirty_ratio_threshold: f64,
+    /// Duration in seconds to retain tombstones before deleting them (default 86400 = 24h).
+    pub tombstone_retention_secs: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -72,6 +79,7 @@ impl Default for BrokerConfig {
             controller: "http://127.0.0.1:8001".to_string(),
             storage_dir: None,
             storage: StorageConfig::default(),
+            tiered_storage: crate::storage::TieredStorageConfig::default(),
             tls: TlsConfig::default(),
             auth: AuthConfig::default(),
         }
@@ -87,6 +95,10 @@ impl Default for StorageConfig {
             max_retention_size: Some(1024 * 1024 * 1024),
             // 7 days.
             max_retention_age_secs: Some(7 * 24 * 3600),
+            // Log compaction enabled by default
+            compaction_enabled: true,
+            dirty_ratio_threshold: 0.5,
+            tombstone_retention_secs: 86400,
         }
     }
 }

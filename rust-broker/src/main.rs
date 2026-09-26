@@ -9,6 +9,7 @@ mod log;
 mod net;
 mod grpc;
 pub mod kafka;
+pub mod storage;
 
 use config::BrokerConfig;
 
@@ -43,6 +44,26 @@ struct Args {
     /// Path to store physical partition log files
     #[arg(long)]
     storage_dir: Option<PathBuf>,
+
+    /// Tiered Storage Provider: s3, gcs, azure, local, disabled
+    #[arg(long)]
+    tiered_storage_provider: Option<String>,
+
+    /// AWS S3 / MinIO bucket for tiered storage
+    #[arg(long)]
+    s3_bucket: Option<String>,
+
+    /// Custom S3 endpoint URL (for MinIO, LocalStack, Ceph)
+    #[arg(long)]
+    s3_endpoint: Option<String>,
+
+    /// AWS region for S3 tiered storage
+    #[arg(long)]
+    s3_region: Option<String>,
+
+    /// Local directory path for tiered storage
+    #[arg(long)]
+    tiered_storage_dir: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -72,6 +93,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.storage_dir.is_some() {
         cfg.storage_dir = args.storage_dir;
+    }
+    if let Some(ref p) = args.tiered_storage_provider {
+        if let Ok(ptype) = p.parse::<storage::ProviderType>() {
+            cfg.tiered_storage.provider = ptype;
+            cfg.tiered_storage.enabled = ptype != storage::ProviderType::Disabled;
+        }
+    }
+    if let Some(b) = args.s3_bucket {
+        cfg.tiered_storage.s3.bucket = b;
+    }
+    if let Some(ep) = args.s3_endpoint {
+        cfg.tiered_storage.s3.endpoint_url = Some(ep);
+    }
+    if let Some(r) = args.s3_region {
+        cfg.tiered_storage.s3.region = Some(r);
+    }
+    if let Some(d) = args.tiered_storage_dir {
+        cfg.tiered_storage.local.root_path = d;
     }
 
     let storage_dir = cfg.resolved_storage_dir();
@@ -115,13 +154,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Arc::new(cfg);
 
     runtime.block_on(async move {
-        let log_manager = Arc::new(
-            log::LogManager::new(storage_dir, cfg.id).with_limits(
+        // Initialize Tiered Storage Provider via Factory
+        let tiered_provider = storage::StorageProviderFactory::create(&cfg.tiered_storage)
+            .unwrap_or_else(|e| {
+                tracing::warn!("[AeroMQ Broker] Failed to initialize tiered storage provider: {}, falling back to NullStorageProvider", e);
+                Arc::new(storage::NullStorageProvider::new())
+            });
+
+        // Initialize channel and offloader pipeline
+        let (offload_tx, offload_rx) = tokio::sync::mpsc::channel(1024);
+        if cfg.tiered_storage.enabled {
+            let offloader = storage::TieredStorageOffloader::new(tiered_provider.clone(), offload_rx);
+            offloader.spawn();
+            info!(
+                "[AeroMQ Broker] Tiered Storage enabled with provider '{}'",
+                tiered_provider.provider_name()
+            );
+        }
+
+        let mut log_manager_builder = log::LogManager::new(storage_dir, cfg.id)
+            .with_limits(
                 cfg.storage.max_segment_size,
                 cfg.storage.max_retention_size,
                 cfg.max_retention_age(),
-            ),
-        );
+            )
+            .with_compaction(
+                cfg.storage.compaction_enabled,
+                cfg.storage.dirty_ratio_threshold,
+                std::time::Duration::from_secs(cfg.storage.tombstone_retention_secs),
+            );
+
+        if cfg.tiered_storage.enabled {
+            log_manager_builder = log_manager_builder.with_tiered_storage(tiered_provider.clone(), offload_tx);
+        }
+
+        let log_manager = Arc::new(log_manager_builder);
+
+        // Spawn background log compaction cleaner loop (runs every 30 seconds)
+        if cfg.storage.compaction_enabled {
+            log_manager.clone().spawn_cleaner_loop(std::time::Duration::from_secs(30));
+            info!(
+                "[AeroMQ Broker] Background Log Compaction cleaner loop spawned (interval=30s, threshold={})",
+                cfg.storage.dirty_ratio_threshold
+            );
+        }
 
         // Spawn client registration & control plane heartbeat worker
         let grpc_log_manager = log_manager.clone();

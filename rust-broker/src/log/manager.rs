@@ -33,6 +33,15 @@ pub struct PartitionLog {
     pub max_retention_size: Option<u64>,
     pub max_retention_age: Option<std::time::Duration>,
 
+    // Compaction configuration
+    pub compaction_enabled: bool,
+    pub dirty_ratio_threshold: f64,
+    pub tombstone_retention: std::time::Duration,
+
+    // Tiered storage offloader and provider
+    pub offload_tx: Option<tokio::sync::mpsc::Sender<crate::storage::offloader::OffloadTask>>,
+    pub tiered_provider: Option<Arc<dyn crate::storage::TieredStorageProvider>>,
+
     // High-Watermark and replica tracking
     pub high_watermark: u64,
     pub replica_offsets: HashMap<u32, u64>,
@@ -146,6 +155,11 @@ impl PartitionLog {
             storage_base_dir,
             max_retention_size,
             max_retention_age,
+            compaction_enabled: true,
+            dirty_ratio_threshold: 0.5,
+            tombstone_retention: std::time::Duration::from_secs(86400),
+            offload_tx: None,
+            tiered_provider: None,
             high_watermark: 0,
             replica_offsets: HashMap::new(),
             replica_ids: Vec::new(),
@@ -214,6 +228,34 @@ impl PartitionLog {
         Ok(offset)
     }
 
+    /// Compacts closed segments using key-offset deduplication and tombstone eviction.
+    pub fn compact_partition_with_stats(&mut self) -> io::Result<crate::log::compactor::CompactionStats> {
+        if self.segments.len() <= 1 {
+            return Ok(crate::log::compactor::CompactionStats::default());
+        }
+        let active_seg = self.segments.pop().unwrap();
+        let mut closed = std::mem::take(&mut self.segments);
+        let res = crate::log::compactor::compact_segments(&self.partition_dir, &mut closed, self.tombstone_retention);
+        closed.push(active_seg);
+        self.segments = closed;
+        res
+    }
+
+    /// Compacts closed segments if compaction is enabled.
+    pub fn compact_partition(&mut self) -> io::Result<()> {
+        let _ = self.compact_partition_with_stats()?;
+        Ok(())
+    }
+
+    /// Computes the ratio of dirty (redundant / expired) bytes in closed segments.
+    pub fn compute_dirty_ratio(&self) -> io::Result<f64> {
+        if self.segments.len() <= 1 {
+            return Ok(0.0);
+        }
+        let closed = &self.segments[..self.segments.len() - 1];
+        crate::log::compactor::compute_dirty_ratio(closed, self.tombstone_retention)
+    }
+
     fn roll_over(&mut self) -> io::Result<()> {
         self.active_log_file.flush()?;
         self.active_idx_file.flush()?;
@@ -234,6 +276,18 @@ impl PartitionLog {
             "[AeroMQ Broker] Segment {} rolled over and copied to cold storage: {:?}",
             old_active_seg.base_offset, cold_log_path
         );
+
+        // Dispatch offload task to tiered object storage if configured
+        if let Some(ref tx) = self.offload_tx {
+            let task = crate::storage::offloader::OffloadTask::new(
+                &self.topic,
+                self.partition,
+                old_active_seg.base_offset,
+                &cold_log_path,
+                &cold_idx_path,
+            );
+            let _ = tx.try_send(task);
+        }
 
         // Create new active segment
         let new_base_offset = self.next_offset;
@@ -498,6 +552,16 @@ pub struct LogManager {
     pub max_segment_size: u64,
     pub max_retention_size: Option<u64>,
     pub max_retention_age: Option<std::time::Duration>,
+
+    // Compaction configuration
+    pub compaction_enabled: bool,
+    pub dirty_ratio_threshold: f64,
+    pub tombstone_retention: std::time::Duration,
+
+    // Tiered storage offloader and provider
+    pub offload_tx: Option<tokio::sync::mpsc::Sender<crate::storage::offloader::OffloadTask>>,
+    pub tiered_provider: Option<Arc<dyn crate::storage::TieredStorageProvider>>,
+
     partitions: Mutex<HashMap<(String, u32), Arc<Mutex<PartitionLog>>>>,
 }
 
@@ -509,6 +573,11 @@ impl LogManager {
             max_segment_size: 210, // 210 bytes default for testing/prototype segment rolling
             max_retention_size: Some(256 * 1024), // 256KB default
             max_retention_age: Some(std::time::Duration::from_secs(3600)), // 1 hour default
+            compaction_enabled: true,
+            dirty_ratio_threshold: 0.5,
+            tombstone_retention: std::time::Duration::from_secs(86400),
+            offload_tx: None,
+            tiered_provider: None,
             partitions: Mutex::new(HashMap::new()),
         }
     }
@@ -525,6 +594,28 @@ impl LogManager {
         self
     }
 
+    pub fn with_compaction(
+        mut self,
+        enabled: bool,
+        dirty_ratio_threshold: f64,
+        tombstone_retention: std::time::Duration,
+    ) -> Self {
+        self.compaction_enabled = enabled;
+        self.dirty_ratio_threshold = dirty_ratio_threshold;
+        self.tombstone_retention = tombstone_retention;
+        self
+    }
+
+    pub fn with_tiered_storage(
+        mut self,
+        provider: Arc<dyn crate::storage::TieredStorageProvider>,
+        offload_tx: tokio::sync::mpsc::Sender<crate::storage::offloader::OffloadTask>,
+    ) -> Self {
+        self.tiered_provider = Some(provider);
+        self.offload_tx = Some(offload_tx);
+        self
+    }
+
     pub async fn get_all_offsets(&self) -> Vec<(String, u32, i64)> {
         let parts = self.partitions.lock().await;
         let mut offsets = Vec::new();
@@ -535,6 +626,35 @@ impl LogManager {
         offsets
     }
 
+    pub async fn compact_eligible_partitions(&self) -> io::Result<usize> {
+        let parts = self.partitions.lock().await;
+        let mut compacted = 0;
+        for part_arc in parts.values() {
+            let mut part = part_arc.lock().await;
+            if !part.compaction_enabled {
+                continue;
+            }
+            let dirty_ratio = part.compute_dirty_ratio().unwrap_or(0.0);
+            if dirty_ratio >= part.dirty_ratio_threshold {
+                part.compact_partition()?;
+                compacted += 1;
+            }
+        }
+        Ok(compacted)
+    }
+
+    pub fn spawn_cleaner_loop(self: Arc<Self>, interval: std::time::Duration) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            loop {
+                ticker.tick().await;
+                if let Err(e) = self.compact_eligible_partitions().await {
+                    tracing::error!("[AeroMQ Broker] Background compaction cleaner error: {:?}", e);
+                }
+            }
+        })
+    }
+
     pub async fn get_partition(&self, topic: &str, partition: u32) -> io::Result<Arc<Mutex<PartitionLog>>> {
         let mut parts = self.partitions.lock().await;
         let key = (topic.to_string(), partition);
@@ -542,7 +662,7 @@ impl LogManager {
             return Ok(log.clone());
         }
 
-        let log = PartitionLog::new(
+        let mut log = PartitionLog::new(
             &self.base_dir,
             topic,
             partition,
@@ -551,6 +671,12 @@ impl LogManager {
             self.max_retention_size,
             self.max_retention_age,
         )?;
+        log.compaction_enabled = self.compaction_enabled;
+        log.dirty_ratio_threshold = self.dirty_ratio_threshold;
+        log.tombstone_retention = self.tombstone_retention;
+        log.offload_tx = self.offload_tx.clone();
+        log.tiered_provider = self.tiered_provider.clone();
+
         let shared = Arc::new(Mutex::new(log));
         parts.insert(key, shared.clone());
         Ok(shared)
@@ -604,9 +730,9 @@ mod tests {
 
         // Write more to trigger retention deletion of segment 0 locally
         // Total retention limit is 250 bytes.
-        let off3 = log.append(&[4; 40]).unwrap(); // segment 1 size = 80b
-        let off4 = log.append(&[5; 40]).unwrap(); // rollover! segment 2 starts at offset 4
-        let off5 = log.append(&[6; 40]).unwrap(); // segment 2 size = 80b
+        let _off3 = log.append(&[4; 40]).unwrap(); // segment 1 size = 80b
+        let _off4 = log.append(&[5; 40]).unwrap(); // rollover! segment 2 starts at offset 4
+        let _off5 = log.append(&[6; 40]).unwrap(); // segment 2 size = 80b
 
         // Local segments:
         // Segment 0 (offset 0): size is 80b log + 32b idx = 112b
