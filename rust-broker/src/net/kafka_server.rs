@@ -112,7 +112,7 @@ pub async fn handle_kafka_frame(
         }
         0 => {
             // Produce
-            let resp_opt = handle_produce(correlation_id, api_version, &mut cursor, log_manager).await?;
+            let resp_opt = handle_produce(correlation_id, api_version, &mut cursor, log_manager, cfg).await?;
             Ok(resp_opt)
         }
         1 => {
@@ -125,10 +125,15 @@ pub async fn handle_kafka_frame(
             let resp = handle_list_offsets(correlation_id, api_version, &mut cursor, log_manager).await?;
             Ok(Some(resp))
         }
-        22 => {
-            // InitProducerId (ApiKey 22)
-            let resp = handle_init_producer_id(correlation_id, api_version, &mut cursor)?;
-            Ok(Some(resp))
+        22 | 24 | 25 | 26 | 28 => {
+            // Transactions: InitProducerId, AddPartitionsToTxn, AddOffsetsToTxn, EndTxn, TxnOffsetCommit
+            let rest = &frame[cursor.position() as usize..];
+            Ok(Some(crate::txn::api::handle_frame(api_key, api_version, correlation_id, rest, log_manager, cfg).await))
+        }
+        76..=79 => {
+            // Share groups (KIP-932): ShareGroupHeartbeat/Describe, ShareFetch, ShareAcknowledge
+            let rest = &frame[cursor.position() as usize..];
+            Ok(Some(crate::share::api::handle_frame(api_key, api_version, correlation_id, rest, log_manager, cfg).await))
         }
         _ => {
             warn!("[AeroMQ Kafka] Unsupported API key: {}", api_key);
@@ -154,17 +159,19 @@ fn handle_api_versions(
     buf.put_i16(0); // ErrorCode: 0 (NONE)
 
     // Supported API keys list
-    let api_keys: [(i16, i16, i16); 6] = [
+    let mut api_keys: Vec<(i16, i16, i16)> = vec![
         (0, 0, 7),  // Produce: v0 - v7
         (1, 0, 7),  // Fetch: v0 - v7
         (2, 0, 2),  // ListOffsets: v0 - v2
         (3, 0, 5),  // Metadata: v0 - v5
         (18, 0, 3), // ApiVersions: v0 - v3
-        (22, 0, 4), // InitProducerId: v0 - v4
     ];
+    // Transactions (22/24/25/26/28) and share groups (76-79).
+    api_keys.extend_from_slice(&crate::txn::api::TXN_API_VERSIONS);
+    api_keys.extend_from_slice(&crate::share::api::SHARE_API_VERSIONS);
 
     buf.put_i32(api_keys.len() as i32);
-    for (key, min_v, max_v) in api_keys {
+    for (key, min_v, max_v) in api_keys.iter().copied() {
         buf.put_i16(key);
         buf.put_i16(min_v);
         buf.put_i16(max_v);
@@ -176,36 +183,6 @@ fn handle_api_versions(
 
     if api_version >= 3 {
         buf.put_u8(0); // Empty tagged fields buffer
-    }
-
-    Ok(buf.to_vec())
-}
-
-/// Handler for InitProducerId (API Key 22)
-fn handle_init_producer_id(
-    correlation_id: i32,
-    api_version: i16,
-    cursor: &mut io::Cursor<&[u8]>,
-) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    let _transactional_id = read_kafka_string(cursor)?;
-    let _transaction_timeout_ms = if cursor.remaining() >= 4 {
-        cursor.get_i32()
-    } else {
-        60000
-    };
-
-    let producer_id = crate::kafka::handlers::allocate_producer_id();
-    let producer_epoch = 0i16;
-
-    let mut buf = BytesMut::new();
-    buf.put_i32(correlation_id);
-    buf.put_i32(0); // ThrottleTimeMs
-    buf.put_i16(0); // ErrorCode: 0 (NONE)
-    buf.put_i64(producer_id);
-    buf.put_i16(producer_epoch);
-
-    if api_version >= 2 {
-        buf.put_u8(0); // empty tagged fields
     }
 
     Ok(buf.to_vec())
@@ -309,10 +286,13 @@ async fn handle_produce(
     api_version: i16,
     cursor: &mut io::Cursor<&[u8]>,
     log_manager: &Arc<LogManager>,
+    cfg: &Arc<BrokerConfig>,
 ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
-    if api_version >= 3 {
-        let _transactional_id = read_kafka_string(cursor)?;
-    }
+    let transactional_id = if api_version >= 3 {
+        read_kafka_string(cursor)?
+    } else {
+        None
+    };
 
     if cursor.remaining() < 6 {
         return Err("Produce request truncated".into());
@@ -340,22 +320,43 @@ async fn handle_produce(
                 let mut records_data = vec![0u8; records_size as usize];
                 cursor.copy_to_slice(&mut records_data);
 
-                // Detect modern RecordBatch (magic byte 2 at index 16) with PID and sequence
-                let (producer_id, base_sequence, records_count) = if records_data.len() >= 61 && records_data[16] == 2 {
-                    let pid = i64::from_be_bytes(records_data[43..51].try_into().unwrap());
-                    let seq = i32::from_be_bytes(records_data[53..57].try_into().unwrap());
-                    let count = i32::from_be_bytes(records_data[57..61].try_into().unwrap());
-                    (pid, seq, count)
-                } else {
-                    (-1i64, -1i32, 1i32)
-                };
+                // Modern RecordBatch payloads (idempotent / transactional aware, one record per offset).
+                let mut handled = false;
+                if crate::txn::batch::is_magic2(&records_data) {
+                    match log_manager.get_partition(&topic_name, partition_index as u32).await {
+                        Ok(part_log) => {
+                            let coord = crate::txn::coordinator_for(log_manager, cfg);
+                            let mut guard = part_log.lock().await;
+                            if let Some(outcome) = crate::txn::produce::append_payload(
+                                &mut guard,
+                                &records_data,
+                                &coord,
+                                transactional_id.as_deref(),
+                                &topic_name,
+                                partition_index,
+                            ) {
+                                error_code = outcome.error;
+                                appended_offset = outcome.base_offset;
+                                handled = true;
+                            }
+                        }
+                        Err(e) => {
+                            error!("[AeroMQ Kafka] Failed to get partition {}-{}: {:?}", topic_name, partition_index, e);
+                            error_code = 3; // UNKNOWN_TOPIC_OR_PARTITION
+                            handled = true;
+                        }
+                    }
+                }
 
+                // Legacy MessageSet / raw payloads keep the original path.
+                let (producer_id, base_sequence, records_count) = (-1i64, -1i32, 1i32);
+
+                if !handled {
                 match log_manager.get_partition(&topic_name, partition_index as u32).await {
                     Ok(part_log) => {
                         let mut guard = part_log.lock().await;
                         match guard.validate_idempotent_produce(producer_id, base_sequence) {
                             Ok(Some(cached_offset)) => {
-                                // Duplicate batch! Return duplicate ACK with cached offset without writing to disk
                                 appended_offset = cached_offset;
                                 error_code = 0;
                             }
@@ -381,6 +382,7 @@ async fn handle_produce(
                         error!("[AeroMQ Kafka] Failed to get partition {}-{}: {:?}", topic_name, partition_index, e);
                         error_code = 3; // UNKNOWN_TOPIC_OR_PARTITION
                     }
+                }
                 }
             }
 
@@ -440,8 +442,9 @@ async fn handle_fetch(
     if api_version >= 3 && cursor.remaining() >= 4 {
         let _max_bytes = cursor.get_i32();
     }
+    let mut isolation_level = 0i8;
     if api_version >= 4 && cursor.remaining() >= 1 {
-        let _isolation_level = cursor.get_i8();
+        isolation_level = cursor.get_i8();
     }
     if api_version >= 7 && cursor.remaining() >= 8 {
         let _session_id = cursor.get_i32();
@@ -458,7 +461,7 @@ async fn handle_fetch(
 
         for _ in 0..partitions_count {
             let partition_index = cursor.get_i32();
-            if api_version >= 5 && cursor.remaining() >= 4 {
+            if api_version >= 9 && cursor.remaining() >= 4 {
                 let _current_leader_epoch = cursor.get_i32();
             }
             let fetch_offset = cursor.get_i64();
@@ -468,15 +471,22 @@ async fn handle_fetch(
             let partition_max_bytes = cursor.get_i32();
 
             let mut high_watermark = 0i64;
+            let mut last_stable_offset = 0i64;
+            let mut aborted: Option<Vec<(i64, i64)>> = None;
             let mut record_set = Vec::new();
             let mut error_code = 0i16;
 
             match log_manager.get_partition(&topic_name, partition_index as u32).await {
                 Ok(part_log) => {
                     let mut guard = part_log.lock().await;
-                    high_watermark = guard.high_watermark as i64;
+                    // Transaction-aware visibility: read_committed is capped at the LSO and
+                    // receives the list of aborted transactions overlapping the fetch.
+                    let view = crate::txn::produce::fetch_view(&guard, fetch_offset, isolation_level);
+                    high_watermark = view.high_watermark;
+                    last_stable_offset = view.last_stable_offset;
+                    aborted = view.aborted;
 
-                    if (fetch_offset as u64) < guard.high_watermark {
+                    if fetch_offset >= 0 && fetch_offset < view.upper_bound {
                         let max_read = (partition_max_bytes as u32).min(32 * 1024 * 1024);
                         if let Ok(Some((mut file, position, bytes_to_read))) =
                             guard.read_from_offset(fetch_offset as u64, max_read)
@@ -495,7 +505,7 @@ async fn handle_fetch(
                 }
             }
 
-            part_results.push((partition_index, error_code, high_watermark, record_set));
+            part_results.push((partition_index, error_code, high_watermark, last_stable_offset, aborted, record_set));
         }
 
         topic_results.push((topic_name, part_results));
@@ -517,18 +527,28 @@ async fn handle_fetch(
     for (topic, parts) in topic_results {
         put_kafka_string(&mut buf, Some(&topic));
         buf.put_i32(parts.len() as i32);
-        for (part_idx, err_code, hw, records) in parts {
+        for (part_idx, err_code, hw, lso, aborted, records) in parts {
             buf.put_i32(part_idx);
             buf.put_i16(err_code);
             buf.put_i64(hw);
             if api_version >= 4 {
-                buf.put_i64(hw); // LastStableOffset
+                buf.put_i64(lso); // LastStableOffset
             }
             if api_version >= 5 {
                 buf.put_i64(0); // LogStartOffset
             }
             if api_version >= 4 {
-                buf.put_i32(0); // AbortedTransactions count: 0
+                match aborted {
+                    // read_uncommitted: null array
+                    None => buf.put_i32(-1),
+                    Some(list) => {
+                        buf.put_i32(list.len() as i32);
+                        for (pid, first_offset) in list {
+                            buf.put_i64(pid);
+                            buf.put_i64(first_offset);
+                        }
+                    }
+                }
             }
             buf.put_i32(records.len() as i32);
             buf.put_slice(&records);
@@ -550,8 +570,9 @@ async fn handle_list_offsets(
     }
 
     let _replica_id = cursor.get_i32();
+    let mut isolation_level = 0i8;
     if api_version >= 2 && cursor.remaining() >= 1 {
-        let _isolation_level = cursor.get_i8();
+        isolation_level = cursor.get_i8();
     }
 
     let topics_count = cursor.get_i32();
@@ -576,8 +597,12 @@ async fn handle_list_offsets(
                     // Earliest offset
                     offset = 0;
                 } else {
-                    // Latest offset (timestamp == -1 or current)
-                    offset = guard.next_offset as i64;
+                    // Latest offset (timestamp == -1 or current); read_committed => LSO
+                    offset = if isolation_level == 1 {
+                        guard.txn_index.lso(guard.high_watermark) as i64
+                    } else {
+                        guard.next_offset as i64
+                    };
                 }
             }
 
@@ -770,7 +795,16 @@ mod tests {
         assert_eq!(cursor.get_i32(), 1234); // correlation_id
         assert_eq!(cursor.get_i16(), 0);    // error_code: NONE
         let num_keys = cursor.get_i32();
-        assert_eq!(num_keys, 6);
+        assert!(num_keys >= 6);
+        let mut keys = Vec::new();
+        for _ in 0..num_keys {
+            keys.push(cursor.get_i16());
+            cursor.advance(4); // min/max version
+        }
+        // Transactions (22/24/25/26/28) and share groups (76-79) are advertised.
+        for k in [22i16, 24, 25, 26, 28, 76, 77, 78, 79] {
+            assert!(keys.contains(&k), "missing api key {}", k);
+        }
     }
 
     #[tokio::test]

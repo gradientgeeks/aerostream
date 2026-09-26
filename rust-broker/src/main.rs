@@ -8,6 +8,8 @@ mod config;
 mod log;
 mod net;
 mod grpc;
+mod txn;
+mod share;
 pub mod kafka;
 pub mod storage;
 

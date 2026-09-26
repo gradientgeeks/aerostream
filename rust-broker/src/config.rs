@@ -27,6 +27,10 @@ pub struct BrokerConfig {
     pub tiered_storage: crate::storage::TieredStorageConfig,
     pub tls: TlsConfig,
     pub auth: AuthConfig,
+    /// Transaction coordinator settings (`[txn]`).
+    pub txn: crate::txn::TxnConfig,
+    /// Share group (KIP-932) settings (`[share]`).
+    pub share: crate::share::ShareConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -82,6 +86,8 @@ impl Default for BrokerConfig {
             tiered_storage: crate::storage::TieredStorageConfig::default(),
             tls: TlsConfig::default(),
             auth: AuthConfig::default(),
+            txn: crate::txn::TxnConfig::default(),
+            share: crate::share::ShareConfig::default(),
         }
     }
 }
