@@ -595,31 +595,34 @@ mat-sidenav,
 
   /* Menubar Toggle Button (Directly Below Logo in Top Navbar) */
   .sidebar-menubar-container {
-    padding: 8px 16px;
+    padding: 8px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
+    width: 100%;
 
     .sidebar-menubar-btn {
       width: 100%;
-      height: 36px;
-      line-height: 36px;
-      padding: 0;
-      border-radius: 6px;
+      height: 40px;
+      padding: 0 12px;
+      border-radius: 8px;
       display: flex;
+      flex-direction: row;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       color: var(--app-text-muted);
       background-color: transparent;
       border: 1px solid transparent;
-      font-size: 0.82rem;
+      font-size: 0.86rem;
       font-weight: 500;
+      font-family: inherit;
       cursor: pointer;
+      outline: none;
       transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 
       .menubar-toggle-icon-wrap {
-        width: 36px;
-        height: 36px;
+        width: 24px;
+        height: 24px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -639,52 +642,17 @@ mat-sidenav,
         text-align: left;
         white-space: nowrap;
         overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 0.86rem;
+        line-height: 1;
       }
 
       &:hover {
         background-color: var(--app-surface-hover);
         color: var(--app-text);
-        border-color: var(--app-border);
 
         .menubar-toggle-icon {
           color: var(--app-primary-text, var(--app-primary));
-        }
-      }
-
-      &.collapsed-menubar-btn {
-        width: 36px;
-        min-width: 36px;
-        height: 36px;
-        line-height: 36px;
-        padding: 0;
-        margin: 0 auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: transparent;
-        border: none;
-        border-radius: 8px;
-
-        .menubar-toggle-icon-wrap {
-          width: 36px;
-          height: 36px;
-        }
-
-        .menubar-toggle-icon {
-          font-size: 20px;
-          width: 20px;
-          height: 20px;
-          color: var(--app-text-muted);
-        }
-
-        &:hover {
-          background-color: var(--app-surface-hover);
-          color: var(--app-text);
-          border: none;
-
-          .menubar-toggle-icon {
-            color: var(--app-primary-text, var(--app-primary));
-          }
         }
       }
     }
@@ -831,6 +799,43 @@ mat-sidenav,
       justify-content: center;
       align-items: center;
       width: 100%;
+
+      .sidebar-menubar-btn {
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        padding: 0;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: transparent;
+        border: 1px solid transparent;
+        border-radius: 8px;
+
+        .menubar-toggle-icon-wrap {
+          width: 24px;
+          height: 24px;
+          margin: 0;
+        }
+
+        .menubar-toggle-icon {
+          font-size: 20px;
+          width: 20px;
+          height: 20px;
+          color: var(--app-text-muted);
+        }
+
+        &:hover {
+          background-color: var(--app-surface-hover);
+          color: var(--app-text);
+          border-color: var(--app-border);
+
+          .menubar-toggle-icon {
+            color: var(--app-primary-text, var(--app-primary));
+          }
+        }
+      }
     }
 
     .sidebar-scroll-container {

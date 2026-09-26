@@ -134,13 +134,12 @@
         <!-- Top: Menubar Toggle Button Properly Aligned Below Logo in Navbar -->
         <div class="sidebar-menubar-container">
           <button
-            mat-button
+            type="button"
             (click)="toggleSidebar()"
             class="sidebar-menubar-btn"
             [class.collapsed-menubar-btn]="!isMobile() && isSidebarCollapsed()"
-            [matTooltip]="isSidebarCollapsed() ? 'Expand sidebar (Menu)' : 'Collapse sidebar'"
-            [matTooltipPosition]="isSidebarCollapsed() ? 'right' : 'below'"
-            aria-label="Toggle sidebar expand and collapse"
+            [title]="isSidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
+            [attr.aria-label]="isSidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
           >
             <div class="menubar-toggle-icon-wrap">
               <mat-icon class="menubar-toggle-icon">{{ (!isMobile() && isSidebarCollapsed()) ? 'menu' : 'menu_open' }}</mat-icon>
