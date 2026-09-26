@@ -74,7 +74,8 @@ broker:
   start** (a marker file on its volume, or always when `controller.replicas=1`); every other start - and
   every other pod - asks the current leader to (re)add it as a voter, retrying against all controllers.
 * **Readiness** of a controller requires that it sees a Raft leader, so a rolling update never replaces
-  the next controller before the previous one has rejoined the quorum.
+  the next controller before the previous one has rejoined the quorum (this also protects clusters running
+  an image without the persistent Raft store).
 * **Brokers** get `--id` from the pod ordinal and use their **pod IP** as `--host` (the broker binds to it
   and advertises it in Kafka Metadata). With `broker.rack.enabled` an init container reads the node's
   topology label through the Kubernetes API (the chart creates a `nodes/get` ClusterRole for this).
@@ -83,26 +84,24 @@ broker:
 ## Operations
 
 **Upgrade:** `helm upgrade aero deploy/helm/aerostream --reuse-values --set image.tag=<new>`.
-Verified: controllers roll one at a time and the cluster keeps its leader, brokers and topics.
+Controllers roll one at a time; the cluster keeps its leader, brokers and topics.
 
-**Recover from total controller loss.** The controller keeps its Raft log in memory (only snapshots go
-to disk), so if *all* controllers are lost at once the cluster metadata (topics, broker registry) is lost
-and, because the bootstrap marker exists, nothing re-forms a cluster. To rebuild it:
-
-```bash
-kubectl exec <release>-aerostream-controller-0 -- rm /data/.aerostream-bootstrapped
-kubectl delete pod -l app.kubernetes.io/component=controller      # recreate all controllers
-```
-
-Topics must then be re-created. Broker data stays on the broker volumes; whether it is served again depends on the new partition-to-broker assignment, so treat this as a metadata-loss event.
+**Controller state lives on the PVCs.** Each controller keeps its Raft log, term/vote (BoltDB `raft.db`) and
+snapshots on its own PersistentVolume at `/data/controller`, the same way KRaft keeps its metadata log.
+A pod restart, a rolling upgrade, or even all controllers going down at once recovers the cluster
+(topics, broker registry, consumer offsets) from disk. This needs an image that includes the persistent
+Raft store (any build after commit `c73b24c`); older images keep the log in memory, and for those the
+chart's safeguards (bootstrap marker, leader-aware readiness) apply, and losing every controller at once
+loses cluster metadata. To force a re-bootstrap of such a cluster:
+`kubectl exec <release>-aerostream-controller-0 -- rm /data/.aerostream-bootstrapped`, then delete the controller pods.
 
 **Scaling controllers down:** set `controller.leaveOnShutdown=true` for the scale-down so pods remove
 themselves from the Raft configuration, then turn it off again.
 
 ## Known limitations
 
-* **Raft state is in memory** (see above): never run more than one controller without persistence, and
-  never take all controllers down at once. Prefer `maxUnavailable: 1` and drain nodes one at a time.
+* **Run more than one controller only with `controller.persistence.enabled=true`.** Without a volume the
+  Raft state is in memory and a restarted controller has to catch up from its peers.
 * **Quotas and topic compression set through the REST API live in each controller process**, not in Raft;
   with 3 controllers a request lands on an arbitrary replica. Configure them declaratively with
   `broker.extraConfig` instead.
