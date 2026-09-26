@@ -32,12 +32,19 @@ func NewRaftNode(cfg appconfig.ControllerConfig) (*RaftNode, error) {
 	config.CommitTimeout = cfg.Raft.CommitTimeout()
 
 	// Setup TCP transport
-	addr, err := net.ResolveTCPAddr("tcp", raftAddr)
+	bindAddr, err := net.ResolveTCPAddr("tcp", raftAddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve raft addr %s: %w", raftAddr, err)
 	}
+	advertiseAddr := bindAddr
+	if bindAddr.IP == nil || bindAddr.IP.IsUnspecified() {
+		advertiseAddr = &net.TCPAddr{
+			IP:   net.ParseIP("127.0.0.1"),
+			Port: bindAddr.Port,
+		}
+	}
 
-	transport, err := raft.NewTCPTransport(raftAddr, addr, 3, 10*time.Second, os.Stderr)
+	transport, err := raft.NewTCPTransport(raftAddr, advertiseAddr, 3, 10*time.Second, os.Stderr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tcp transport: %w", err)
 	}

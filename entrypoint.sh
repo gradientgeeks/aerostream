@@ -34,7 +34,7 @@ trap cleanup SIGTERM SIGINT
 echo "[1/2] Starting Go Controller (Raft & Management)..."
 controller \
     -id "${NODE_ID}" \
-    -raft-addr "0.0.0.0:${RAFT_PORT}" \
+    -raft-addr "127.0.0.1:${RAFT_PORT}" \
     -grpc-addr "0.0.0.0:${GRPC_PORT}" \
     -http-addr "0.0.0.0:${HTTP_PORT}" \
     -data-dir "${DATA_DIR}/controller" \
