@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for AeroMQ High-Performance Rust Broker
 # Stage 1: Build
-FROM rust:1.80-slim-bookworm AS builder
+FROM rust:slim-bookworm AS builder
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends protobuf-compiler pkg-config && \

@@ -20,7 +20,7 @@ RUN cd go-controller && \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /bin/controller cmd/controller/main.go
 
 # --- Stage 3: Build Rust Zero-Copy Broker ---
-FROM rust:1.80-slim-bookworm AS broker-builder
+FROM rust:slim-bookworm AS broker-builder
 RUN apt-get update && \
     apt-get install -y --no-install-recommends protobuf-compiler pkg-config && \
     rm -rf /var/lib/apt/lists/*
