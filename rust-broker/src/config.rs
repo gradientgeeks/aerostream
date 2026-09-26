@@ -33,6 +33,10 @@ pub struct BrokerConfig {
     pub quotas: Vec<crate::kafka::quota::QuotaEntry>,
     /// Iceberg topics (`[iceberg]` section).
     pub iceberg: crate::iceberg::IcebergConfig,
+    /// Transaction coordinator settings (`[txn]`).
+    pub txn: crate::txn::TxnConfig,
+    /// Share group (KIP-932) settings (`[share]`).
+    pub share: crate::share::ShareConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -91,6 +95,8 @@ impl Default for BrokerConfig {
             compression_type: "producer".to_string(),
             quotas: Vec::new(),
             iceberg: crate::iceberg::IcebergConfig::default(),
+            txn: crate::txn::TxnConfig::default(),
+            share: crate::share::ShareConfig::default(),
         }
     }
 }

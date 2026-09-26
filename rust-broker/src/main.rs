@@ -9,6 +9,8 @@ mod log;
 mod net;
 mod grpc;
 mod iceberg;
+mod txn;
+mod share;
 pub mod kafka;
 pub mod storage;
 

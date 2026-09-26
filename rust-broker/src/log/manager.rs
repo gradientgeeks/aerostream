@@ -53,6 +53,9 @@ pub struct PartitionLog {
     // Idempotent producer sequence tracking
     pub producer_tracker: ProducerStateTracker,
     pub producer_states: HashMap<i64, ProducerState>,
+
+    // Transaction index (ongoing txns for LSO, aborted txns for read_committed fetch)
+    pub txn_index: crate::txn::PartitionTxnIndex,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -155,6 +158,7 @@ impl PartitionLog {
         // Put seek back to end
         active_idx_file.seek(SeekFrom::End(0))?;
 
+        let partition_dir_for_txn = partition_dir.clone();
         let mut log = Self {
             topic: topic.to_string(),
             partition,
@@ -178,6 +182,7 @@ impl PartitionLog {
             replica_ids: Vec::new(),
             producer_tracker: ProducerStateTracker::new(),
             producer_states: HashMap::new(),
+            txn_index: crate::txn::PartitionTxnIndex::open(&partition_dir_for_txn),
         };
         log.recompute_high_watermark();
         Ok(log)
@@ -651,6 +656,11 @@ pub struct LogManager {
     pub tiered_provider: Option<Arc<dyn crate::storage::TieredStorageProvider>>,
 
     partitions: Mutex<HashMap<(String, u32), Arc<Mutex<PartitionLog>>>>,
+
+    /// Lazily-created transaction coordinator (see `crate::txn`).
+    pub txn_coord: std::sync::OnceLock<Arc<crate::txn::TxnCoordinator>>,
+    /// Lazily-created share-group coordinator (see `crate::share`).
+    pub share_coord: std::sync::OnceLock<Arc<crate::share::ShareCoordinator>>,
 }
 
 impl LogManager {
@@ -667,7 +677,13 @@ impl LogManager {
             offload_tx: None,
             tiered_provider: None,
             partitions: Mutex::new(HashMap::new()),
+            txn_coord: std::sync::OnceLock::new(),
+            share_coord: std::sync::OnceLock::new(),
         }
+    }
+
+    pub fn base_dir(&self) -> &Path {
+        &self.base_dir
     }
 
     pub fn with_limits(

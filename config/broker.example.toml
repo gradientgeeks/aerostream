@@ -59,3 +59,27 @@ enabled = false
 # name = "orders"
 # mode = "json"                                         # "key_value" (default) or "json"
 # json_fields = ["user:string", "amount:double", "qty:long"]
+# ---------------------------------------------------------------------------
+# Transactions (KIP-98 / KIP-890 TV1): coordinator runs inside the broker.
+# State: <storage_dir>/__txn_state/txn.journal (+ per-partition txn.index).
+# ---------------------------------------------------------------------------
+[txn]
+max_timeout_ms = 900000                        # cap for transaction.timeout.ms
+transactional_id_expiration_ms = 604800000     # 7 days idle -> transactional id expired
+sweep_interval_ms = 10000                      # timeout abort / Prepare* recovery sweeper
+
+# ---------------------------------------------------------------------------
+# Share groups (KIP-932): ShareGroupHeartbeat/Describe, ShareFetch, ShareAcknowledge.
+# State: <storage_dir>/__share_state/
+# ---------------------------------------------------------------------------
+[share]
+heartbeat_interval_ms = 5000
+session_timeout_ms = 45000
+lock_timeout_ms = 30000            # acquisition lock duration
+max_delivery_attempts = 5          # then the record is archived (and sent to the DLQ if configured)
+max_in_flight = 2000               # per share-partition in-flight record cap
+auto_offset_reset = "latest"       # or "earliest"
+isolation_level = "read_uncommitted"   # or "read_committed"
+default_max_records = 500
+# dlq_topic = "{topic}.dlq"        # optional dead-letter topic template ({topic}, {group})
+sweep_interval_ms = 1000
