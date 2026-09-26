@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for AeroMQ High-Performance Rust Broker
+# Multi-stage Dockerfile for AeroStream High-Performance Rust Broker
 # Stage 1: Build
 FROM rust:slim-bookworm AS builder
 

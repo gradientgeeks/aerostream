@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: aeromq-config
-  namespace: aeromq
+  name: aerostream-config
+  namespace: aerostream
   labels:
-    app.kubernetes.io/name: aeromq
-    app.kubernetes.io/part-of: aeromq
+    app.kubernetes.io/name: aerostream
+    app.kubernetes.io/part-of: aerostream
 data:
   controller.toml: |
-    # AeroMQ Go Controller Production Configuration
+    # AeroStream Go Controller Production Configuration
     data_dir = "/data"
     raft_addr = "0.0.0.0:7001"
     grpc_addr = "0.0.0.0:8001"
@@ -32,7 +32,7 @@ data:
     token = ""
 
   broker.toml: |
-    # AeroMQ Rust Storage Broker Production Configuration
+    # AeroStream Rust Storage Broker Production Configuration
     data_port = 9091
     storage_dir = "/data"
 

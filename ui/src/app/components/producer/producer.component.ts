@@ -16,7 +16,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
 import { MatBadgeModule } from '@angular/material/badge';
-import { AeroMQService } from '../../services/aeromq.service';
+import { AeroStreamService } from '../../services/aeromq.service';
 import { Topic } from '../../models/aeromq.models';
 
 export interface PublishedRecord {
@@ -63,7 +63,7 @@ const STORAGE_KEY_PRODUCER_HISTORY = 'aeromq_producer_history';
   styleUrl: './producer.component.scss',
 })
 export class ProducerComponent implements OnInit {
-  protected readonly service = inject(AeroMQService);
+  protected readonly service = inject(AeroStreamService);
   private readonly snackBar = inject(MatSnackBar);
 
   // Form State Signals
@@ -157,13 +157,13 @@ export class ProducerComponent implements OnInit {
       const sample = {
         event: 'user_signup',
         userId: `usr_${Math.floor(1000 + Math.random() * 9000)}`,
-        email: 'developer@aeromq.io',
+        email: 'developer@aerostream.io',
         plan: 'enterprise',
         timestamp: Math.floor(Date.now() / 1000),
       };
       this.payload.set(JSON.stringify(sample, null, 2));
     } else if (type === 'ping') {
-      const ping = `PING - AeroMQ cluster heartbeat probe at ${new Date().toISOString()}`;
+      const ping = `PING - AeroStream cluster heartbeat probe at ${new Date().toISOString()}`;
       this.payload.set(ping);
     } else if (type === 'order') {
       const order = {
@@ -172,7 +172,7 @@ export class ProducerComponent implements OnInit {
         currency: 'USD',
         total: 129.99,
         items: [
-          { sku: 'AEROMQ-LICENSE-PRO', qty: 1, unitPrice: 129.99 },
+          { sku: 'AEROSTREAM-LICENSE-PRO', qty: 1, unitPrice: 129.99 },
         ],
         status: 'PENDING',
         created_at: new Date().toISOString(),

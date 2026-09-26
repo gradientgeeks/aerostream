@@ -1,4 +1,4 @@
-# AeroMQ Rust Broker — example configuration.
+# AeroStream Rust Broker — example configuration.
 #
 # Usage:
 #   ./rust-broker/target/release/rust-broker --config config/broker.example.toml

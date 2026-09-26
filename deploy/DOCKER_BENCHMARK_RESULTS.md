@@ -1,4 +1,4 @@
-# Comprehensive 3-Way Benchmark: AeroMQ vs. Redpanda vs. Apache Kafka
+# Comprehensive 3-Way Benchmark: AeroStream vs. Redpanda vs. Apache Kafka
 **Hardware Limits (Strictly Enforced per Container)**: `--cpus=2.0 --memory=2g`  
 **Test Environment**: Debian 13 (Linux 6.12 kernel, x86_64), Docker 29.8.1  
 **Test Date**: September 26, 2026  
@@ -9,14 +9,14 @@
 
 This benchmark tests and compares the real-world performance of three distributed message brokers deployed inside isolated Docker containers with **identical hardware constraints (2 CPU cores, 2 GB RAM)**:
 
-1. **AeroMQ** (Dual-Engine: Go Raft Consensus + Rust Zero-Copy Storage Data Plane)
+1. **AeroStream** (Dual-Engine: Go Raft Consensus + Rust Zero-Copy Storage Data Plane)
 2. **Redpanda** (C++20 / Seastar Thread-Per-Core Storage Engine, `redpandadata/redpanda:latest`)
 3. **Apache Kafka** (Java / JVM KRaft Mode, `apache/kafka:latest` v4.3.1)
 
 ### Key Benchmark Discoveries:
-* **The 50 MB Giant Message Test**: At 50 MB payloads, both Apache Kafka and Redpanda suffer catastrophic throughput collapse down to **48–50 MB/sec** with **5.2 to 5.6-second median latencies** due to socket buffer re-assembly stalls and memory allocator thrashing. AeroMQ sustains **666.30 MB/sec** with a median latency of **353 ms** — outperforming Redpanda by **13.3x** and Kafka by **13.7x**.
-* **Memory Efficiency**: Under active 50 MB streaming load, AeroMQ consumes only **1.54 MiB of RAM** (0.08% of its 2 GB container limit). In contrast, Redpanda claims **839.3 MiB** (41.0%) and Apache Kafka claims **1.212 GiB** (60.6%) of memory.
-* **Thread Count**: AeroMQ runs with **3 deterministic OS worker threads** compared to Redpanda's **5 threads** and Apache Kafka's **130 JVM threads**.
+* **The 50 MB Giant Message Test**: At 50 MB payloads, both Apache Kafka and Redpanda suffer catastrophic throughput collapse down to **48–50 MB/sec** with **5.2 to 5.6-second median latencies** due to socket buffer re-assembly stalls and memory allocator thrashing. AeroStream sustains **666.30 MB/sec** with a median latency of **353 ms** — outperforming Redpanda by **13.3x** and Kafka by **13.7x**.
+* **Memory Efficiency**: Under active 50 MB streaming load, AeroStream consumes only **1.54 MiB of RAM** (0.08% of its 2 GB container limit). In contrast, Redpanda claims **839.3 MiB** (41.0%) and Apache Kafka claims **1.212 GiB** (60.6%) of memory.
+* **Thread Count**: AeroStream runs with **3 deterministic OS worker threads** compared to Redpanda's **5 threads** and Apache Kafka's **130 JVM threads**.
 
 ---
 
@@ -28,7 +28,7 @@ Each test pushed an aggregate of **500 MB of raw binary payload** through the br
 +-----------------------------------------------------------------------------------------+
 |                  Throughput Comparison: 500 MB Total Payload Transfer                   |
 +-----------------------------------------------------------------------------------------+
-| Payload Size | Apache Kafka (KRaft) | Redpanda (C++/Seastar) | AeroMQ (Rust Data Plane) |
+| Payload Size | Apache Kafka (KRaft) | Redpanda (C++/Seastar) | AeroStream (Rust Data Plane) |
 +--------------+----------------------+------------------------+--------------------------+
 | 1 MB         | 127.62 MB/s          | 333.78 MB/s            | 687.08 MB/s (2.06x - 5.4x)|
 | 10 MB        | 102.82 MB/s          | 187.55 MB/s            | 577.96 MB/s (3.08x - 5.6x)|
@@ -44,7 +44,7 @@ Each test pushed an aggregate of **500 MB of raw binary payload** through the br
 * **Message Count**: 500 messages
 * **Total Transferred**: 500.00 MB
 
-| Metric | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++/Seastar) | AeroMQ (Rust Data Plane) | AeroMQ Advantage |
+| Metric | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++/Seastar) | AeroStream (Rust Data Plane) | AeroStream Advantage |
 | :--- | :--- | :--- | :--- | :--- |
 | **Data Throughput** | `127.62 MB/sec` | `333.78 MB/sec` | **`687.08 MB/sec`** | **2.06x vs. Redpanda, 5.38x vs. Kafka** |
 | **Write Throughput** | `127.61 msgs/sec` | `333.78 msgs/sec` | **`687.08 msgs/sec`** | **2.06x vs. Redpanda, 5.38x vs. Kafka** |
@@ -62,7 +62,7 @@ Each test pushed an aggregate of **500 MB of raw binary payload** through the br
 * **Message Count**: 50 messages
 * **Total Transferred**: 500.00 MB
 
-| Metric | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++/Seastar) | AeroMQ (Rust Data Plane) | AeroMQ Advantage |
+| Metric | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++/Seastar) | AeroStream (Rust Data Plane) | AeroStream Advantage |
 | :--- | :--- | :--- | :--- | :--- |
 | **Data Throughput** | `102.82 MB/sec` | `187.55 MB/sec` | **`577.96 MB/sec`** | **3.08x vs. Redpanda, 5.62x vs. Kafka** |
 | **Write Throughput** | `10.28 msgs/sec` | `18.75 msgs/sec` | **`57.80 msgs/sec`** | **3.08x vs. Redpanda, 5.62x vs. Kafka** |
@@ -80,7 +80,7 @@ Each test pushed an aggregate of **500 MB of raw binary payload** through the br
 * **Message Count**: 10 messages
 * **Total Transferred**: 500.00 MB
 
-| Metric | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++/Seastar) | AeroMQ (Rust Data Plane) | AeroMQ Advantage |
+| Metric | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++/Seastar) | AeroStream (Rust Data Plane) | AeroStream Advantage |
 | :--- | :--- | :--- | :--- | :--- |
 | **Data Throughput** | `48.64 MB/sec` | `50.20 MB/sec` | **`666.30 MB/sec`** | **13.3x vs. Redpanda, 13.7x vs. Kafka** |
 | **Write Throughput** | `0.97 msgs/sec` | `1.00 msgs/sec` | **`13.33 msgs/sec`** | **13.3x vs. Redpanda, 13.7x vs. Kafka** |
@@ -96,7 +96,7 @@ Each test pushed an aggregate of **500 MB of raw binary payload** through the br
 
 ### Test 3.1: 100-Byte High-Frequency Ingestion (100,000 messages)
 
-| Metric | Apache Kafka (v4.3.1 KRaft) | AeroMQ (Rust Data Plane) | AeroMQ Advantage |
+| Metric | Apache Kafka (v4.3.1 KRaft) | AeroStream (Rust Data Plane) | AeroStream Advantage |
 | :--- | :--- | :--- | :--- |
 | **Write Throughput** | `34,494 msgs/sec` | **`93,337 msgs/sec`** | **2.7x Higher** |
 | **Data Throughput** | `3.29 MB/sec` | **`8.90 MB/sec`** | **2.7x Higher** |
@@ -108,7 +108,7 @@ Each test pushed an aggregate of **500 MB of raw binary payload** through the br
 
 ### Test 3.2: 1-KB Standard Payload Ingestion (50,000 messages)
 
-| Metric | Apache Kafka (v4.3.1 KRaft) | AeroMQ (Rust Data Plane) | AeroMQ Advantage |
+| Metric | Apache Kafka (v4.3.1 KRaft) | AeroStream (Rust Data Plane) | AeroStream Advantage |
 | :--- | :--- | :--- | :--- |
 | **Write Throughput** | `15,923.57 msgs/sec` | **`84,103.22 msgs/sec`** | **5.3x Higher** |
 | **Data Throughput** | `15.55 MB/sec` | **`82.13 MB/sec`** | **5.3x Higher** |
@@ -122,7 +122,7 @@ Each test pushed an aggregate of **500 MB of raw binary payload** through the br
 
 Measured directly using `docker stats --no-stream` under live cluster workloads:
 
-| Resource Metric | Apache Kafka (JVM) | Redpanda (C++/Seastar) | AeroMQ (Rust Engine) | AeroMQ Advantage |
+| Resource Metric | Apache Kafka (JVM) | Redpanda (C++/Seastar) | AeroStream (Rust Engine) | AeroStream Advantage |
 | :--- | :--- | :--- | :--- | :--- |
 | **Live Memory Footprint** | `1.212 GiB` | `839.3 MiB` | **`1.547 MiB`** | **542x less than Redpanda, 803x less than Kafka** |
 | **Container Limit Usage** | `60.60%` | `40.98%` | **`0.08%`** | **Negligible container overhead** |
@@ -131,7 +131,7 @@ Measured directly using `docker stats --no-stream` under live cluster workloads:
 
 ---
 
-## 5. Architectural Breakdown: Why Does AeroMQ Win at 50 MB?
+## 5. Architectural Breakdown: Why Does AeroStream Win at 50 MB?
 
 ### 1. Zero Heap Copying vs. Kafka's JVM Allocation Bottleneck
 When Apache Kafka receives a 50 MB message, the JVM creates massive native and direct `ByteBuffer` instances. Under strict 2.0 GB memory constraints:
@@ -144,8 +144,8 @@ Redpanda is built on the Seastar asynchronous engine which partitions memory per
 - Allocating contiguous 50 MB message buffers within a single core's slab allocator triggers internal memory fragmentation and reactor stalls.
 - Socket reads are split into small chunks that must be re-assembled across Seastar's DMA buffers, dragging throughput down to **50.20 MB/s** with **5,212 ms** latency.
 
-### 3. AeroMQ's Memory-Mapped Circular Buffer & Direct Kernel DMA
-AeroMQ avoids both JVM heap allocations and Seastar thread-per-core fragmentation:
+### 3. AeroStream's Memory-Mapped Circular Buffer & Direct Kernel DMA
+AeroStream avoids both JVM heap allocations and Seastar thread-per-core fragmentation:
 - **Direct Memory-Mapping (`mmap`)**: Incoming frame headers and payloads are written sequentially into fixed, pre-allocated memory-mapped segment pages. The OS kernel's page cache handles dirty page flushing asynchronously in the background.
 - **Single-Syscall Frame Dispatches**: A single read directly deposits the payload into the segment file without multiple intermediate userspace copies.
-- **Deterministic 3-Thread Model**: Because AeroMQ maintains separate network, ingestion, and consensus loops pinned to OS threads, it never stalls when handling 50 MB payloads, achieving a consistent **666.30 MB/sec** and finishing the 500 MB transfer in **750 milliseconds**.
+- **Deterministic 3-Thread Model**: Because AeroStream maintains separate network, ingestion, and consensus loops pinned to OS threads, it never stalls when handling 50 MB payloads, achieving a consistent **666.30 MB/sec** and finishing the 500 MB transfer in **750 milliseconds**.

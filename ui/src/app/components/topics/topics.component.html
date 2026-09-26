@@ -50,7 +50,7 @@
   @if (isLoading()) {
     <div class="loading-state">
       <mat-spinner diameter="44"></mat-spinner>
-      <span>Loading topics from AeroMQ cluster...</span>
+      <span>Loading topics from AeroStream cluster...</span>
     </div>
   }
 
@@ -381,7 +381,7 @@
         </div>
         <h2 class="empty-title">No Topics Created Yet</h2>
         <p class="empty-desc">
-          Topics in AeroMQ are distributed, partitioned event streams replicated across your cluster brokers via Raft consensus.
+          Topics in AeroStream are distributed, partitioned event streams replicated across your cluster brokers via Raft consensus.
         </p>
 
         <button mat-flat-button color="primary" class="create-hero-btn" (click)="openCreateDialog()">

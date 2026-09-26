@@ -1,12 +1,12 @@
-# AeroMQ vs. Apache Kafka: Kubernetes Benchmarking & Performance Comparison Guide
+# AeroStream vs. Apache Kafka: Kubernetes Benchmarking & Performance Comparison Guide
 
-This guide provides a reproducible, production-grade benchmarking methodology to compare **AeroMQ** against **Apache Kafka** deployed inside the same Kubernetes cluster with identical resource boundaries (CPU, memory, and NVMe/SSD storage).
+This guide provides a reproducible, production-grade benchmarking methodology to compare **AeroStream** against **Apache Kafka** deployed inside the same Kubernetes cluster with identical resource boundaries (CPU, memory, and NVMe/SSD storage).
 
 ---
 
-## 1. Architectural Foundations: AeroMQ vs. Apache Kafka
+## 1. Architectural Foundations: AeroStream vs. Apache Kafka
 
-Understanding the fundamental architectural divergence between AeroMQ and Apache Kafka explains why their latency and throughput characteristics differ substantially under high-concurrency workloads.
+Understanding the fundamental architectural divergence between AeroStream and Apache Kafka explains why their latency and throughput characteristics differ substantially under high-concurrency workloads.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -17,14 +17,14 @@ Understanding the fundamental architectural divergence between AeroMQ and Apache
 └────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────────┐
-│                       AeroMQ (Rust + Tokio + Go)                       │
+│                       AeroStream (Rust + Tokio + Go)                       │
 │                                                                        │
 │  Client TCP ──> Thread-Pinned Tokio ──> Zero-Copy DMA ──> Commit Log   │
 │  (sched_setaffinity, sendfile(2) direct kernel transfer, Zero GC)      │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Dimension | Apache Kafka | AeroMQ |
+| Dimension | Apache Kafka | AeroStream |
 | :--- | :--- | :--- |
 | **Runtime Engine** | Java Virtual Machine (OpenJDK 17/21) | Native Compiled Rust (1.80+) + Go (1.22+) |
 | **Garbage Collection** | Generational GC (G1GC / ZGC) with stop-the-world pauses | **Zero GC**; deterministic manual memory management (RAII) |
@@ -41,7 +41,7 @@ To guarantee a scientifically sound, fair comparison, both clusters must be allo
 
 ### Node & Pod Resource Sizing Matrix
 
-| Metric | Kafka Broker Pod | AeroMQ Broker Pod |
+| Metric | Kafka Broker Pod | AeroStream Broker Pod |
 | :--- | :--- | :--- |
 | **CPU Request / Limit** | `1000m` / `2000m` (1–2 vCPUs) | `1000m` / `2000m` (1–2 vCPUs) |
 | **Memory Request / Limit** | `1024Mi` / `4096Mi` (`-Xms1g -Xmx2g`) | `1024Mi` / `4096Mi` |
@@ -96,9 +96,9 @@ To guarantee a scientifically sound, fair comparison, both clusters must be allo
 
 ---
 
-## 4. Step-by-Step AeroMQ Deployment in Kubernetes
+## 4. Step-by-Step AeroStream Deployment in Kubernetes
 
-1. **Apply all AeroMQ manifests:**
+1. **Apply all AeroStream manifests:**
    ```bash
    kubectl apply -f deploy/k8s/namespace.yaml
    kubectl apply -f deploy/k8s/configmap.yaml
@@ -107,14 +107,14 @@ To guarantee a scientifically sound, fair comparison, both clusters must be allo
    kubectl apply -f deploy/k8s/services.yaml
    ```
 
-2. **Verify AeroMQ cluster readiness:**
+2. **Verify AeroStream cluster readiness:**
    ```bash
-   kubectl wait --namespace aeromq --for=condition=ready pod -l app.kubernetes.io/name=aeromq --timeout=120s
+   kubectl wait --namespace aerostream --for=condition=ready pod -l app.kubernetes.io/name=aerostream --timeout=120s
    ```
 
 3. **Verify cluster controller quorum:**
    ```bash
-   kubectl exec -n aeromq controller-0 -- curl -s http://localhost:9001/status
+   kubectl exec -n aerostream controller-0 -- curl -s http://localhost:9001/status
    ```
    *Expected output:*
    ```json
@@ -134,19 +134,19 @@ To guarantee a scientifically sound, fair comparison, both clusters must be allo
 
 *Goal: Saturate the broker's ingestion pipeline with 20 concurrent producers pushing 1 KB records.*
 
-#### AeroMQ In-Cluster Benchmark:
+#### AeroStream In-Cluster Benchmark:
 Launch via the preconfigured Kubernetes Job:
 ```bash
 kubectl apply -f deploy/k8s/benchmark-job.yaml
-kubectl wait --namespace aeromq --for=condition=complete job/aeromq-benchmark --timeout=180s
-kubectl logs -n aeromq job/aeromq-benchmark
+kubectl wait --namespace aerostream --for=condition=complete job/aerostream-benchmark --timeout=180s
+kubectl logs -n aerostream job/aerostream-benchmark
 ```
 
 Or execute directly from an interactive pod / CLI:
 ```bash
-kubectl run aeromq-bench-runner --rm -it --namespace aeromq \
-  --image=aeromq-client:latest --image-pull-policy=IfNotPresent -- \
-  --controller aeromq-controller.aeromq.svc.cluster.local:8001 \
+kubectl run aerostream-bench-runner --rm -it --namespace aerostream \
+  --image=aerostream-client:latest --image-pull-policy=IfNotPresent -- \
+  --controller aerostream-controller.aerostream.svc.cluster.local:8001 \
   bench \
   --producers 20 \
   --messages 50000 \
@@ -179,11 +179,11 @@ kubectl run kafka-bench-runner --rm -it --namespace kafka \
 
 *Goal: Measure individual message end-to-end write ACK latency under moderate concurrency without client-side artificial batching.*
 
-#### AeroMQ:
+#### AeroStream:
 ```bash
-kubectl run aeromq-latency-test --rm -it --namespace aeromq \
-  --image=aeromq-client:latest --image-pull-policy=IfNotPresent -- \
-  --controller aeromq-controller.aeromq.svc.cluster.local:8001 \
+kubectl run aerostream-latency-test --rm -it --namespace aerostream \
+  --image=aerostream-client:latest --image-pull-policy=IfNotPresent -- \
+  --controller aerostream-controller.aerostream.svc.cluster.local:8001 \
   bench \
   --producers 10 \
   --messages 10000 \
@@ -220,7 +220,7 @@ When comparing the results of both test runs, observe the following four critica
   Kafka typically achieves good average latencies under batching, but exhibits significant tail-latency degradation:
   - **p99 / p99.9 spikes (15ms – 80ms+):** Primarily triggered by JVM Stop-the-World (STW) pauses during G1GC mixed collection phases or young-gen scavenges.
   - **Safepoint bias:** When JIT compiler triggers loop strip-mining or deoptimizations, all JVM threads pause to reach a global safepoint.
-- **AeroMQ Behaviour:**
+- **AeroStream Behaviour:**
   - **Deterministic sub-millisecond latencies (p99 < 1.0ms):** Rust's compiler guarantees memory release upon variable scope termination (RAII), eliminating any asynchronous runtime pause.
   - Async IO tasks are handled by non-blocking Tokio workers with zero runtime locks on the fast append path.
 
@@ -228,36 +228,36 @@ When comparing the results of both test runs, observe the following four critica
 
 - **Kernel Context Switching:**
   - In Kafka, network thread pools, IO thread pools, and JVM GC threads constantly contend for CPU cores. Check context switches using `pidstat -w 1`.
-  - In AeroMQ, each Tokio worker thread is pinned to an exclusive CPU core using `libc::sched_setaffinity(0, ...)`. Cache lines remain warm in L1/L2 caches, eliminating CPU migrations across physical cores.
+  - In AeroStream, each Tokio worker thread is pinned to an exclusive CPU core using `libc::sched_setaffinity(0, ...)`. Cache lines remain warm in L1/L2 caches, eliminating CPU migrations across physical cores.
 - **Zero-Copy Data Transfer (`sendfile(2)`):**
-  - AeroMQ utilizes Linux `sendfile(2)` system calls directly on the file descriptor. Data transfers occur directly from kernel PageCache to network socket buffers via DMA, bypassing userspace memory copying entirely.
+  - AeroStream utilizes Linux `sendfile(2)` system calls directly on the file descriptor. Data transfers occur directly from kernel PageCache to network socket buffers via DMA, bypassing userspace memory copying entirely.
 
 ### 3. Memory Footprint (RSS vs. Heap)
 
-Monitor pod memory utilization using `kubectl top pods -n aeromq` and `kubectl top pods -n kafka`:
+Monitor pod memory utilization using `kubectl top pods -n aerostream` and `kubectl top pods -n kafka`:
 
 ```bash
 # Compare real-time RSS memory consumption
-kubectl top pods -n aeromq
+kubectl top pods -n aerostream
 kubectl top pods -n kafka
 ```
 
 - **Kafka Broker:** Requires `1.5 GiB – 3.5 GiB` of RAM due to JVM heap allocations, object headers (12–16 bytes per allocated object), string intern tables, and off-heap metadata structures.
-- **AeroMQ Broker:** Operates comfortably in `25 MiB – 65 MiB` RSS under continuous 50,000+ msgs/sec ingestion. This provides **30x–50x higher tenant density** on identical cloud instances.
+- **AeroStream Broker:** Operates comfortably in `25 MiB – 65 MiB` RSS under continuous 50,000+ msgs/sec ingestion. This provides **30x–50x higher tenant density** on identical cloud instances.
 
 ### 4. Disk IOPS and PageCache Writebacks
 
 - Inspect disk write rates using `iostat -xz 1` on the underlying host node.
 - **Sequential Append Performance:**
-  AeroMQ uses fixed 64-bit offsets and compact binary headers (`magic: 2B`, `cmd: 1B`, `len: 4B`), requiring minimal disk metadata overhead per frame compared to Kafka's protocol framing.
+  AeroStream uses fixed 64-bit offsets and compact binary headers (`magic: 2B`, `cmd: 1B`, `len: 4B`), requiring minimal disk metadata overhead per frame compared to Kafka's protocol framing.
 - **Segment Rollover & Compaction:**
-  AeroMQ rolls over closed segments into tiered cold storage asynchronously without holding locks on the active segment, preventing producer stalls during segment boundary transitions.
+  AeroStream rolls over closed segments into tiered cold storage asynchronously without holding locks on the active segment, preventing producer stalls during segment boundary transitions.
 
 ---
 
 ## 7. Performance Scorecard Summary Template
 
-| Metric | Apache Kafka (KRaft) | AeroMQ (Rust + Go) | Differential |
+| Metric | Apache Kafka (KRaft) | AeroStream (Rust + Go) | Differential |
 | :--- | :--- | :--- | :--- |
 | **Ingestion Throughput (1KB msgs)** | ~45,000 msgs/sec | **~72,000+ msgs/sec** | **+60% Throughput** |
 | **Average Latency (avg)** | ~1.4 ms | **~138 µs** | **~10x Lower** |
@@ -272,12 +272,12 @@ kubectl top pods -n kafka
 ## 8. Troubleshooting & Performance Tuning Tips
 
 1. **Host Network & Port Forwarding:**
-   When running benchmarks externally from outside Kubernetes, use the LoadBalancer or NodePort services defined in `deploy/k8s/services.yaml` (`aeromq-ui-external` and `aeromq-broker-external`).
+   When running benchmarks externally from outside Kubernetes, use the LoadBalancer or NodePort services defined in `deploy/k8s/services.yaml` (`aerostream-ui-external` and `aerostream-broker-external`).
 2. **Storage Volume Selection:**
    Always test using a persistent volume with defined IOPS provisioning (`gp3`, `io2`, or local NVMe SSDs) rather than standard HDD storage classes, as mechanical seek latencies will obscure broker architecture differences.
 3. **CPU Throttling Check:**
    Verify Kubernetes CFS quota throttling using:
    ```bash
-   kubectl exec -n aeromq broker-0 -- cat /sys/fs/cgroup/cpu.stat
+   kubectl exec -n aerostream broker-0 -- cat /sys/fs/cgroup/cpu.stat
    ```
    Ensure `nr_throttled` is near 0 by allocating sufficient CPU limits during maximum throughput runs.

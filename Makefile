@@ -24,7 +24,7 @@ clean:
 	@rm -f *.log
 
 start: build
-	@echo "Starting AeroMQ Cluster (3 Go Controllers, 2 Rust Brokers)..."
+	@echo "Starting AeroStream Cluster (3 Go Controllers, 2 Rust Brokers)..."
 	@mkdir -p data/broker_1 data/broker_2
 	
 	# Start Controllers
@@ -39,11 +39,11 @@ start: build
 	@setsid ./rust-broker/target/release/rust-broker --id 2 --host 127.0.0.1 --data-port 9092 --kafka-port 9094 --controller http://127.0.0.1:8001 --storage-dir ./data/broker_2 > broker2.log 2>&1 < /dev/null &
 	@sleep 2
 	
-	@echo "AeroMQ Cluster is running!"
+	@echo "AeroStream Cluster is running!"
 
 
 stop:
-	@echo "Stopping AeroMQ cluster..."
+	@echo "Stopping AeroStream cluster..."
 	@-pkill -f go-controller/bin/controller || true
 	@-pkill -f target/release/rust-broker || true
 
@@ -58,9 +58,9 @@ status:
 certs:
 	@mkdir -p config/certs
 	@openssl req -x509 -newkey rsa:2048 -nodes -keyout config/certs/ca.key \
-		-out config/certs/ca.crt -days 365 -subj "/CN=AeroMQ-CA" 2>/dev/null
+		-out config/certs/ca.crt -days 365 -subj "/CN=AeroStream-CA" 2>/dev/null
 	@openssl req -newkey rsa:2048 -nodes -keyout config/certs/server.key \
-		-out config/certs/server.csr -subj "/CN=aeromq" 2>/dev/null
+		-out config/certs/server.csr -subj "/CN=aerostream" 2>/dev/null
 	@printf "subjectAltName=IP:127.0.0.1,DNS:localhost" > config/certs/san.ext
 	@openssl x509 -req -in config/certs/server.csr -CA config/certs/ca.crt \
 		-CAkey config/certs/ca.key -CAcreateserial -out config/certs/server.crt \

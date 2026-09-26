@@ -14,7 +14,7 @@ import { CommonModule } from '@angular/common';
       [style.width.px]="size"
       [style.height.px]="size"
       role="img"
-      aria-label="AeroMQ Turbine Ring Buffer Logo">
+      aria-label="AeroStream Turbine Ring Buffer Logo">
       <svg
         [attr.width]="size"
         [attr.height]="size"

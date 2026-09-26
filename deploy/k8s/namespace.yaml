@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: aeromq
+  name: aerostream
   labels:
-    app.kubernetes.io/name: aeromq
-    app.kubernetes.io/part-of: aeromq
+    app.kubernetes.io/name: aerostream
+    app.kubernetes.io/part-of: aerostream

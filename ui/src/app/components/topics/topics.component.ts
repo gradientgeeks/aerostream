@@ -97,7 +97,7 @@ export class TopicsComponent implements OnInit {
       },
       error: (err) => {
         this.isLoading.set(false);
-        const msg = err.error?.message || err.message || 'Failed to connect to AeroMQ controller';
+        const msg = err.error?.message || err.message || 'Failed to connect to AeroStream controller';
         this.errorMessage.set(typeof msg === 'string' ? msg : JSON.stringify(msg));
       }
     });

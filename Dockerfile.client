@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for AeroMQ CLI & Benchmark Tool
+# Multi-stage Dockerfile for AeroStream CLI & Benchmark Tool
 # Stage 1: Build
 FROM golang:1.22-alpine AS builder
 
@@ -27,7 +27,7 @@ RUN apk add --no-cache ca-certificates bash curl
 WORKDIR /app
 
 COPY --from=builder /bin/client /usr/local/bin/client
-RUN ln -s /usr/local/bin/client /usr/local/bin/aeromq
+RUN ln -s /usr/local/bin/client /usr/local/bin/aerostream && ln -s /usr/local/bin/client /usr/local/bin/aeromq
 
 ENTRYPOINT ["client"]
 CMD ["--help"]

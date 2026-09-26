@@ -1,4 +1,4 @@
-# AeroMQ Go Controller — example configuration.
+# AeroStream Go Controller — example configuration.
 #
 # Usage:
 #   ./go-controller/bin/controller --config config/controller.example.toml --bootstrap

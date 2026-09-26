@@ -21,12 +21,12 @@ BROKER_ID="${BROKER_ID:-1}"
 
 # Cleanup handler on exit
 cleanup() {
-    echo "Shutting down AeroMQ processes..."
+    echo "Shutting down AeroStream processes..."
     kill -TERM "$BROKER_PID" 2>/dev/null || true
     kill -TERM "$CONTROLLER_PID" 2>/dev/null || true
     wait "$BROKER_PID" 2>/dev/null || true
     wait "$CONTROLLER_PID" 2>/dev/null || true
-    echo "AeroMQ gracefully stopped."
+    echo "AeroStream gracefully stopped."
     exit 0
 }
 trap cleanup SIGTERM SIGINT

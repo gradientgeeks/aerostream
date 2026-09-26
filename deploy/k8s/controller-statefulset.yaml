@@ -2,14 +2,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: controller-headless
-  namespace: aeromq
+  namespace: aerostream
   labels:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: controller
 spec:
   clusterIP: None
   selector:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: controller
   ports:
     - name: raft
@@ -26,41 +26,41 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: controller
-  namespace: aeromq
+  namespace: aerostream
   labels:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: controller
 spec:
   serviceName: controller-headless
   replicas: 3
   selector:
     matchLabels:
-      app.kubernetes.io/name: aeromq
+      app.kubernetes.io/name: aerostream
       app.kubernetes.io/component: controller
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: aeromq
+        app.kubernetes.io/name: aerostream
         app.kubernetes.io/component: controller
     spec:
       terminationGracePeriodSeconds: 15
       containers:
         - name: controller
-          image: aeromq-controller:latest
+          image: aerostream-controller:latest
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
             - |
               ORDINAL="${HOSTNAME##*-}"
               NODE_ID="node$((ORDINAL + 1))"
-              FQDN="${HOSTNAME}.controller-headless.aeromq.svc.cluster.local"
+              FQDN="${HOSTNAME}.controller-headless.aerostream.svc.cluster.local"
               RAFT_ADDR="${FQDN}:7001"
-              BOOTSTRAP_HOST="controller-0.controller-headless.aeromq.svc.cluster.local"
+              BOOTSTRAP_HOST="controller-0.controller-headless.aerostream.svc.cluster.local"
 
-              echo "[AeroMQ Controller Pod ${HOSTNAME}] Starting node ${NODE_ID} with Raft address ${RAFT_ADDR}..."
+              echo "[AeroStream Controller Pod ${HOSTNAME}] Starting node ${NODE_ID} with Raft address ${RAFT_ADDR}..."
 
               if [ "${ORDINAL}" = "0" ]; then
-                echo "[AeroMQ Controller Pod ${HOSTNAME}] Node 0 bootstrapping initial cluster..."
+                echo "[AeroStream Controller Pod ${HOSTNAME}] Node 0 bootstrapping initial cluster..."
                 exec controller \
                   -id "${NODE_ID}" \
                   -raft-addr "${RAFT_ADDR}" \
@@ -69,7 +69,7 @@ spec:
                   -data-dir "/data" \
                   -bootstrap
               else
-                echo "[AeroMQ Controller Pod ${HOSTNAME}] Node ${ORDINAL} joining Raft cluster via http://${BOOTSTRAP_HOST}:9001..."
+                echo "[AeroStream Controller Pod ${HOSTNAME}] Node ${ORDINAL} joining Raft cluster via http://${BOOTSTRAP_HOST}:9001..."
                 exec controller \
                   -id "${NODE_ID}" \
                   -raft-addr "${RAFT_ADDR}" \
@@ -110,16 +110,16 @@ spec:
             - name: data
               mountPath: /data
             - name: config
-              mountPath: /etc/aeromq
+              mountPath: /etc/aerostream
       volumes:
         - name: config
           configMap:
-            name: aeromq-config
+            name: aerostream-config
   volumeClaimTemplates:
     - metadata:
         name: data
         labels:
-          app.kubernetes.io/name: aeromq
+          app.kubernetes.io/name: aerostream
           app.kubernetes.io/component: controller
       spec:
         accessModes: ["ReadWriteOnce"]

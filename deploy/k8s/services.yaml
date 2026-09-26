@@ -4,15 +4,15 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: aeromq-controller
-  namespace: aeromq
+  name: aerostream-controller
+  namespace: aerostream
   labels:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: controller
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: controller
   ports:
     - name: grpc
@@ -25,15 +25,15 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: aeromq-broker
-  namespace: aeromq
+  name: aerostream-broker
+  namespace: aerostream
   labels:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: broker
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: broker
   ports:
     - name: data
@@ -46,15 +46,15 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: aeromq-ui-external
-  namespace: aeromq
+  name: aerostream-ui-external
+  namespace: aerostream
   labels:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: controller
 spec:
   type: LoadBalancer
   selector:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: controller
   ports:
     - name: http-ui
@@ -69,15 +69,15 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: aeromq-broker-external
-  namespace: aeromq
+  name: aerostream-broker-external
+  namespace: aerostream
   labels:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: broker
 spec:
   type: NodePort
   selector:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: broker
   ports:
     - name: tcp-data

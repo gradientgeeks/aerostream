@@ -6,8 +6,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.controller
-    image: aeromq-controller:latest
-    container_name: aeromq-controller-1
+    image: aerostream-controller:latest
+    container_name: aerostream-controller-1
     command:
       - "-id"
       - "node1"
@@ -27,7 +27,7 @@ services:
     volumes:
       - controller-1-data:/data
     networks:
-      - aeromq-net
+      - aerostream-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:9001/status"]
       interval: 5s
@@ -40,8 +40,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.controller
-    image: aeromq-controller:latest
-    container_name: aeromq-controller-2
+    image: aerostream-controller:latest
+    container_name: aerostream-controller-2
     command:
       - "-id"
       - "node2"
@@ -62,7 +62,7 @@ services:
     volumes:
       - controller-2-data:/data
     networks:
-      - aeromq-net
+      - aerostream-net
     depends_on:
       controller-1:
         condition: service_healthy
@@ -78,8 +78,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.controller
-    image: aeromq-controller:latest
-    container_name: aeromq-controller-3
+    image: aerostream-controller:latest
+    container_name: aerostream-controller-3
     command:
       - "-id"
       - "node3"
@@ -100,7 +100,7 @@ services:
     volumes:
       - controller-3-data:/data
     networks:
-      - aeromq-net
+      - aerostream-net
     depends_on:
       controller-1:
         condition: service_healthy
@@ -119,8 +119,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.broker
-    image: aeromq-broker:latest
-    container_name: aeromq-broker-1
+    image: aerostream-broker:latest
+    container_name: aerostream-broker-1
     command:
       - "--id"
       - "1"
@@ -128,16 +128,19 @@ services:
       - "broker-1"
       - "--data-port"
       - "9091"
+      - "--kafka-port"
+      - "9093"
       - "--controller"
       - "http://controller-1:8001"
       - "--storage-dir"
       - "/data"
     ports:
       - "9091:9091"
+      - "9093:9093"
     volumes:
       - broker-1-data:/data
     networks:
-      - aeromq-net
+      - aerostream-net
     depends_on:
       controller-1:
         condition: service_healthy
@@ -153,8 +156,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.broker
-    image: aeromq-broker:latest
-    container_name: aeromq-broker-2
+    image: aerostream-broker:latest
+    container_name: aerostream-broker-2
     command:
       - "--id"
       - "2"
@@ -162,16 +165,18 @@ services:
       - "broker-2"
       - "--data-port"
       - "9091"
+      - "--kafka-port"
+      - "9093"
       - "--controller"
       - "http://controller-1:8001"
       - "--storage-dir"
       - "/data"
     ports:
-      - "9092:9091"
+      - "9094:9093"
     volumes:
       - broker-2-data:/data
     networks:
-      - aeromq-net
+      - aerostream-net
     depends_on:
       controller-1:
         condition: service_healthy
@@ -185,17 +190,17 @@ services:
 
 volumes:
   controller-1-data:
-    name: aeromq_controller_1_data
+    name: aerostream_controller_1_data
   controller-2-data:
-    name: aeromq_controller_2_data
+    name: aerostream_controller_2_data
   controller-3-data:
-    name: aeromq_controller_3_data
+    name: aerostream_controller_3_data
   broker-1-data:
-    name: aeromq_broker_1_data
+    name: aerostream_broker_1_data
   broker-2-data:
-    name: aeromq_broker_2_data
+    name: aerostream_broker_2_data
 
 networks:
-  aeromq-net:
-    name: aeromq-network
+  aerostream-net:
+    name: aerostream-network
     driver: bridge

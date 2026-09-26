@@ -142,8 +142,8 @@ export class AeroMQService {
         this.isLoading.set(false);
         const errMsg =
           err?.status === 0
-            ? `Connection refused at ${this.apiBaseUrl()}. Is AeroMQ controller running?`
-            : err?.message || 'Failed to communicate with AeroMQ cluster';
+            ? `Connection refused at ${this.apiBaseUrl()}. Is AeroStream controller running?`
+            : err?.message || 'Failed to communicate with AeroStream cluster';
         this.error.set(errMsg);
         return of(null);
       })
@@ -235,3 +235,5 @@ export class AeroMQService {
     return this.http.get<FetchMessagesResponse>(url, { params });
   }
 }
+
+export { AeroMQService as AeroStreamService };

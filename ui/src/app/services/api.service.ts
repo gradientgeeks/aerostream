@@ -69,7 +69,7 @@ export class ApiService {
   }
 
   /**
-   * Creates a new topic on the AeroMQ cluster.
+   * Creates a new topic on the AeroStream cluster.
    */
   createTopic(request: CreateTopicRequest): Observable<CreateTopicResponse> {
     const url = this.getApiUrl('/api/topics');

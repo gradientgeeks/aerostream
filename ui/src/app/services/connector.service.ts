@@ -46,7 +46,7 @@ export const PLUGIN_CONFIG_TEMPLATES: Record<string, Record<string, string>> = {
     'retry.backoff.ms': '1000',
   },
   S3ArchivalSinkConnector: {
-    's3.bucket': 'aeromq-archives',
+    's3.bucket': 'aerostream-archives',
     's3.region': 'us-east-1',
     'flush.size': '1000',
     'storage.class': 'STANDARD_IA',
@@ -78,7 +78,7 @@ const DEFAULT_CONNECTORS: Connector[] = [
       'connector.class': 'S3ArchivalSinkConnector',
       'tasks.max': '1',
       'topics': 'orders',
-      's3.bucket': 'aeromq-archives',
+      's3.bucket': 'aerostream-archives',
       's3.region': 'us-east-1',
       'flush.size': '1000',
     },

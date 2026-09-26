@@ -1,28 +1,28 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: aeromq-benchmark
-  namespace: aeromq
+  name: aerostream-benchmark
+  namespace: aerostream
   labels:
-    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/name: aerostream
     app.kubernetes.io/component: benchmark
 spec:
   backoffLimit: 0
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: aeromq
+        app.kubernetes.io/name: aerostream
         app.kubernetes.io/component: benchmark
     spec:
       restartPolicy: Never
       containers:
         - name: benchmark-runner
-          image: aeromq-client:latest
+          image: aerostream-client:latest
           imagePullPolicy: IfNotPresent
           command: ["client"]
           args:
             - "--controller"
-            - "aeromq-controller.aeromq.svc.cluster.local:8001"
+            - "aerostream-controller.aerostream.svc.cluster.local:8001"
             - "bench"
             - "--producers"
             - "20"
