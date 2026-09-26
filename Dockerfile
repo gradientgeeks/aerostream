@@ -51,11 +51,12 @@ COPY --from=ui-builder /app/ui/dist/ui/browser/ /app/ui/
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# 9091: TCP Data Plane
+# 9091: Native TCP Data Plane
+# 9092: Kafka Wire Protocol TCP Listener
 # 8001: gRPC Cluster Control
-# 9001: HTTP REST API & Web UI Console (/aeromq/console)
+# 9001: HTTP REST API & Web UI Console (/aerostream/console)
 # 7001: Raft Consensus
-EXPOSE 9091 8001 9001 7001
+EXPOSE 9091 9092 8001 9001 7001
 
 VOLUME ["/data"]
 

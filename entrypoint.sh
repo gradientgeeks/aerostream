@@ -16,6 +16,7 @@ RAFT_PORT="${RAFT_PORT:-7001}"
 GRPC_PORT="${GRPC_PORT:-8001}"
 HTTP_PORT="${HTTP_PORT:-9001}"
 DATA_PORT="${DATA_PORT:-9091}"
+KAFKA_PORT="${KAFKA_PORT:-9092}"
 BROKER_ID="${BROKER_ID:-1}"
 
 # Cleanup handler on exit
@@ -58,6 +59,7 @@ rust-broker \
     --id "${BROKER_ID}" \
     --host "0.0.0.0" \
     --data-port "${DATA_PORT}" \
+    --kafka-port "${KAFKA_PORT}" \
     --controller "http://127.0.0.1:${GRPC_PORT}" \
     --storage-dir "${DATA_DIR}/broker" &
 BROKER_PID=$!
@@ -66,7 +68,8 @@ echo "======================================================"
 echo " AeroStream Full-Stack is READY!"
 echo " Web UI:     http://localhost:${HTTP_PORT}/aerostream/console"
 echo " REST API:   http://localhost:${HTTP_PORT}/api/cluster"
-echo " Data Plane: localhost:${DATA_PORT}"
+echo " Native TCP: localhost:${DATA_PORT}"
+echo " Kafka Wire: localhost:${KAFKA_PORT}"
 echo "======================================================"
 
 # Wait for either process to terminate

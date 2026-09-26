@@ -16,6 +16,8 @@ pub struct BrokerConfig {
     pub host: String,
     /// TCP port for client data operations.
     pub data_port: i32,
+    /// TCP port for Kafka wire protocol operations.
+    pub kafka_port: i32,
     /// gRPC endpoint of the Go control plane.
     pub controller: String,
     /// Path to store physical partition log files (defaults to ./data/broker_{id}).
@@ -66,6 +68,7 @@ impl Default for BrokerConfig {
             id: 1,
             host: "127.0.0.1".to_string(),
             data_port: 9091,
+            kafka_port: 9093,
             controller: "http://127.0.0.1:8001".to_string(),
             storage_dir: None,
             storage: StorageConfig::default(),

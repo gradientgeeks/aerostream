@@ -8,6 +8,7 @@ mod config;
 mod log;
 mod net;
 mod grpc;
+pub mod kafka;
 
 use config::BrokerConfig;
 
@@ -30,6 +31,10 @@ struct Args {
     /// TCP port for high-throughput client data operations
     #[arg(long)]
     data_port: Option<i32>,
+
+    /// TCP port for Kafka wire protocol compatibility
+    #[arg(long)]
+    kafka_port: Option<i32>,
 
     /// gRPC Endpoint of the Go Control Plane
     #[arg(long)]
@@ -59,6 +64,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(data_port) = args.data_port {
         cfg.data_port = data_port;
     }
+    if let Some(kafka_port) = args.kafka_port {
+        cfg.kafka_port = kafka_port;
+    }
     if let Some(controller) = args.controller {
         cfg.controller = controller;
     }
@@ -71,7 +79,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("[AeroMQ Broker] Initializing Storage Broker {}...", cfg.id);
     info!("[AeroMQ Broker] Commit Log Storage: {:?}", storage_dir);
     info!(
-        "[AeroMQ Broker] max_segment_size={} bytes, data-plane TLS={}, auth={}",
+        "[AeroMQ Broker] data_port={}, kafka_port={}, max_segment_size={} bytes, data-plane TLS={}, auth={}",
+        cfg.data_port,
+        cfg.kafka_port,
         cfg.storage.max_segment_size,
         cfg.tls.enabled,
         cfg.auth.token.is_some()
@@ -118,6 +128,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let grpc_cfg = cfg.clone();
         tokio::spawn(async move {
             grpc::run_control_plane_loop(grpc_cfg, grpc_log_manager).await;
+        });
+
+        // Spawn Kafka Wire Protocol TCP listener (bind 0.0.0.0 if host is a hostname/FQDN)
+        let kafka_bind_addr: SocketAddr = format!("{}:{}", cfg.host, cfg.kafka_port)
+            .parse()
+            .unwrap_or_else(|_| format!("0.0.0.0:{}", cfg.kafka_port).parse().unwrap());
+        let kafka_server = net::KafkaServer::new(kafka_bind_addr, log_manager.clone(), cfg.clone());
+        tokio::spawn(async move {
+            if let Err(e) = kafka_server.run().await {
+                tracing::error!("[AeroMQ Broker] Kafka server error: {:?}", e);
+            }
         });
 
         // Run TCP Data Plane server (bind 0.0.0.0 if host is a hostname/FQDN)

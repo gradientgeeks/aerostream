@@ -35,8 +35,8 @@ start: build
 	@sleep 2
 	
 	# Start Brokers
-	@setsid ./rust-broker/target/release/rust-broker --id 1 --host 127.0.0.1 --data-port 9091 --controller http://127.0.0.1:8001 --storage-dir ./data/broker_1 > broker1.log 2>&1 < /dev/null &
-	@setsid ./rust-broker/target/release/rust-broker --id 2 --host 127.0.0.1 --data-port 9092 --controller http://127.0.0.1:8001 --storage-dir ./data/broker_2 > broker2.log 2>&1 < /dev/null &
+	@setsid ./rust-broker/target/release/rust-broker --id 1 --host 127.0.0.1 --data-port 9091 --kafka-port 9093 --controller http://127.0.0.1:8001 --storage-dir ./data/broker_1 > broker1.log 2>&1 < /dev/null &
+	@setsid ./rust-broker/target/release/rust-broker --id 2 --host 127.0.0.1 --data-port 9092 --kafka-port 9094 --controller http://127.0.0.1:8001 --storage-dir ./data/broker_2 > broker2.log 2>&1 < /dev/null &
 	@sleep 2
 	
 	@echo "AeroMQ Cluster is running!"
