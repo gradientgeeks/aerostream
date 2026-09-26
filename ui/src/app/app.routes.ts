@@ -45,6 +45,39 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'acls',
+    loadComponent: () =>
+      import('./components/acls/acls.component').then(
+        (m) => m.AclsComponent
+      ),
+  },
+  {
+    path: 'connectors',
+    loadComponent: () =>
+      import('./components/connectors/connectors.component').then(
+        (m) => m.ConnectorsComponent
+      ),
+  },
+  {
+    path: 'transforms',
+    loadComponent: () =>
+      import('./components/transforms/transforms.component').then(
+        (m) => m.TransformsComponent
+      ),
+  },
+  {
+    path: 'aerostream/console/transforms',
+    redirectTo: 'transforms',
+  },
+  {
+    path: 'aerostream/console/connectors',
+    redirectTo: 'connectors',
+  },
+  {
+    path: 'aerostream/console/acls',
+    redirectTo: 'acls',
+  },
+  {
     path: 'aerostream/console/schemas',
     redirectTo: 'schemas',
   },

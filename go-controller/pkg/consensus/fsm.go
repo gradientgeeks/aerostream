@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"sync"
 	"time"
 
@@ -43,17 +44,26 @@ type TopicState struct {
 
 // GroupMember tracks a consumer in a consumer group
 type GroupMember struct {
-	ID       string    `json:"id"`
-	Topics   []string  `json:"topics"`
-	LastSeen time.Time `json:"last_seen"`
+	ID                 string           `json:"id"`
+	Topics             []string         `json:"topics"`
+	LastSeen           time.Time        `json:"last_seen"`
+	ClientHost         string           `json:"client_host,omitempty"`
+	UserAgent          string           `json:"user_agent,omitempty"`
+	AssignedPartitions []PartitionTopic `json:"assigned_partitions"`
+	RevokingPartitions []PartitionTopic `json:"revoking_partitions"`
 }
 
 // ConsumerGroupState tracks consumer group state
 type ConsumerGroupState struct {
-	GroupID     string                      `json:"group_id"`
-	Generation  uint32                      `json:"generation"`
-	Members     map[string]*GroupMember     `json:"members"`
-	Assignments map[string][]PartitionTopic `json:"assignments"` // key: member_id
+	GroupID           string                      `json:"group_id"`
+	Protocol          string                      `json:"protocol"`
+	State             string                      `json:"state"`
+	Generation        uint32                      `json:"generation"`
+	LeaderID          string                      `json:"leader_id"`
+	RebalanceCount    int64                       `json:"rebalance_count"`
+	LastRebalanceTime time.Time                   `json:"last_rebalance_time"`
+	Members           map[string]*GroupMember     `json:"members"`
+	Assignments       map[string][]PartitionTopic `json:"assignments"` // key: member_id
 }
 
 // ClusterState is the state replicated by Raft
@@ -97,6 +107,7 @@ const (
 	CmdCreateTopic        = "create_topic"
 	CmdAssignPartitions   = "assign_partitions"
 	CmdJoinConsumerGroup  = "join_consumer_group"
+	CmdRebalanceGroup     = "rebalance_group"
 	CmdCommitOffset       = "commit_offset"
 	CmdCleanInactive      = "clean_inactive"
 )
@@ -235,30 +246,62 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 
 	case CmdJoinConsumerGroup:
 		var payload struct {
-			GroupID  string   `json:"group_id"`
-			MemberID string   `json:"member_id"`
-			Topics   []string `json:"topics"`
+			GroupID    string   `json:"group_id"`
+			MemberID   string   `json:"member_id"`
+			Topics     []string `json:"topics"`
+			ClientHost string   `json:"client_host,omitempty"`
+			UserAgent  string   `json:"user_agent,omitempty"`
 		}
 		if err := json.Unmarshal(cmd.Payload, &payload); err == nil {
 			g, exists := f.state.ConsumerGroups[payload.GroupID]
 			if !exists {
 				g = &ConsumerGroupState{
-					GroupID:     payload.GroupID,
-					Generation:  0,
-					Members:     make(map[string]*GroupMember),
-					Assignments: make(map[string][]PartitionTopic),
+					GroupID:           payload.GroupID,
+					Protocol:          "COOPERATIVE_STICKY",
+					State:             "STABLE",
+					Generation:        0,
+					Members:           make(map[string]*GroupMember),
+					Assignments:       make(map[string][]PartitionTopic),
+					LastRebalanceTime: time.Now(),
 				}
 				f.state.ConsumerGroups[payload.GroupID] = g
 			}
 			
-			g.Members[payload.MemberID] = &GroupMember{
-				ID:       payload.MemberID,
-				Topics:   payload.Topics,
-				LastSeen: time.Now(),
+			m, mExists := g.Members[payload.MemberID]
+			if !mExists {
+				m = &GroupMember{
+					ID:                 payload.MemberID,
+					Topics:             payload.Topics,
+					LastSeen:           time.Now(),
+					ClientHost:         payload.ClientHost,
+					UserAgent:          payload.UserAgent,
+					AssignedPartitions: make([]PartitionTopic, 0),
+					RevokingPartitions: make([]PartitionTopic, 0),
+				}
+				g.Members[payload.MemberID] = m
+			} else {
+				m.Topics = payload.Topics
+				m.LastSeen = time.Now()
+				if payload.ClientHost != "" {
+					m.ClientHost = payload.ClientHost
+				}
+				if payload.UserAgent != "" {
+					m.UserAgent = payload.UserAgent
+				}
 			}
 			
 			// Trigger a rebalance!
 			f.rebalanceGroup(g)
+		}
+
+	case CmdRebalanceGroup:
+		var payload struct {
+			GroupID string `json:"group_id"`
+		}
+		if err := json.Unmarshal(cmd.Payload, &payload); err == nil {
+			if g, exists := f.state.ConsumerGroups[payload.GroupID]; exists {
+				f.rebalanceGroup(g)
+			}
 		}
 
 	case CmdCommitOffset:
@@ -382,35 +425,244 @@ func (f *FSM) handleBrokerFailure(failedID uint32) {
 }
 
 func (f *FSM) rebalanceGroup(g *ConsumerGroupState) {
+	if g == nil {
+		return
+	}
+	g.Protocol = "COOPERATIVE_STICKY"
+	g.State = "STABLE"
 	g.Generation++
-	g.Assignments = make(map[string][]PartitionTopic)
+	g.RebalanceCount++
+	g.LastRebalanceTime = time.Now()
 
-	// Collect all topics that members are interested in
-	topicToMembers := make(map[string][]string)
-	for memberID, member := range g.Members {
-		for _, topic := range member.Topics {
-			topicToMembers[topic] = append(topicToMembers[topic], memberID)
+	if g.Members == nil {
+		g.Members = make(map[string]*GroupMember)
+	}
+	if g.Assignments == nil {
+		g.Assignments = make(map[string][]PartitionTopic)
+	}
+
+	// Deterministic member IDs
+	memberIDs := make([]string, 0, len(g.Members))
+	for mID := range g.Members {
+		memberIDs = append(memberIDs, mID)
+	}
+	sort.Strings(memberIDs)
+
+	if len(memberIDs) == 0 {
+		g.LeaderID = ""
+		g.Assignments = make(map[string][]PartitionTopic)
+		return
+	}
+
+	// Update leader ID
+	if g.LeaderID == "" || g.Members[g.LeaderID] == nil {
+		g.LeaderID = memberIDs[0]
+	}
+
+	// Reset revoking partitions for all active members
+	for _, m := range g.Members {
+		m.RevokingPartitions = make([]PartitionTopic, 0)
+		if m.AssignedPartitions == nil {
+			m.AssignedPartitions = make([]PartitionTopic, 0)
 		}
 	}
 
-	// For each topic subscribed, distribute its partitions among subscribed members
-	for topicName, memberIDs := range topicToMembers {
-		if len(memberIDs) == 0 {
-			continue
+	// Collect unique topics subscribed across all members
+	topicSet := make(map[string]bool)
+	for _, mID := range memberIDs {
+		m := g.Members[mID]
+		for _, t := range m.Topics {
+			topicSet[t] = true
 		}
-		topic, exists := f.state.Topics[topicName]
-		if !exists {
+	}
+	topics := make([]string, 0, len(topicSet))
+	for t := range topicSet {
+		topics = append(topics, t)
+	}
+	sort.Strings(topics)
+
+	// Map to accumulate final assignments per member: memberID -> []PartitionTopic
+	finalAssignments := make(map[string][]PartitionTopic)
+	for _, mID := range memberIDs {
+		finalAssignments[mID] = make([]PartitionTopic, 0)
+	}
+
+	// Perform cooperative sticky balancing topic by topic
+	for _, topicName := range topics {
+		topicState, exists := f.state.Topics[topicName]
+		if !exists || len(topicState.Partitions) == 0 {
 			continue
 		}
 
-		for pID := range topic.Partitions {
-			// Round robin assignment
-			assignedMember := memberIDs[int(pID)%len(memberIDs)]
-			g.Assignments[assignedMember] = append(g.Assignments[assignedMember], PartitionTopic{
-				Topic:     topicName,
-				Partition: pID,
+		// Partitions for this topic, sorted
+		partitionIDs := make([]uint32, 0, len(topicState.Partitions))
+		for pID := range topicState.Partitions {
+			partitionIDs = append(partitionIDs, pID)
+		}
+		sort.Slice(partitionIDs, func(i, j int) bool { return partitionIDs[i] < partitionIDs[j] })
+
+		// Subscribed members for this topic, sorted
+		subMembers := make([]string, 0)
+		for _, mID := range memberIDs {
+			m := g.Members[mID]
+			for _, t := range m.Topics {
+				if t == topicName {
+					subMembers = append(subMembers, mID)
+					break
+				}
+			}
+		}
+		if len(subMembers) == 0 {
+			continue
+		}
+
+		numPartitions := len(partitionIDs)
+		numMembers := len(subMembers)
+		baseQuota := numPartitions / numMembers
+		remainder := numPartitions % numMembers
+
+		maxQuota := baseQuota
+		if remainder > 0 {
+			maxQuota = baseQuota + 1
+		}
+
+		// Find existing assignments for this topic
+		currentHeld := make(map[string][]uint32)
+		for _, mID := range subMembers {
+			currentHeld[mID] = make([]uint32, 0)
+		}
+
+		claimed := make(map[uint32]string)
+		for _, mID := range subMembers {
+			var prevList []PartitionTopic
+			if pts, ok := g.Assignments[mID]; ok {
+				prevList = append(prevList, pts...)
+			}
+			if m, ok := g.Members[mID]; ok && m != nil {
+				prevList = append(prevList, m.AssignedPartitions...)
+			}
+
+			seen := make(map[uint32]bool)
+			for _, pt := range prevList {
+				if pt.Topic == topicName {
+					if _, valid := topicState.Partitions[pt.Partition]; valid {
+						if !seen[pt.Partition] {
+							seen[pt.Partition] = true
+							if _, alreadyClaimed := claimed[pt.Partition]; !alreadyClaimed {
+								claimed[pt.Partition] = mID
+								currentHeld[mID] = append(currentHeld[mID], pt.Partition)
+							}
+						}
+					}
+				}
+			}
+			sort.Slice(currentHeld[mID], func(i, j int) bool {
+				return currentHeld[mID][i] < currentHeld[mID][j]
 			})
 		}
+
+		// Retained assignments per member
+		retained := make(map[string][]uint32)
+		unassigned := make([]uint32, 0)
+
+		// 1. Cooperative preservation: keep partitions within maxQuota
+		for _, mID := range subMembers {
+			parts := currentHeld[mID]
+			if len(parts) > maxQuota {
+				retained[mID] = append([]uint32(nil), parts[:maxQuota]...)
+				revoked := parts[maxQuota:]
+				unassigned = append(unassigned, revoked...)
+				for _, p := range revoked {
+					g.Members[mID].RevokingPartitions = append(g.Members[mID].RevokingPartitions, PartitionTopic{
+						Topic:     topicName,
+						Partition: p,
+					})
+				}
+			} else {
+				retained[mID] = append([]uint32(nil), parts...)
+			}
+		}
+
+		// 2. If count of members holding (baseQuota + 1) exceeds remainder, shed the excess from the end
+		if remainder > 0 {
+			countPlusOne := 0
+			for _, mID := range subMembers {
+				if len(retained[mID]) == baseQuota+1 {
+					countPlusOne++
+				}
+			}
+			for i := len(subMembers) - 1; i >= 0 && countPlusOne > remainder; i-- {
+				mID := subMembers[i]
+				if len(retained[mID]) == baseQuota+1 {
+					revokedP := retained[mID][len(retained[mID])-1]
+					retained[mID] = retained[mID][:len(retained[mID])-1]
+					unassigned = append(unassigned, revokedP)
+					g.Members[mID].RevokingPartitions = append(g.Members[mID].RevokingPartitions, PartitionTopic{
+						Topic:     topicName,
+						Partition: revokedP,
+					})
+					countPlusOne--
+				}
+			}
+		}
+
+		// 3. Find any partitions that were not held at all (orphaned from departed members or brand new)
+		allHeld := make(map[uint32]bool)
+		for _, mID := range subMembers {
+			for _, p := range retained[mID] {
+				allHeld[p] = true
+			}
+		}
+		for _, p := range partitionIDs {
+			if !allHeld[p] {
+				found := false
+				for _, u := range unassigned {
+					if u == p {
+						found = true
+						break
+					}
+				}
+				if !found {
+					unassigned = append(unassigned, p)
+				}
+			}
+		}
+		sort.Slice(unassigned, func(i, j int) bool { return unassigned[i] < unassigned[j] })
+
+		// 4. Reassign orphaned / new partitions to the least-loaded members
+		for _, p := range unassigned {
+			bestMember := ""
+			bestCount := -1
+			for _, mID := range subMembers {
+				c := len(retained[mID])
+				if bestCount == -1 || c < bestCount {
+					bestCount = c
+					bestMember = mID
+				}
+			}
+			if bestMember != "" {
+				retained[bestMember] = append(retained[bestMember], p)
+				sort.Slice(retained[bestMember], func(i, j int) bool {
+					return retained[bestMember][i] < retained[bestMember][j]
+				})
+			}
+		}
+
+		// Populate into finalAssignments
+		for _, mID := range subMembers {
+			for _, p := range retained[mID] {
+				finalAssignments[mID] = append(finalAssignments[mID], PartitionTopic{
+					Topic:     topicName,
+					Partition: p,
+				})
+			}
+		}
+	}
+
+	// Update g.Assignments and g.Members[mID].AssignedPartitions
+	g.Assignments = finalAssignments
+	for mID, m := range g.Members {
+		m.AssignedPartitions = append([]PartitionTopic(nil), finalAssignments[mID]...)
 	}
 }
 
@@ -471,16 +723,25 @@ func (f *FSM) GetMetadata(topics []string) ClusterState {
 
 	for k, v := range f.state.ConsumerGroups {
 		cgState := &ConsumerGroupState{
-			GroupID:     v.GroupID,
-			Generation:  v.Generation,
-			Members:     make(map[string]*GroupMember),
-			Assignments: make(map[string][]PartitionTopic),
+			GroupID:           v.GroupID,
+			Protocol:          v.Protocol,
+			State:             v.State,
+			Generation:        v.Generation,
+			LeaderID:          v.LeaderID,
+			RebalanceCount:    v.RebalanceCount,
+			LastRebalanceTime: v.LastRebalanceTime,
+			Members:           make(map[string]*GroupMember),
+			Assignments:       make(map[string][]PartitionTopic),
 		}
 		for mk, mv := range v.Members {
 			cgState.Members[mk] = &GroupMember{
-				ID:       mv.ID,
-				Topics:   append([]string(nil), mv.Topics...),
-				LastSeen: mv.LastSeen,
+				ID:                 mv.ID,
+				Topics:             append([]string(nil), mv.Topics...),
+				LastSeen:           mv.LastSeen,
+				ClientHost:         mv.ClientHost,
+				UserAgent:          mv.UserAgent,
+				AssignedPartitions: append([]PartitionTopic(nil), mv.AssignedPartitions...),
+				RevokingPartitions: append([]PartitionTopic(nil), mv.RevokingPartitions...),
 			}
 		}
 		for ak, av := range v.Assignments {

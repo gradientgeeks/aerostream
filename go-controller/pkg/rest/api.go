@@ -13,14 +13,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/auth"
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/connect"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/consensus"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/schemaregistry"
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/transform"
+	"github.com/hashicorp/raft"
 )
 
 type Server struct {
-	raftNode       *consensus.RaftNode
-	httpAddr       string
-	schemaRegistry *schemaregistry.Registry
+	raftNode         *consensus.RaftNode
+	httpAddr         string
+	schemaRegistry   *schemaregistry.Registry
+	aclManager       *auth.AclManager
+	transformEngine  *transform.Engine
+	connectorManager *connect.ConnectorManager
 }
 
 func NewServer(raftNode *consensus.RaftNode, httpAddr string, registry ...*schemaregistry.Registry) *Server {
@@ -31,9 +38,12 @@ func NewServer(raftNode *consensus.RaftNode, httpAddr string, registry ...*schem
 		reg = schemaregistry.NewRegistry()
 	}
 	return &Server{
-		raftNode:       raftNode,
-		httpAddr:       httpAddr,
-		schemaRegistry: reg,
+		raftNode:         raftNode,
+		httpAddr:         httpAddr,
+		schemaRegistry:   reg,
+		aclManager:       auth.NewAclManager(),
+		transformEngine:  transform.NewEngine(),
+		connectorManager: connect.NewManager(),
 	}
 }
 
@@ -43,6 +53,30 @@ func (s *Server) Registry() *schemaregistry.Registry {
 
 func (s *Server) SetSchemaRegistry(r *schemaregistry.Registry) {
 	s.schemaRegistry = r
+}
+
+func (s *Server) TransformEngine() *transform.Engine {
+	return s.transformEngine
+}
+
+func (s *Server) SetTransformEngine(t *transform.Engine) {
+	s.transformEngine = t
+}
+
+func (s *Server) AclManager() *auth.AclManager {
+	return s.aclManager
+}
+
+func (s *Server) SetAclManager(m *auth.AclManager) {
+	s.aclManager = m
+}
+
+func (s *Server) ConnectorManager() *connect.ConnectorManager {
+	return s.connectorManager
+}
+
+func (s *Server) SetConnectorManager(m *connect.ConnectorManager) {
+	s.connectorManager = m
 }
 
 func (s *Server) enableCORS(w http.ResponseWriter, r *http.Request) bool {
@@ -61,9 +95,31 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/brokers", s.handleBrokers)
 	mux.HandleFunc("/api/topics", s.handleTopics)
 	mux.HandleFunc("/api/groups", s.handleGroups)
+	mux.HandleFunc("/api/groups/", s.handleGroups)
 	mux.HandleFunc("/api/lag", s.handleLag)
 	mux.HandleFunc("/api/produce", s.handleProduce)
 	mux.HandleFunc("/api/messages", s.handleMessages)
+
+	// ACLs and RBAC endpoints
+	mux.HandleFunc("/api/acls", s.handleAcls)
+	mux.HandleFunc("/api/acls/", s.handleAcls)
+	mux.HandleFunc("/api/users", s.handleUsers)
+	mux.HandleFunc("/api/users/", s.handleUsers)
+
+	// Stream Transforms endpoints
+	mux.HandleFunc("/api/transforms", s.handleTransforms)
+	mux.HandleFunc("/api/transforms/", s.handleTransformItem)
+
+	// Connectors Ecosystem endpoints (Kafka Connect-compatible & Native)
+	mux.HandleFunc("/api/connectors", s.handleConnectors)
+	mux.HandleFunc("/api/connectors/", s.handleConnectors)
+	mux.HandleFunc("/api/connectors-detail", s.handleConnectorsDetail)
+	mux.HandleFunc("/api/connector-plugins", s.handleConnectorPlugins)
+
+	// Kafka Connect compatibility aliases
+	mux.HandleFunc("/connectors", s.handleConnectors)
+	mux.HandleFunc("/connectors/", s.handleConnectors)
+	mux.HandleFunc("/connector-plugins", s.handleConnectorPlugins)
 
 	// Schema Registry endpoints (Confluent-compatible)
 	mux.HandleFunc("/subjects", s.handleSubjects)
@@ -209,9 +265,120 @@ func (s *Server) handleGroups(w http.ResponseWriter, r *http.Request) {
 	if s.enableCORS(w, r) {
 		return
 	}
-	meta := s.raftNode.FSM.GetMetadata(nil)
-	w.Header().Set("Content-Type", "application/json")
 
+	path := strings.Trim(r.URL.Path, "/")
+
+	// Handle POST /api/groups/{id}/rebalance
+	if strings.HasPrefix(path, "api/groups/") && strings.HasSuffix(path, "/rebalance") {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		rawGroup := strings.TrimPrefix(path, "api/groups/")
+		rawGroup = strings.TrimSuffix(rawGroup, "/rebalance")
+		rawGroup = strings.Trim(rawGroup, "/")
+		groupID, err := url.PathUnescape(rawGroup)
+		if err != nil || groupID == "" {
+			http.Error(w, "invalid group id", http.StatusBadRequest)
+			return
+		}
+
+		if s.raftNode == nil {
+			http.Error(w, "raft node not initialized", http.StatusInternalServerError)
+			return
+		}
+
+		meta := s.raftNode.FSM.GetMetadata(nil)
+		if meta.ConsumerGroups == nil {
+			http.Error(w, fmt.Sprintf("consumer group %s not found", groupID), http.StatusNotFound)
+			return
+		}
+		cg, exists := meta.ConsumerGroups[groupID]
+		if !exists {
+			http.Error(w, fmt.Sprintf("consumer group %s not found", groupID), http.StatusNotFound)
+			return
+		}
+
+		rebalancePayload := struct {
+			GroupID string `json:"group_id"`
+		}{
+			GroupID: groupID,
+		}
+
+		if s.raftNode.Raft != nil {
+			if err := s.raftNode.Propose(consensus.CmdRebalanceGroup, rebalancePayload); err != nil {
+				http.Error(w, fmt.Sprintf("failed to trigger rebalance: %v", err), http.StatusInternalServerError)
+				return
+			}
+		} else if s.raftNode.FSM != nil {
+			raw, _ := json.Marshal(rebalancePayload)
+			cmdData, _ := json.Marshal(consensus.Command{
+				Op:      consensus.CmdRebalanceGroup,
+				Payload: raw,
+			})
+			s.raftNode.FSM.Apply(&raft.Log{Data: cmdData})
+		}
+
+		// Re-fetch updated metadata
+		updatedMeta := s.raftNode.FSM.GetMetadata(nil)
+		var updatedGroup *consensus.ConsumerGroupState
+		if updatedMeta.ConsumerGroups != nil {
+			updatedGroup = updatedMeta.ConsumerGroups[groupID]
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		protocol := "COOPERATIVE_STICKY"
+		state := "STABLE"
+		gen := cg.Generation + 1
+		leaderID := cg.LeaderID
+		rebalanceCount := cg.RebalanceCount + 1
+
+		if updatedGroup != nil {
+			if updatedGroup.Protocol != "" {
+				protocol = updatedGroup.Protocol
+			}
+			if updatedGroup.State != "" {
+				state = updatedGroup.State
+			}
+			gen = updatedGroup.Generation
+			leaderID = updatedGroup.LeaderID
+			rebalanceCount = updatedGroup.RebalanceCount
+		}
+
+		resp := map[string]interface{}{
+			"success":         true,
+			"message":         fmt.Sprintf("cooperative rebalance triggered successfully for group %s", groupID),
+			"group_id":        groupID,
+			"protocol":        protocol,
+			"state":           state,
+			"generation":      gen,
+			"leader_id":       leaderID,
+			"rebalance_count": rebalanceCount,
+		}
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	// Handle GET /api/groups
+	if path != "api/groups" && path != "api/groups/" {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if s.raftNode == nil {
+		json.NewEncoder(w).Encode([]interface{}{})
+		return
+	}
+
+	meta := s.raftNode.FSM.GetMetadata(nil)
 	groups := make([]interface{}, 0)
 	if meta.ConsumerGroups != nil {
 		for _, g := range meta.ConsumerGroups {
@@ -226,11 +393,23 @@ func (s *Server) handleGroups(w http.ResponseWriter, r *http.Request) {
 					if topics == nil {
 						topics = make([]string, 0)
 					}
+					assignedParts := m.AssignedPartitions
+					if assignedParts == nil {
+						assignedParts = make([]consensus.PartitionTopic, 0)
+					}
+					revokingParts := m.RevokingPartitions
+					if revokingParts == nil {
+						revokingParts = make([]consensus.PartitionTopic, 0)
+					}
 					members = append(members, map[string]interface{}{
-						"id":          m.ID,
-						"topics":      topics,
-						"last_seen":   m.LastSeen,
-						"assignments": assigned,
+						"id":                  m.ID,
+						"topics":              topics,
+						"last_seen":           m.LastSeen,
+						"client_host":         m.ClientHost,
+						"user_agent":          m.UserAgent,
+						"assigned_partitions": assignedParts,
+						"revoking_partitions": revokingParts,
+						"assignments":         assigned,
 					})
 				}
 			}
@@ -240,11 +419,25 @@ func (s *Server) handleGroups(w http.ResponseWriter, r *http.Request) {
 				assignments = make(map[string][]consensus.PartitionTopic)
 			}
 
+			protocol := g.Protocol
+			if protocol == "" {
+				protocol = "COOPERATIVE_STICKY"
+			}
+			state := g.State
+			if state == "" {
+				state = "STABLE"
+			}
+
 			groups = append(groups, map[string]interface{}{
-				"group_id":    g.GroupID,
-				"generation":  g.Generation,
-				"members":     members,
-				"assignments": assignments,
+				"group_id":            g.GroupID,
+				"protocol":            protocol,
+				"state":               state,
+				"rebalance_count":     g.RebalanceCount,
+				"leader_id":           g.LeaderID,
+				"generation":          g.Generation,
+				"last_rebalance_time": g.LastRebalanceTime,
+				"members":             members,
+				"assignments":         assignments,
 			})
 		}
 	}
@@ -857,6 +1050,139 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleAcls(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	path := strings.Trim(r.URL.Path, "/")
+
+	// POST /api/acls/test - Live authorization evaluation
+	if path == "api/acls/test" {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+			return
+		}
+		var testReq struct {
+			Principal    string            `json:"principal"`
+			ResourceType auth.ResourceType `json:"resource_type"`
+			ResourceName string            `json:"resource_name"`
+			Operation    auth.Operation    `json:"operation"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&testReq); err != nil {
+			writeError(w, http.StatusBadRequest, 400, fmt.Sprintf("Invalid JSON request body: %v", err))
+			return
+		}
+		if strings.TrimSpace(testReq.Principal) == "" || testReq.ResourceType == "" || strings.TrimSpace(testReq.ResourceName) == "" || testReq.Operation == "" {
+			writeError(w, http.StatusBadRequest, 400, "principal, resource_type, resource_name, and operation are required")
+			return
+		}
+
+		allowed, reason := s.aclManager.AuthorizeWithReason(testReq.Principal, testReq.ResourceType, testReq.ResourceName, testReq.Operation)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"allowed": allowed,
+			"reason":  reason,
+		})
+		return
+	}
+
+	// /api/acls - List or Create
+	if path == "api/acls" {
+		switch r.Method {
+		case http.MethodGet:
+			rules := s.aclManager.ListRules()
+			json.NewEncoder(w).Encode(rules)
+			return
+
+		case http.MethodPost:
+			var rule auth.AclRule
+			if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
+				writeError(w, http.StatusBadRequest, 400, fmt.Sprintf("Invalid JSON request body: %v", err))
+				return
+			}
+			if err := s.aclManager.AddRule(&rule); err != nil {
+				writeError(w, http.StatusBadRequest, 400, err.Error())
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(rule)
+			return
+
+		default:
+			writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+			return
+		}
+	}
+
+	// /api/acls/{id} - Delete rule
+	if strings.HasPrefix(path, "api/acls/") {
+		rawID := strings.TrimPrefix(path, "api/acls/")
+		ruleID, err := url.PathUnescape(rawID)
+		if err != nil || ruleID == "" {
+			writeError(w, http.StatusBadRequest, 400, "Invalid ACL rule ID")
+			return
+		}
+
+		switch r.Method {
+		case http.MethodDelete:
+			if err := s.aclManager.DeleteRule(ruleID); err != nil {
+				writeError(w, http.StatusNotFound, 404, err.Error())
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"deleted": true,
+				"id":      ruleID,
+			})
+			return
+
+		default:
+			writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+			return
+		}
+	}
+
+	writeError(w, http.StatusNotFound, 404, "Not found")
+}
+
+func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	path := strings.Trim(r.URL.Path, "/")
+	if path != "api/users" {
+		writeError(w, http.StatusNotFound, 404, "Not found")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		users := s.aclManager.ListUsers()
+		json.NewEncoder(w).Encode(users)
+		return
+
+	case http.MethodPost:
+		var u auth.User
+		if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
+			writeError(w, http.StatusBadRequest, 400, fmt.Sprintf("Invalid JSON request body: %v", err))
+			return
+		}
+		if err := s.aclManager.AddUser(&u); err != nil {
+			writeError(w, http.StatusBadRequest, 400, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(u)
+		return
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+		return
+	}
+}
+
 func writeError(w http.ResponseWriter, statusCode int, errorCode int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
@@ -865,4 +1191,443 @@ func writeError(w http.ResponseWriter, statusCode int, errorCode int, message st
 		"message":    message,
 	})
 }
+
+func (s *Server) handleTransforms(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case http.MethodGet:
+		transforms := s.transformEngine.ListTransforms()
+		json.NewEncoder(w).Encode(transforms)
+
+	case http.MethodPost:
+		var t transform.Transform
+		if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+			http.Error(w, fmt.Sprintf("invalid transform payload: %v", err), http.StatusBadRequest)
+			return
+		}
+		if err := s.transformEngine.RegisterTransform(&t); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(t)
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleTransformItem(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+
+	subPath := strings.TrimPrefix(r.URL.Path, "/api/transforms/")
+	subPath = strings.Trim(subPath, "/")
+
+	if subPath == "" {
+		s.handleTransforms(w, r)
+		return
+	}
+
+	if subPath == "test" {
+		s.handleTransformTest(w, r)
+		return
+	}
+
+	parts := strings.Split(subPath, "/")
+	name, err := url.PathUnescape(parts[0])
+	if err != nil {
+		name = parts[0]
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if len(parts) == 1 {
+		switch r.Method {
+		case http.MethodGet:
+			t, err := s.transformEngine.GetTransform(name)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(t)
+
+		case http.MethodDelete:
+			if err := s.transformEngine.DeleteTransform(name); err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "deleted",
+				"name":    name,
+				"message": fmt.Sprintf("Transform %s successfully removed", name),
+			})
+
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+		return
+	}
+
+	if len(parts) == 2 {
+		action := parts[1]
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		switch action {
+		case "pause":
+			if err := s.transformEngine.PauseTransform(name); err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "PAUSED",
+				"name":    name,
+				"message": fmt.Sprintf("Transform %s paused", name),
+			})
+
+		case "resume":
+			if err := s.transformEngine.ResumeTransform(name); err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "RUNNING",
+				"name":    name,
+				"message": fmt.Sprintf("Transform %s resumed", name),
+			})
+
+		default:
+			http.Error(w, "unknown action", http.StatusBadRequest)
+		}
+		return
+	}
+
+	http.Error(w, "invalid path", http.StatusNotFound)
+}
+
+func (s *Server) handleTransformTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		TransformName string               `json:"transform_name,omitempty"`
+		Transform     *transform.Transform `json:"transform,omitempty"`
+		Payload       interface{}          `json:"payload"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("invalid test request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	var targetTransform *transform.Transform
+	if req.TransformName != "" {
+		existing, err := s.transformEngine.GetTransform(req.TransformName)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("transform %q not found: %v", req.TransformName, err), http.StatusNotFound)
+			return
+		}
+		targetTransform = existing
+	} else if req.Transform != nil {
+		targetTransform = req.Transform
+	} else {
+		http.Error(w, "either transform_name or transform configuration must be provided", http.StatusBadRequest)
+		return
+	}
+
+	var payloadBytes []byte
+	switch p := req.Payload.(type) {
+	case string:
+		payloadBytes = []byte(p)
+	case []byte:
+		payloadBytes = p
+	default:
+		marshaled, err := json.Marshal(p)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to serialize test payload: %v", err), http.StatusBadRequest)
+			return
+		}
+		payloadBytes = marshaled
+	}
+
+	start := time.Now()
+	output, drop, err := s.transformEngine.ExecuteTransform(targetTransform, payloadBytes)
+	elapsedMs := float64(time.Since(start).Microseconds()) / 1000.0
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf("execution failed: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":     "success",
+		"drop":       drop,
+		"output":     string(output),
+		"latency_ms": elapsedMs,
+	})
+}
+
+func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	path := strings.Trim(r.URL.Path, "/")
+	if path == "api/connectors" || path == "connectors" {
+		switch r.Method {
+		case http.MethodGet:
+			connectors := s.connectorManager.ListConnectors()
+			names := make([]string, 0, len(connectors))
+			for _, c := range connectors {
+				names = append(names, c.Name)
+			}
+			json.NewEncoder(w).Encode(names)
+			return
+
+		case http.MethodPost:
+			var req struct {
+				Name       string            `json:"name"`
+				Type       string            `json:"type"`
+				Class      string            `json:"class"`
+				Topic      string            `json:"topic"`
+				Config     map[string]string `json:"config"`
+				TasksCount int               `json:"tasks_count"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeError(w, http.StatusBadRequest, 400, fmt.Sprintf("Invalid JSON request body: %v", err))
+				return
+			}
+
+			// Kafka Connect format fallback
+			if req.Class == "" && req.Config != nil {
+				if val, ok := req.Config["connector.class"]; ok {
+					req.Class = val
+				}
+			}
+			if req.Topic == "" && req.Config != nil {
+				if val, ok := req.Config["topics"]; ok {
+					req.Topic = val
+				}
+			}
+			if req.Name == "" && req.Config != nil {
+				if val, ok := req.Config["name"]; ok {
+					req.Name = val
+				}
+			}
+			if req.TasksCount <= 0 && req.Config != nil {
+				if val, ok := req.Config["tasks.max"]; ok {
+					if n, err := strconv.Atoi(val); err == nil && n > 0 {
+						req.TasksCount = n
+					}
+				}
+			}
+
+			if req.Name == "" || req.Class == "" {
+				writeError(w, http.StatusBadRequest, 400, "name and class are required")
+				return
+			}
+
+			conn := &connect.Connector{
+				Name:       req.Name,
+				Type:       connect.ConnectorType(req.Type),
+				Class:      req.Class,
+				Topic:      req.Topic,
+				Config:     req.Config,
+				TasksCount: req.TasksCount,
+			}
+
+			if err := s.connectorManager.RegisterConnector(conn); err != nil {
+				if errors.Is(err, connect.ErrConnectorExists) {
+					writeError(w, http.StatusConflict, 409, fmt.Sprintf("Connector %s already exists", req.Name))
+					return
+				}
+				writeError(w, http.StatusBadRequest, 400, err.Error())
+				return
+			}
+
+			created, _ := s.connectorManager.GetConnector(req.Name)
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(created)
+			return
+
+		default:
+			writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+			return
+		}
+	}
+
+	sub := ""
+	if strings.HasPrefix(path, "api/connectors/") {
+		sub = strings.TrimPrefix(path, "api/connectors/")
+	} else if strings.HasPrefix(path, "connectors/") {
+		sub = strings.TrimPrefix(path, "connectors/")
+	} else {
+		writeError(w, http.StatusNotFound, 404, "Not found")
+		return
+	}
+
+	sub = strings.Trim(sub, "/")
+	parts := strings.Split(sub, "/")
+	name, err := url.PathUnescape(parts[0])
+	if err != nil || name == "" {
+		writeError(w, http.StatusBadRequest, 400, "Invalid connector name")
+		return
+	}
+
+	if len(parts) == 1 {
+		switch r.Method {
+		case http.MethodGet:
+			c, err := s.connectorManager.GetConnector(name)
+			if err != nil {
+				writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
+				return
+			}
+			json.NewEncoder(w).Encode(c)
+			return
+
+		case http.MethodDelete:
+			if err := s.connectorManager.DeleteConnector(name); err != nil {
+				writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"deleted": true,
+				"name":    name,
+			})
+			return
+
+		default:
+			writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+			return
+		}
+	}
+
+	if len(parts) >= 2 {
+		action := parts[1]
+		switch action {
+		case "status":
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+				return
+			}
+			c, err := s.connectorManager.GetConnector(name)
+			if err != nil {
+				writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
+				return
+			}
+			workerID := "aeromq-controller-0"
+			tasks := make([]map[string]interface{}, 0, c.TasksCount)
+			for i := 0; i < c.TasksCount; i++ {
+				tasks = append(tasks, map[string]interface{}{
+					"id":        i,
+					"state":     string(c.State),
+					"worker_id": workerID,
+				})
+			}
+			resp := map[string]interface{}{
+				"name": name,
+				"connector": map[string]interface{}{
+					"state":     string(c.State),
+					"worker_id": workerID,
+				},
+				"tasks":             tasks,
+				"type":              strings.ToLower(string(c.Type)),
+				"state":             string(c.State),
+				"records_processed": c.RecordsProcessed,
+				"bytes_transferred": c.BytesTransferred,
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+
+		case "pause":
+			if r.Method != http.MethodPut && r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+				return
+			}
+			if err := s.connectorManager.PauseConnector(name); err != nil {
+				writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
+				return
+			}
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"name":  name,
+				"state": string(connect.StatePaused),
+			})
+			return
+
+		case "resume":
+			if r.Method != http.MethodPut && r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+				return
+			}
+			if err := s.connectorManager.ResumeConnector(name); err != nil {
+				writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
+				return
+			}
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"name":  name,
+				"state": string(connect.StateRunning),
+			})
+			return
+
+		case "config":
+			c, err := s.connectorManager.GetConnector(name)
+			if err != nil {
+				writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
+				return
+			}
+			json.NewEncoder(w).Encode(c.Config)
+			return
+
+		default:
+			writeError(w, http.StatusNotFound, 404, "Not found")
+			return
+		}
+	}
+
+	writeError(w, http.StatusNotFound, 404, "Not found")
+}
+
+func (s *Server) handleConnectorsDetail(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+		return
+	}
+	connectors := s.connectorManager.ListConnectors()
+	json.NewEncoder(w).Encode(connectors)
+}
+
+func (s *Server) handleConnectorPlugins(w http.ResponseWriter, r *http.Request) {
+	if s.enableCORS(w, r) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+		return
+	}
+	plugins := s.connectorManager.ListPlugins()
+	json.NewEncoder(w).Encode(plugins)
+}
+
+
+
 

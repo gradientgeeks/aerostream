@@ -14,6 +14,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject, Subscription, catchError, forkJoin, of, timer } from 'rxjs';
 import { AeroMQService } from '../../services/aeromq.service';
 import { ConsumerGroup, ConsumerGroupMember, PartitionLag } from '../../models/aeromq.models';
@@ -21,6 +22,11 @@ import { ConsumerGroup, ConsumerGroupMember, PartitionLag } from '../../models/a
 export interface GroupDisplayInfo {
   groupId: string;
   generation: number;
+  protocol: string;
+  state: string;
+  leaderId: string;
+  rebalanceCount: number;
+  lastRebalanceTime?: string;
   members: ConsumerGroupMember[];
   memberCount: number;
   subscribedTopics: string[];
@@ -59,12 +65,14 @@ export interface MemberAssignmentDisplay {
     MatInputModule,
     MatBadgeModule,
     MatTabsModule,
+    MatSnackBarModule,
   ],
   templateUrl: './consumer-groups.component.html',
   styleUrl: './consumer-groups.component.scss',
 })
 export class ConsumerGroupsComponent implements OnInit, OnDestroy {
   protected readonly service = inject(AeroMQService);
+  private readonly snackBar = inject(MatSnackBar);
   private readonly destroy$ = new Subject<void>();
   private pollingSub: Subscription | null = null;
 
@@ -72,6 +80,7 @@ export class ConsumerGroupsComponent implements OnInit, OnDestroy {
   readonly groups = signal<ConsumerGroup[]>([]);
   readonly allLag = signal<PartitionLag[]>([]);
   readonly isLoading = signal<boolean>(false);
+  readonly isRebalancing = signal<boolean>(false);
   readonly errorMessage = signal<string | null>(null);
   readonly lastRefreshed = signal<Date | null>(null);
 
@@ -84,6 +93,8 @@ export class ConsumerGroupsComponent implements OnInit, OnDestroy {
   readonly groupColumns: string[] = [
     'groupId',
     'generation',
+    'protocol',
+    'state',
     'membersCount',
     'topics',
     'totalLag',
@@ -145,6 +156,11 @@ export class ConsumerGroupsComponent implements OnInit, OnDestroy {
       return {
         groupId: group?.group_id || '',
         generation: group?.generation || 0,
+        protocol: group?.protocol || 'COOPERATIVE_STICKY',
+        state: group?.state || 'STABLE',
+        leaderId: group?.leader_id || (group?.members && group.members.length > 0 ? group.members[0].id : ''),
+        rebalanceCount: group?.rebalance_count || 0,
+        lastRebalanceTime: group?.last_rebalance_time,
         members: group?.members || [],
         memberCount: group?.members ? group.members.length : 0,
         subscribedTopics: Array.from(topicSet),
@@ -350,5 +366,53 @@ export class ConsumerGroupsComponent implements OnInit, OnDestroy {
     if (lag === 0) return '0 (Up to date)';
     if (lag <= 50) return `${lag} (Moderate Lag)`;
     return `${lag} (High Lag)`;
+  }
+
+  triggerRebalance(groupId: string): void {
+    if (!groupId || this.isRebalancing()) return;
+    this.isRebalancing.set(true);
+    this.service.triggerRebalance(groupId).subscribe({
+      next: (resp) => {
+        this.isRebalancing.set(false);
+        this.snackBar.open(
+          `Cooperative rebalance completed for ${groupId}! Gen #${resp.generation ?? 'updated'} (${resp.state || 'STABLE'})`,
+          'Dismiss',
+          { duration: 4000, panelClass: ['snackbar-success'] }
+        );
+        this.fetchData(false);
+      },
+      error: (err) => {
+        this.isRebalancing.set(false);
+        this.snackBar.open(
+          `Rebalance failed: ${err?.message || 'Server error'}`,
+          'Dismiss',
+          { duration: 4000, panelClass: ['snackbar-error'] }
+        );
+      },
+    });
+  }
+
+  getMemberPartitionCount(member: ConsumerGroupMember): number {
+    const assignments = this.getMemberAssignments(member);
+    return assignments.reduce((acc, a) => acc + (a.partitions ? a.partitions.length : 0), 0);
+  }
+
+  getTotalAssignedPartitions(): number {
+    const raw = this.activeRawGroup();
+    if (!raw || !raw.members) return 0;
+    return raw.members.reduce((acc, m) => acc + this.getMemberPartitionCount(m), 0);
+  }
+
+  getMemberLoadPercentage(member: ConsumerGroupMember): number {
+    const total = this.getTotalAssignedPartitions();
+    if (total === 0) return 0;
+    const count = this.getMemberPartitionCount(member);
+    return Math.round((count / total) * 100);
+  }
+
+  getLoadBarClass(percentage: number): string {
+    if (percentage > 60) return 'load-heavy';
+    if (percentage > 30) return 'load-balanced';
+    return 'load-light';
   }
 }

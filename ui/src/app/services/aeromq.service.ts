@@ -176,6 +176,29 @@ export class AeroMQService {
     return this.http.get<ConsumerGroup[]>(url);
   }
 
+  triggerRebalance(groupId: string): Observable<{
+    success: boolean;
+    message: string;
+    group_id: string;
+    protocol?: string;
+    state?: string;
+    generation?: number;
+    leader_id?: string;
+    rebalance_count?: number;
+  }> {
+    const url = `${this.apiBaseUrl()}/api/groups/${encodeURIComponent(groupId)}/rebalance`;
+    return this.http.post<{
+      success: boolean;
+      message: string;
+      group_id: string;
+      protocol?: string;
+      state?: string;
+      generation?: number;
+      leader_id?: string;
+      rebalance_count?: number;
+    }>(url, {});
+  }
+
   getLag(): Observable<PartitionLag[]> {
     const url = `${this.apiBaseUrl()}/api/lag`;
     return this.http.get<PartitionLag[]>(url);

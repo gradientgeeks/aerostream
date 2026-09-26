@@ -1,0 +1,131 @@
+<div class="deploy-dialog-container">
+  <div class="dialog-header">
+    <div class="header-title-row">
+      <div class="icon-avatar">
+        <mat-icon>auto_fix_high</mat-icon>
+      </div>
+      <div>
+        <h2 mat-dialog-title>Deploy Stream Transform</h2>
+        <p class="dialog-subtitle">Configure inline event filtering, PII sanitization, JSON mapping, or WebAssembly routines</p>
+      </div>
+    </div>
+    <button mat-icon-button (click)="onCancel()" aria-label="Close dialog" class="close-btn">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <mat-dialog-content class="dialog-body">
+    @if (errorMessage()) {
+      <div class="error-banner">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ errorMessage() }}</span>
+      </div>
+    }
+
+    <form [formGroup]="form" class="transform-form">
+      <div class="form-row-grid">
+        <!-- Transform Name -->
+        <mat-form-field appearance="outline" class="form-field">
+          <mat-label>Transform Name</mat-label>
+          <input matInput formControlName="name" placeholder="e.g. pii-scrubber-payments" />
+          <mat-hint>Unique identifier in broker pipeline</mat-hint>
+          @if (form.get('name')?.hasError('required') && form.get('name')?.touched) {
+            <mat-error>Transform name is required</mat-error>
+          }
+          @if (form.get('name')?.hasError('pattern')) {
+            <mat-error>Only letters, numbers, underscores, dots, and hyphens</mat-error>
+          }
+        </mat-form-field>
+
+        <!-- Transform Type -->
+        <mat-form-field appearance="outline" class="form-field">
+          <mat-label>Transform Type</mat-label>
+          <mat-select formControlName="type">
+            @for (t of transformTypes; track t) {
+              <mat-option [value]="t">
+                <span class="type-option-label" [ngClass]="'type-' + t.toLowerCase()">
+                  {{ t }}
+                </span>
+              </mat-option>
+            }
+          </mat-select>
+          <mat-hint>Engine processing model</mat-hint>
+        </mat-form-field>
+      </div>
+
+      <div class="form-row-grid">
+        <!-- Source Topic -->
+        <mat-form-field appearance="outline" class="form-field">
+          <mat-label>Source Topic (Input)</mat-label>
+          <input matInput formControlName="source_topic" placeholder="e.g. raw-transactions" />
+          <mat-icon matSuffix class="input-icon">input</mat-icon>
+          @if (form.get('source_topic')?.hasError('required') && form.get('source_topic')?.touched) {
+            <mat-error>Source topic is required</mat-error>
+          }
+        </mat-form-field>
+
+        <!-- Target Topic -->
+        <mat-form-field appearance="outline" class="form-field">
+          <mat-label>Target Topic (Output)</mat-label>
+          <input matInput formControlName="target_topic" placeholder="e.g. sanitized-transactions" />
+          <mat-icon matSuffix class="input-icon">output</mat-icon>
+          @if (form.get('target_topic')?.hasError('required') && form.get('target_topic')?.touched) {
+            <mat-error>Target topic is required</mat-error>
+          }
+        </mat-form-field>
+      </div>
+
+      <!-- Config Key/Value -->
+      <div class="config-section">
+        <label class="section-label">Transform Configuration</label>
+        <div class="form-row-grid config-grid">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Config Key</mat-label>
+            <input matInput formControlName="config_key1" placeholder="Property name" />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Config Value</mat-label>
+            <input matInput formControlName="config_val1" placeholder="Property value / expression" />
+          </mat-form-field>
+        </div>
+      </div>
+
+      <!-- Code / Script Editor -->
+      <div class="code-section">
+        <div class="code-header">
+          <label class="section-label">Transform Implementation (Script / WAT / Rule)</label>
+          <span class="engine-indicator">Inline Micro-Engine</span>
+        </div>
+        <textarea
+          class="code-editor-textarea"
+          formControlName="code"
+          rows="7"
+          spellcheck="false"
+          placeholder="Enter transform definition code or rule..."
+        ></textarea>
+      </div>
+    </form>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end" class="dialog-actions">
+    <button mat-button type="button" (click)="onCancel()" [disabled]="isSubmitting()">
+      Cancel
+    </button>
+    <button
+      mat-flat-button
+      color="primary"
+      type="button"
+      class="deploy-btn"
+      (click)="onSubmit()"
+      [disabled]="form.invalid || isSubmitting()"
+    >
+      @if (isSubmitting()) {
+        <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
+      } @else {
+        <mat-icon>rocket_launch</mat-icon>
+      }
+      <span>{{ isSubmitting() ? 'Deploying...' : 'Deploy Pipeline' }}</span>
+    </button>
+  </mat-dialog-actions>
+</div>

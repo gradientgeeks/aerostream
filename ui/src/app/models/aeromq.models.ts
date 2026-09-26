@@ -33,15 +33,24 @@ export interface Topic {
 export interface ConsumerGroupMember {
   id: string;
   topics: string[];
-  last_seen: number;
+  last_seen: number | string | Date;
+  client_host?: string;
+  user_agent?: string;
+  assigned_partitions?: { topic: string; partition: number }[];
+  revoking_partitions?: { topic: string; partition: number }[];
   assignments?: Record<string, number[]>;
 }
 
 export interface ConsumerGroup {
   group_id: string;
   generation: number;
+  protocol?: string;
+  state?: string;
+  leader_id?: string;
+  rebalance_count?: number;
+  last_rebalance_time?: string;
   members: ConsumerGroupMember[];
-  assignments?: Record<string, Record<string, number[]>>;
+  assignments?: Record<string, any>;
 }
 
 export interface PartitionLag {

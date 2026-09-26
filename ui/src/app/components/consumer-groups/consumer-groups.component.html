@@ -183,7 +183,29 @@
         <ng-container matColumnDef="generation">
           <th mat-header-cell *matHeaderCellDef class="whitespace-nowrap px-4 py-3">Generation</th>
           <td mat-cell *matCellDef="let element" class="whitespace-nowrap px-4 py-3">
-            <span class="generation-chip font-mono">gen-{{ element.generation }}</span>
+            <span class="generation-chip font-mono">Gen #{{ element.generation }}</span>
+          </td>
+        </ng-container>
+
+        <!-- Protocol Column -->
+        <ng-container matColumnDef="protocol">
+          <th mat-header-cell *matHeaderCellDef class="whitespace-nowrap px-4 py-3">Protocol</th>
+          <td mat-cell *matCellDef="let element" class="whitespace-nowrap px-4 py-3">
+            <span class="protocol-badge table-badge">
+              <mat-icon>handshake</mat-icon>
+              <span>Cooperative Sticky (KIP-848)</span>
+            </span>
+          </td>
+        </ng-container>
+
+        <!-- Rebalance State Column -->
+        <ng-container matColumnDef="state">
+          <th mat-header-cell *matHeaderCellDef class="whitespace-nowrap px-4 py-3">Rebalance State</th>
+          <td mat-cell *matCellDef="let element" class="whitespace-nowrap px-4 py-3">
+            <span class="state-badge stable">
+              <mat-icon>verified</mat-icon>
+              <span>Stable</span>
+            </span>
           </td>
         </ng-container>
 
@@ -282,30 +304,58 @@
   <!-- Selected Group Detail View (Lag Breakdown + Members List) -->
   <div class="group-detail-section mt-7" *ngIf="activeGroup() as selected">
     <div class="detail-header-card rounded-xl border border-app bg-app-card shadow-[var(--app-card-shadow)] p-4 sm:p-5 mb-5">
-      <div class="detail-title-row flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div class="detail-name-box flex items-center gap-3 min-w-0">
-          <mat-icon class="detail-icon text-[var(--app-code-text)] shrink-0">analytics</mat-icon>
+      <div class="detail-title-row flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div class="detail-name-box flex items-start gap-3 min-w-0">
+          <mat-icon class="detail-icon text-[var(--app-code-text)] shrink-0 mt-1">analytics</mat-icon>
           <div class="min-w-0">
             <div class="detail-super text-[11px] font-bold text-app-muted tracking-wider">CONSUMER GROUP DETAILS</div>
             <h2 class="font-mono text-lg sm:text-xl text-app m-0 truncate">{{ selected.groupId }}</h2>
+            <div class="header-badges-row flex flex-wrap items-center gap-2 mt-2">
+              <span class="protocol-badge">
+                <mat-icon>handshake</mat-icon> Cooperative Sticky (KIP-848)
+              </span>
+              <span class="state-badge stable">
+                <mat-icon>verified</mat-icon> Stable
+              </span>
+              <span class="generation-badge">
+                Gen #{{ selected.generation }}
+              </span>
+              <span *ngIf="selected.leaderId" class="leader-badge font-mono text-xs flex items-center gap-1">
+                <mat-icon class="tiny-icon">star</mat-icon>
+                <span>Leader: {{ selected.leaderId }}</span>
+              </span>
+            </div>
           </div>
         </div>
 
-        <div class="detail-tags-row flex flex-wrap items-center gap-2 sm:gap-3">
-          <div class="detail-meta-item flex items-center gap-1.5 bg-app-nested px-3 py-1.5 rounded-md border border-app text-xs">
-            <span class="meta-label text-app-muted">Generation:</span>
-            <span class="meta-val font-mono font-semibold text-app">#{{ selected.generation }}</span>
+        <div class="detail-actions-and-meta flex flex-wrap items-center gap-3">
+          <div class="detail-tags-row flex flex-wrap items-center gap-2 sm:gap-3">
+            <div class="detail-meta-item flex items-center gap-1.5 bg-app-nested px-3 py-1.5 rounded-md border border-app text-xs">
+              <span class="meta-label text-app-muted">Active Members:</span>
+              <span class="meta-val font-mono font-semibold text-app">{{ selected.memberCount }}</span>
+            </div>
+            <div class="detail-meta-item flex items-center gap-1.5 bg-app-nested px-3 py-1.5 rounded-md border border-app text-xs">
+              <span class="meta-label text-app-muted">Rebalances:</span>
+              <span class="meta-val font-mono font-semibold text-app">#{{ selected.rebalanceCount }}</span>
+            </div>
+            <div class="detail-meta-item flex items-center gap-1.5 bg-app-nested px-3 py-1.5 rounded-md border border-app text-xs">
+              <span class="meta-label text-app-muted">Total Group Lag:</span>
+              <span class="meta-val font-mono font-semibold" [ngClass]="selected.totalLag > 0 ? 'text-amber' : 'text-emerald'">
+                {{ selected.totalLag | number }} msgs
+              </span>
+            </div>
           </div>
-          <div class="detail-meta-item flex items-center gap-1.5 bg-app-nested px-3 py-1.5 rounded-md border border-app text-xs">
-            <span class="meta-label text-app-muted">Active Members:</span>
-            <span class="meta-val font-mono font-semibold text-app">{{ selected.memberCount }}</span>
-          </div>
-          <div class="detail-meta-item flex items-center gap-1.5 bg-app-nested px-3 py-1.5 rounded-md border border-app text-xs">
-            <span class="meta-label text-app-muted">Total Group Lag:</span>
-            <span class="meta-val font-mono font-semibold" [ngClass]="selected.totalLag > 0 ? 'text-amber' : 'text-emerald'">
-              {{ selected.totalLag | number }} msgs
-            </span>
-          </div>
+
+          <button
+            mat-flat-button
+            color="primary"
+            class="rebalance-btn flex items-center gap-1.5"
+            (click)="triggerRebalance(selected.groupId)"
+            [disabled]="isRebalancing()"
+            matTooltip="Trigger Cooperative Sticky Rebalance (KIP-848)">
+            <mat-icon [class.spin]="isRebalancing()">autorenew</mat-icon>
+            <span>Trigger Cooperative Rebalance</span>
+          </button>
         </div>
       </div>
     </div>
@@ -406,10 +456,16 @@
               <div class="member-identity flex items-center gap-2.5 min-w-0">
                 <mat-icon class="member-avatar-icon text-[var(--app-code-text)] shrink-0">dns</mat-icon>
                 <div class="member-name-block min-w-0">
-                  <span class="member-id font-mono text-xs sm:text-sm font-semibold text-app truncate block">{{ member.id }}</span>
-                  <span class="member-last-seen flex items-center gap-1 text-[11px] text-app-muted mt-0.5">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="member-id font-mono text-xs sm:text-sm font-semibold text-app truncate block">{{ member.id }}</span>
+                    <span *ngIf="member.id === selected.leaderId" class="leader-pill font-mono text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      LEADER
+                    </span>
+                  </div>
+                  <span class="member-last-seen flex items-center gap-1 text-[11px] text-app-muted mt-0.5 flex-wrap">
                     <mat-icon class="tiny-icon">access_time</mat-icon>
                     Heartbeat: {{ formatLastSeen(member.last_seen) }}
+                    <span *ngIf="member.client_host" class="ml-1 text-app-subtle font-mono text-[10px]">[{{ member.client_host }}]</span>
                   </span>
                 </div>
               </div>
@@ -425,6 +481,26 @@
                 <span *ngIf="!member.topics || member.topics.length === 0" class="muted-text">
                   All group topics
                 </span>
+              </div>
+            </div>
+
+            <!-- Visual Load Percentage Bar -->
+            <div class="member-load-section mb-3">
+              <div class="load-bar-header flex items-center justify-between text-xs mb-1">
+                <span class="load-bar-label flex items-center gap-1 font-semibold text-app-muted">
+                  <mat-icon class="tiny-icon text-[var(--app-code-text)]">bar_chart</mat-icon>
+                  <span>Assigned Load:</span>
+                </span>
+                <span class="load-bar-val font-mono font-bold text-app">
+                  {{ getMemberLoadPercentage(member) }}% ({{ getMemberPartitionCount(member) }} of {{ getTotalAssignedPartitions() }} parts)
+                </span>
+              </div>
+              <div class="load-progress-bar-track">
+                <div
+                  class="load-progress-bar-fill"
+                  [style.width.%]="getMemberLoadPercentage(member)"
+                  [ngClass]="getLoadBarClass(getMemberLoadPercentage(member))">
+                </div>
               </div>
             </div>
 
@@ -452,6 +528,19 @@
                   <mat-icon class="tiny-icon">hourglass_empty</mat-icon>
                   <span>Awaiting coordinator partition rebalance</span>
                 </div>
+              </div>
+            </div>
+
+            <!-- Cooperative Revoking Partitions Handoff Display -->
+            <div *ngIf="member.revoking_partitions && member.revoking_partitions.length > 0" class="revoking-box mt-2.5 p-2 rounded border border-amber-500/35 bg-amber-500/10 text-amber-500 text-xs">
+              <div class="flex items-center gap-1 font-semibold mb-1">
+                <mat-icon class="tiny-icon">pending_actions</mat-icon>
+                <span>Cooperative Revocation Handoff:</span>
+              </div>
+              <div class="flex flex-wrap gap-1.5 mt-1">
+                <span *ngFor="let rp of member.revoking_partitions" class="revoking-badge font-mono text-[11px] px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40">
+                  {{ rp.topic }}:P-{{ rp.partition }}
+                </span>
               </div>
             </div>
           </div>

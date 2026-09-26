@@ -46,10 +46,10 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 | **Exactly-Once Semantics** | Idempotent Producer + 2PC Coordinator | Idempotent Producer + 2PC | **Idempotent Producer PID & Sequence De-dup** | **Implemented** |
 | **Cloud Object Storage Tier** | KIP-405 (S3 / GCS / Azure) | Native Shadow Indexing (S3 / GCS) | **Multi-Cloud (AWS S3, MinIO, GCS, Azure, Local)** | **Implemented** |
 | **Built-in Schema Registry** | External (Confluent / Karapace) | **Built-in Schema Registry (Avro/Proto/JSON)** | **Confluent-Compatible Schema Registry** | **Implemented** |
-| **In-Broker Stream Transforms**| External (Flink / Kafka Streams) | **Native WASM Data Transforms** | Planned (WASM Runtime Integration) | **Roadmap** |
-| **Enterprise RBAC / ACLs** | SASL/SCRAM, Kerberos, Granular ACLs | SASL/SCRAM, OIDC, RBAC | Shared Bearer Token + TLS (RBAC Planned) | **Partial** |
-| **Consumer Rebalancing** | Cooperative Sticky (KIP-848) | Cooperative Sticky (KIP-848) | Custom Coordinator + Lag Tracking | **Implemented** |
-| **Connectors Ecosystem** | 300+ Kafka Connect plugins | Compatible with Kafka Connect | Standard Kafka Wire Protocol Compatible | **Supported via Wire Shim** |
+| **In-Broker Stream Transforms**| External (Flink / Kafka Streams) | **Native WASM Data Transforms** | **Native WASM & Stream Data Transforms Engine + Web Console** | **Implemented** |
+| **Enterprise RBAC / ACLs** | SASL/SCRAM, Kerberos, Granular ACLs | SASL/SCRAM, OIDC, RBAC | **Granular Topic/Group ACLs, Principal Roles, REST API & Web UI** | **Implemented** |
+| **Consumer Rebalancing** | Cooperative Sticky (KIP-848) | Cooperative Sticky (KIP-848) | **Cooperative Sticky Protocol KIP-848** | **Implemented** |
+| **Connectors Ecosystem** | 300+ Kafka Connect plugins | Compatible with Kafka Connect | **Kafka Connect Compatible API + Native Connector Manager & Web UI** | **Implemented** |
 
 ---
 
@@ -95,6 +95,9 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 | [x] Phase 3: Multi-Cloud Tiered Storage-> Async offloading to S3, GCS, Azure, MinIO|
 | [x] Phase 4: Idempotent Producer EOS   -> Producer ID (PID) & sequence de-dup     |
 | [x] Phase 5: Built-in Schema Registry  -> Avro, Protobuf, JSON Schema & Web UI    |
+| [x] Phase 6: In-Broker Stream Transforms-> Native WASM & Inline Transform Engine   |
+| [x] Phase 7: Enterprise RBAC / ACLs    -> Principal Roles & Granular Rules        |
+| [x] Phase 8: Connectors Ecosystem      -> Kafka Connect API & Native Connectors   |
 +-----------------------------------------------------------------------------------+
 ```
 
@@ -108,6 +111,12 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
    * Tracks producer sequence numbers in memory per active partition head, guaranteeing zero duplicate messages during network reconnects or retries (EOS).
 5. **Phase 5: Built-in Schema Registry & UI Integration [IMPLEMENTED]**:
    * Confluent-compatible schema governance for Avro, JSON, and Protobuf contracts, complete with Web Console UI master-detail explorer, validation, and direct topic linkage.
+6. **Phase 6: In-Broker Stream Transforms Engine [IMPLEMENTED]**:
+   * Native WASM and inline stream data transforms engine executing in-memory PII masking, critical event filtering, and JSON record mapping directly on broker/controller streaming pipelines with Web Console UI integration.
+7. **Phase 7: Enterprise RBAC & Granular ACLs [IMPLEMENTED]**:
+   * Zero-trust security governance with principal roles (Admin, Developer, Consumer, Producer), wildcard resource matching for topics and consumer groups, live authorization evaluation testing, and Web Console management.
+8. **Phase 8: Connectors Ecosystem & Kafka Connect Compatibility [IMPLEMENTED]**:
+   * Kafka Connect compatible REST API endpoints alongside native thread-safe Connector Manager supporting source and sink streaming pipelines (S3 Archival, HTTP Webhooks, Database CDC, Elasticsearch) with full Web Console UI orchestrator.
 
 ---
 

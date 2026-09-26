@@ -44,6 +44,18 @@
         <mat-icon matListItemIcon>send</mat-icon>
         <span matListItemTitle>Web Producer</span>
       </a>
+      <a mat-list-item routerLink="/transforms" routerLinkActive="active-link" (click)="mobileNav.close()">
+        <mat-icon matListItemIcon>transform</mat-icon>
+        <span matListItemTitle>Transforms</span>
+      </a>
+      <a mat-list-item routerLink="/connectors" routerLinkActive="active-link" (click)="mobileNav.close()">
+        <mat-icon matListItemIcon>cable</mat-icon>
+        <span matListItemTitle>Connectors</span>
+      </a>
+      <a mat-list-item routerLink="/acls" routerLinkActive="active-link" (click)="mobileNav.close()">
+        <mat-icon matListItemIcon>admin_panel_settings</mat-icon>
+        <span matListItemTitle>Security / ACLs</span>
+      </a>
     </mat-nav-list>
 
     <mat-divider></mat-divider>
@@ -113,6 +125,18 @@
           <a routerLink="/producer" routerLinkActive="active" class="nav-link">
             <mat-icon>send</mat-icon>
             <span>Producer</span>
+          </a>
+          <a routerLink="/transforms" routerLinkActive="active" class="nav-link">
+            <mat-icon>transform</mat-icon>
+            <span>Transforms</span>
+          </a>
+          <a routerLink="/connectors" routerLinkActive="active" class="nav-link">
+            <mat-icon>cable</mat-icon>
+            <span>Connectors</span>
+          </a>
+          <a routerLink="/acls" routerLinkActive="active" class="nav-link">
+            <mat-icon>admin_panel_settings</mat-icon>
+            <span>Security / ACLs</span>
           </a>
         </nav>
 

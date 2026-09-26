@@ -4,6 +4,12 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { TopicInfo, CreateTopicRequest, CreateTopicResponse } from '../models/topic.model';
 import { FetchMessagesParams, FetchMessagesResponse } from '../models/message.model';
+import {
+  StreamTransform,
+  RegisterTransformRequest,
+  TestTransformRequest,
+  TestTransformResponse,
+} from '../models/transform.model';
 
 @Injectable({
   providedIn: 'root'
@@ -88,4 +94,53 @@ export class ApiService {
 
     return this.http.get<FetchMessagesResponse>(url, { params: httpParams });
   }
+
+  /**
+   * Fetches all registered stream transforms (WASM, FILTER, MASK_PII, JSON_MAP).
+   */
+  getTransforms(): Observable<StreamTransform[]> {
+    const url = this.getApiUrl('/api/transforms');
+    return this.http.get<StreamTransform[]>(url);
+  }
+
+  /**
+   * Deploys a new stream transform.
+   */
+  registerTransform(request: RegisterTransformRequest): Observable<StreamTransform> {
+    const url = this.getApiUrl('/api/transforms');
+    return this.http.post<StreamTransform>(url, request);
+  }
+
+  /**
+   * Pauses an active stream transform.
+   */
+  pauseTransform(name: string): Observable<any> {
+    const url = this.getApiUrl(`/api/transforms/${encodeURIComponent(name)}/pause`);
+    return this.http.post(url, {});
+  }
+
+  /**
+   * Resumes a paused stream transform.
+   */
+  resumeTransform(name: string): Observable<any> {
+    const url = this.getApiUrl(`/api/transforms/${encodeURIComponent(name)}/resume`);
+    return this.http.post(url, {});
+  }
+
+  /**
+   * Deletes a stream transform.
+   */
+  deleteTransform(name: string): Observable<any> {
+    const url = this.getApiUrl(`/api/transforms/${encodeURIComponent(name)}`);
+    return this.http.delete(url);
+  }
+
+  /**
+   * Tests a stream transform with a sample JSON payload.
+   */
+  testTransform(request: TestTransformRequest): Observable<TestTransformResponse> {
+    const url = this.getApiUrl('/api/transforms/test');
+    return this.http.post<TestTransformResponse>(url, request);
+  }
 }
+

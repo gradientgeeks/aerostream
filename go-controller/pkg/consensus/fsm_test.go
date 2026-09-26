@@ -487,3 +487,180 @@ type nopCloser struct{ r *bytes.Reader }
 
 func (n nopCloser) Read(p []byte) (int, error) { return n.r.Read(p) }
 func (n nopCloser) Close() error               { return nil }
+
+// ---------------------------------------------------------------------
+// Cooperative Sticky Rebalance Tests (KIP-848)
+// ---------------------------------------------------------------------
+
+func TestCooperativeStickyRebalance_MemberJoinPreservesAssignments(t *testing.T) {
+	f := NewFSM(time.Minute, 10)
+
+	registerBroker(t, f, 1, "h1", 9001)
+	createTopic(t, f, "t1", 4, 1)
+
+	// 1. First member joins: m1 should get all 4 partitions
+	joinConsumerGroup(t, f, "g1", "m1", []string{"t1"})
+
+	state1 := f.GetMetadata(nil)
+	g1 := state1.ConsumerGroups["g1"]
+	if g1 == nil {
+		t.Fatalf("expected consumer group g1 to exist")
+	}
+	if g1.Protocol != "COOPERATIVE_STICKY" {
+		t.Errorf("expected protocol COOPERATIVE_STICKY, got %s", g1.Protocol)
+	}
+	if g1.State != "STABLE" {
+		t.Errorf("expected state STABLE, got %s", g1.State)
+	}
+	if g1.Generation != 1 {
+		t.Errorf("expected generation 1, got %d", g1.Generation)
+	}
+	if g1.LeaderID != "m1" {
+		t.Errorf("expected leader m1, got %s", g1.LeaderID)
+	}
+	if g1.RebalanceCount != 1 {
+		t.Errorf("expected rebalance count 1, got %d", g1.RebalanceCount)
+	}
+	if len(g1.Assignments["m1"]) != 4 {
+		t.Fatalf("expected m1 to have 4 partitions, got %d", len(g1.Assignments["m1"]))
+	}
+
+	// 2. Second member joins: m2 joins. Under cooperative sticky:
+	// m1 should retain its first 2 partitions (0, 1) without revoking all partitions!
+	// Partitions 2, 3 should move to m2.
+	joinConsumerGroup(t, f, "g1", "m2", []string{"t1"})
+
+	state2 := f.GetMetadata(nil)
+	g2 := state2.ConsumerGroups["g1"]
+	if g2.Generation != 2 {
+		t.Errorf("expected generation 2, got %d", g2.Generation)
+	}
+	if g2.State != "STABLE" {
+		t.Errorf("expected state STABLE, got %s", g2.State)
+	}
+	if g2.RebalanceCount != 2 {
+		t.Errorf("expected rebalance count 2, got %d", g2.RebalanceCount)
+	}
+
+	m1Assignments := g2.Assignments["m1"]
+	m2Assignments := g2.Assignments["m2"]
+
+	if len(m1Assignments) != 2 {
+		t.Fatalf("expected m1 to retain 2 partitions, got %d", len(m1Assignments))
+	}
+	if len(m2Assignments) != 2 {
+		t.Fatalf("expected m2 to be assigned 2 partitions, got %d", len(m2Assignments))
+	}
+
+	// Verify m1 preserved partitions 0 and 1
+	if m1Assignments[0].Partition != 0 || m1Assignments[1].Partition != 1 {
+		t.Errorf("expected m1 to preserve partitions [0, 1], got [%d, %d]",
+			m1Assignments[0].Partition, m1Assignments[1].Partition)
+	}
+	// Verify m2 got partitions 2 and 3
+	if m2Assignments[0].Partition != 2 || m2Assignments[1].Partition != 3 {
+		t.Errorf("expected m2 to get partitions [2, 3], got [%d, %d]",
+			m2Assignments[0].Partition, m2Assignments[1].Partition)
+	}
+
+	// Check member assigned and revoking fields
+	m1Member := g2.Members["m1"]
+	if len(m1Member.RevokingPartitions) != 2 {
+		t.Errorf("expected m1 to have 2 revoking partitions, got %d", len(m1Member.RevokingPartitions))
+	}
+	m2Member := g2.Members["m2"]
+	if len(m2Member.RevokingPartitions) != 0 {
+		t.Errorf("expected m2 to have 0 revoking partitions, got %d", len(m2Member.RevokingPartitions))
+	}
+}
+
+func TestCooperativeStickyRebalance_UnassignedPartitionsDistributed(t *testing.T) {
+	f := NewFSM(time.Minute, 10)
+
+	registerBroker(t, f, 1, "h1", 9001)
+	createTopic(t, f, "t2", 4, 1)
+
+	// Set up initial state with member c1 having only partitions 0, 1
+	// (e.g. topic initially had 2 partitions or partitions 2 and 3 were unassigned)
+	applyCmd(t, f, CmdJoinConsumerGroup, struct {
+		GroupID    string   `json:"group_id"`
+		MemberID   string   `json:"member_id"`
+		Topics     []string `json:"topics"`
+		ClientHost string   `json:"client_host"`
+		UserAgent  string   `json:"user_agent"`
+	}{
+		GroupID:    "g2",
+		MemberID:   "c1",
+		Topics:     []string{"t2"},
+		ClientHost: "192.168.1.10",
+		UserAgent:  "aeromq-client-go/v1",
+	})
+
+	// Manually set c1 assignment to just [0, 1] to simulate unassigned partitions [2, 3]
+	f.mu.Lock()
+	f.state.ConsumerGroups["g2"].Assignments["c1"] = []PartitionTopic{
+		{Topic: "t2", Partition: 0},
+		{Topic: "t2", Partition: 1},
+	}
+	f.state.ConsumerGroups["g2"].Members["c1"].AssignedPartitions = []PartitionTopic{
+		{Topic: "t2", Partition: 0},
+		{Topic: "t2", Partition: 1},
+	}
+	f.mu.Unlock()
+
+	// Now c2 joins group g2. Unassigned partitions 2 and 3 should be cooperatively
+	// distributed to c2 while c1 keeps partitions 0 and 1 with ZERO revocations!
+	applyCmd(t, f, CmdJoinConsumerGroup, struct {
+		GroupID    string   `json:"group_id"`
+		MemberID   string   `json:"member_id"`
+		Topics     []string `json:"topics"`
+		ClientHost string   `json:"client_host"`
+		UserAgent  string   `json:"user_agent"`
+	}{
+		GroupID:    "g2",
+		MemberID:   "c2",
+		Topics:     []string{"t2"},
+		ClientHost: "192.168.1.11",
+		UserAgent:  "aeromq-client-go/v1",
+	})
+
+	state := f.GetMetadata(nil)
+	g := state.ConsumerGroups["g2"]
+	if g == nil {
+		t.Fatalf("expected group g2 to exist")
+	}
+
+	c1Member := g.Members["c1"]
+	c2Member := g.Members["c2"]
+
+	// c1 must keep partitions 0 and 1
+	if len(g.Assignments["c1"]) != 2 {
+		t.Fatalf("expected c1 to keep 2 partitions, got %d", len(g.Assignments["c1"]))
+	}
+	if g.Assignments["c1"][0].Partition != 0 || g.Assignments["c1"][1].Partition != 1 {
+		t.Errorf("expected c1 to retain [0, 1], got [%d, %d]",
+			g.Assignments["c1"][0].Partition, g.Assignments["c1"][1].Partition)
+	}
+
+	// c1 should have 0 revoked partitions because it did not need to give up any partition
+	if len(c1Member.RevokingPartitions) != 0 {
+		t.Errorf("expected c1 to have 0 revoking partitions, got %d", len(c1Member.RevokingPartitions))
+	}
+
+	// c2 should receive unassigned partitions 2 and 3
+	if len(g.Assignments["c2"]) != 2 {
+		t.Fatalf("expected c2 to receive 2 unassigned partitions, got %d", len(g.Assignments["c2"]))
+	}
+	if g.Assignments["c2"][0].Partition != 2 || g.Assignments["c2"][1].Partition != 3 {
+		t.Errorf("expected c2 to receive [2, 3], got [%d, %d]",
+			g.Assignments["c2"][0].Partition, g.Assignments["c2"][1].Partition)
+	}
+
+	// Verify metadata fields
+	if c1Member.ClientHost != "192.168.1.10" {
+		t.Errorf("expected client host 192.168.1.10, got %s", c1Member.ClientHost)
+	}
+	if c2Member.UserAgent != "aeromq-client-go/v1" {
+		t.Errorf("expected user agent aeromq-client-go/v1, got %s", c2Member.UserAgent)
+	}
+}

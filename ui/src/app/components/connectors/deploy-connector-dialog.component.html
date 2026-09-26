@@ -1,0 +1,183 @@
+<div class="deploy-dialog-container">
+  <div class="dialog-header">
+    <div class="title-group">
+      <div class="header-icon-badge">
+        <mat-icon>cable</mat-icon>
+      </div>
+      <div>
+        <h2 mat-dialog-title class="dialog-title">Deploy Connector</h2>
+        <p class="dialog-subtitle">Configure and launch a native Kafka Connect streaming pipeline</p>
+      </div>
+    </div>
+    <button mat-icon-button (click)="onCancel()" class="close-btn" aria-label="Close dialog">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <mat-divider></mat-divider>
+
+  <form [formGroup]="form" (ngSubmit)="onSubmit()" class="dialog-content">
+    <div mat-dialog-content class="form-body">
+      <!-- Row 1: Connector Name and Tasks Max -->
+      <div class="form-row grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-2">
+          <mat-form-field appearance="outline" class="w-full">
+            <mat-label>Connector Name</mat-label>
+            <input
+              matInput
+              formControlName="name"
+              placeholder="e.g. s3-events-archival-sink"
+              required
+            />
+            <mat-icon matPrefix>badge</mat-icon>
+            <mat-hint>Unique alphanumeric ID across the cluster</mat-hint>
+            <mat-error *ngIf="form.get('name')?.hasError('required')">
+              Connector name is required
+            </mat-error>
+            <mat-error *ngIf="form.get('name')?.hasError('pattern')">
+              Only letters, numbers, hyphens, and dots allowed
+            </mat-error>
+          </mat-form-field>
+        </div>
+
+        <div>
+          <mat-form-field appearance="outline" class="w-full">
+            <mat-label>Tasks Max</mat-label>
+            <input
+              matInput
+              type="number"
+              min="1"
+              max="32"
+              formControlName="tasksCount"
+              required
+            />
+            <mat-icon matPrefix>tune</mat-icon>
+            <mat-hint>Parallelism count</mat-hint>
+          </mat-form-field>
+        </div>
+      </div>
+
+      <!-- Row 2: Plugin Class Selection -->
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Connector Plugin Class</mat-label>
+          <mat-select formControlName="class">
+            <mat-option *ngFor="let p of plugins()" [value]="p.class">
+              <div class="plugin-option flex items-center justify-between w-full">
+                <span class="plugin-class-text font-mono font-medium">{{ p.class }}</span>
+                <span
+                  class="type-pill"
+                  [ngClass]="p.type === 'SOURCE' ? 'type-source' : 'type-sink'"
+                >
+                  {{ p.type }}
+                </span>
+              </div>
+            </mat-option>
+          </mat-select>
+          <mat-icon matPrefix>extension</mat-icon>
+          <mat-hint *ngIf="selectedPlugin() as p">
+            {{ p.description }} (v{{ p.version }})
+          </mat-hint>
+        </mat-form-field>
+      </div>
+
+      <!-- Row 3: Target / Source Topic -->
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Bound Topic</mat-label>
+          <input
+            matInput
+            formControlName="topic"
+            placeholder="e.g. orders or payment-transactions"
+            required
+          />
+          <mat-icon matPrefix>layers</mat-icon>
+          <mat-hint>Kafka topic to consume from (Sink) or publish to (Source)</mat-hint>
+          <mat-error *ngIf="form.get('topic')?.hasError('required')">
+            Topic is required
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <!-- Key-Value Configuration Section -->
+      <div class="config-section mt-4">
+        <div class="config-header flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <mat-icon class="section-icon">settings_input_component</mat-icon>
+            <span class="section-title font-semibold text-sm">Connector Configuration Properties</span>
+          </div>
+          <button
+            type="button"
+            mat-button
+            color="primary"
+            class="add-prop-btn text-xs"
+            (click)="addConfigEntry()"
+          >
+            <mat-icon>add</mat-icon>
+            <span>Add Property</span>
+          </button>
+        </div>
+
+        <div class="config-entries-list flex flex-col gap-2">
+          <div
+            *ngFor="let entry of configEntries(); let i = index"
+            class="config-entry-row flex items-center gap-2"
+          >
+            <div class="entry-key-field flex-1">
+              <input
+                type="text"
+                class="config-input key-input font-mono text-xs"
+                [value]="entry.key"
+                (input)="updateEntryKey(i, $any($event.target).value)"
+                placeholder="key.name"
+              />
+            </div>
+            <span class="equals-sign text-muted">=</span>
+            <div class="entry-val-field flex-1">
+              <input
+                type="text"
+                class="config-input val-input font-mono text-xs"
+                [value]="entry.value"
+                (input)="updateEntryValue(i, $any($event.target).value)"
+                placeholder="value"
+              />
+            </div>
+            <button
+              type="button"
+              mat-icon-button
+              class="entry-del-btn"
+              (click)="removeConfigEntry(i)"
+              matTooltip="Remove property"
+            >
+              <mat-icon>delete_outline</mat-icon>
+            </button>
+          </div>
+
+          <div *ngIf="configEntries().length === 0" class="empty-config-hint text-xs text-muted py-2 text-center">
+            No properties configured. Click "Add Property" or select a plugin with default templates.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- Dialog Actions -->
+    <div mat-dialog-actions class="dialog-actions flex justify-end gap-3 p-4">
+      <button type="button" mat-stroked-button (click)="onCancel()" [disabled]="isSubmitting()">
+        Cancel
+      </button>
+      <button
+        type="submit"
+        mat-flat-button
+        color="primary"
+        [disabled]="form.invalid || isSubmitting()"
+        class="deploy-btn"
+      >
+        <mat-icon *ngIf="!isSubmitting()">rocket_launch</mat-icon>
+        <span *ngIf="!isSubmitting()">Deploy Connector</span>
+        <span *ngIf="isSubmitting()">Deploying...</span>
+      </button>
+    </div>
+  </form>
+</div>
