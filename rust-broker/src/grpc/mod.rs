@@ -46,13 +46,17 @@ pub async fn run_control_plane_loop(
 
     let auth_token = cfg.auth.token.clone();
 
+    // Retry with exponential backoff (200 ms .. 3 s) so a broker started before the controller has elected a
+    // leader registers within a fraction of a second instead of waiting a fixed 3 s.
+    let mut backoff = Duration::from_millis(200);
     loop {
         // Build endpoint, attaching TLS config for https:// controllers.
         let endpoint = match Channel::from_shared(controller_uri.clone()) {
             Ok(ep) => ep,
             Err(e) => {
                 error!("[AeroMQ Broker] Invalid controller URI: {:?}. Retrying...", e);
-                sleep(Duration::from_secs(3)).await;
+                sleep(backoff).await;
+                backoff = (backoff * 2).min(Duration::from_secs(3));
                 continue;
             }
         };
@@ -64,7 +68,8 @@ pub async fn run_control_plane_loop(
                     Ok(pem) => tls = tls.ca_certificate(Certificate::from_pem(pem)),
                     Err(e) => {
                         error!("[AeroMQ Broker] Failed to read controller CA {:?}: {}. Retrying...", ca_path, e);
-                        sleep(Duration::from_secs(3)).await;
+                        sleep(backoff).await;
+                backoff = (backoff * 2).min(Duration::from_secs(3));
                         continue;
                     }
                 }
@@ -73,7 +78,8 @@ pub async fn run_control_plane_loop(
                 Ok(ep) => ep,
                 Err(e) => {
                     error!("[AeroMQ Broker] Invalid TLS config: {:?}. Retrying...", e);
-                    sleep(Duration::from_secs(3)).await;
+                    sleep(backoff).await;
+                backoff = (backoff * 2).min(Duration::from_secs(3));
                     continue;
                 }
             }
@@ -86,7 +92,8 @@ pub async fn run_control_plane_loop(
             Ok(ch) => ch,
             Err(e) => {
                 error!("[AeroMQ Broker] Failed to connect to controller: {:?}. Retrying...", e);
-                sleep(Duration::from_secs(3)).await;
+                sleep(backoff).await;
+                backoff = (backoff * 2).min(Duration::from_secs(3));
                 continue;
             }
         };
@@ -108,15 +115,18 @@ pub async fn run_control_plane_loop(
                 let resp = resp.into_inner();
                 if resp.success {
                     info!("[AeroMQ Broker] Successfully registered broker {} with control plane", broker_id);
+                    backoff = Duration::from_millis(200);
                 } else {
                     error!("[AeroMQ Broker] Control plane rejected registration: {}", resp.message);
-                    sleep(Duration::from_secs(3)).await;
+                    sleep(backoff).await;
+                backoff = (backoff * 2).min(Duration::from_secs(3));
                     continue;
                 }
             }
             Err(e) => {
                 error!("[AeroMQ Broker] gRPC registration failed: {:?}. Retrying...", e);
-                sleep(Duration::from_secs(3)).await;
+                sleep(backoff).await;
+                backoff = (backoff * 2).min(Duration::from_secs(3));
                 continue;
             }
         }

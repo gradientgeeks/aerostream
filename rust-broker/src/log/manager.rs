@@ -24,6 +24,10 @@ pub struct PartitionLog {
     pub active_log_file: File,
     pub active_idx_file: File,
     pub next_offset: u64,
+    // Tracked sizes of the active segment files (avoid a metadata()/lseek syscall per append).
+    active_len: u64,
+    active_idx_len: u64,
+    last_retention_check: std::time::Instant,
 
     // Configurations
     pub max_segment_size: u64,
@@ -155,8 +159,9 @@ impl PartitionLog {
             active_seg.base_offset
         };
 
-        // Put seek back to end
-        active_idx_file.seek(SeekFrom::End(0))?;
+        // Appends use positioned writes at the tracked lengths
+        let active_len = active_log_file.metadata()?.len();
+        let active_idx_len = index_len;
 
         let partition_dir_for_txn = partition_dir.clone();
         let mut log = Self {
@@ -167,6 +172,9 @@ impl PartitionLog {
             active_log_file,
             active_idx_file,
             next_offset,
+            active_len,
+            active_idx_len,
+            last_retention_check: std::time::Instant::now(),
             max_segment_size,
             broker_id,
             storage_base_dir,
@@ -295,27 +303,34 @@ impl PartitionLog {
     }
 
     pub fn append(&mut self, data: &[u8]) -> io::Result<u64> {
-        let cur_len = self.active_log_file.metadata()?.len();
-        if cur_len + data.len() as u64 > self.max_segment_size && cur_len > 0 {
+        use std::os::unix::fs::FileExt;
+
+        let mut rolled = false;
+        if self.active_len + data.len() as u64 > self.max_segment_size && self.active_len > 0 {
             self.roll_over()?;
+            rolled = true;
         }
 
-        let pos = self.active_log_file.metadata()?.len();
-        // Seek to end before writing (append mode manually simulated for flexibility)
-        self.active_log_file.seek(SeekFrom::End(0))?;
-        self.active_log_file.write_all(data)?;
-        self.active_log_file.flush()?;
+        // Positioned writes at the tracked lengths: no metadata(), lseek or split index writes per record.
+        let pos = self.active_len;
+        self.active_log_file.write_all_at(data, pos)?;
+        self.active_len += data.len() as u64;
 
         let offset = self.next_offset;
-        self.active_idx_file.seek(SeekFrom::End(0))?;
-        self.active_idx_file.write_all(&offset.to_be_bytes())?;
-        self.active_idx_file.write_all(&pos.to_be_bytes())?;
-        self.active_idx_file.flush()?;
+        let mut entry = [0u8; 16];
+        entry[..8].copy_from_slice(&offset.to_be_bytes());
+        entry[8..].copy_from_slice(&pos.to_be_bytes());
+        self.active_idx_file.write_all_at(&entry, self.active_idx_len)?;
+        self.active_idx_len += 16;
 
         self.next_offset += 1;
 
-        // Clean up retention
-        self.clean_retention()?;
+        // Retention is enforced on a timer (like Kafka's log cleaner) and after a roll, not after every record:
+        // it stats every segment file.
+        if rolled || self.last_retention_check.elapsed() >= std::time::Duration::from_secs(1) {
+            self.clean_retention()?;
+            self.last_retention_check = std::time::Instant::now();
+        }
 
         self.recompute_high_watermark();
         Ok(offset)
@@ -401,6 +416,8 @@ impl PartitionLog {
 
         self.active_log_file = new_log_file;
         self.active_idx_file = new_idx_file;
+        self.active_len = 0;
+        self.active_idx_len = 0;
 
         self.segments.push(LogSegment {
             base_offset: new_base_offset,

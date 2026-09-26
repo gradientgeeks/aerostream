@@ -34,6 +34,9 @@ impl KafkaServer {
 
         loop {
             let (stream, peer_addr) = listener.accept().await?;
+            // Kafka clients pipeline small requests; without TCP_NODELAY, Nagle's algorithm plus the client's delayed
+            // ACK stalls every response for milliseconds.
+            let _ = stream.set_nodelay(true);
             let log_manager = self.log_manager.clone();
             let cfg = self.cfg.clone();
 
@@ -71,8 +74,13 @@ async fn handle_kafka_connection(
             break;
         }
 
-        let mut frame_buf = vec![0u8; frame_len as usize];
-        stream.read_exact(&mut frame_buf).await?;
+        // Read straight into spare capacity: `vec![0; n]` would memset (and page-fault) the whole frame first,
+        // which is expensive for multi-megabyte produce requests.
+        let mut frame_buf: Vec<u8> = Vec::with_capacity(frame_len as usize);
+        let got = (&mut stream).take(frame_len as u64).read_to_end(&mut frame_buf).await?;
+        if got != frame_len as usize {
+            return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof).into());
+        }
 
         let mut ctx = RequestCtx::default();
         let resp = handle_kafka_frame_ctx(&frame_buf, &log_manager, &cfg, &mut ctx).await?;
@@ -90,8 +98,16 @@ async fn handle_kafka_connection(
         }
         if let Some(resp_bytes) = resp {
             let resp_len = (resp_bytes.len() as i32).to_be_bytes();
-            stream.write_all(&resp_len).await?;
-            stream.write_all(&resp_bytes).await?;
+            if resp_bytes.len() <= 64 * 1024 {
+                // One write per small response (a separate 4-byte length segment would wait on Nagle / delayed ACK).
+                let mut out = Vec::with_capacity(4 + resp_bytes.len());
+                out.extend_from_slice(&resp_len);
+                out.extend_from_slice(&resp_bytes);
+                stream.write_all(&out).await?;
+            } else {
+                stream.write_all(&resp_len).await?;
+                stream.write_all(&resp_bytes).await?;
+            }
             stream.flush().await?;
         }
         if ctx.throttle_ms > 0 && !delay_before {
