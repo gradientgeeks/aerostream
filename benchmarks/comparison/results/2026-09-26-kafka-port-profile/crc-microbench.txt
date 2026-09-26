@@ -1,0 +1,4 @@
+same result: true
+byte-at-a-time table :      474 MB/s
+hardware crc32 (sse4.2):     8089 MB/s  (17x)
+CPU cost per 1 KiB record: table 2.06 us, hardware 0.121 us

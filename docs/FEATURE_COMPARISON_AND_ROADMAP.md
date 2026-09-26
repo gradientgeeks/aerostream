@@ -126,7 +126,7 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 
 ---
 
-*For detailed benchmark metrics and performance test logs across 1 MB, 10 MB, and 50 MB payloads, see [`docs/BENCHMARK_RESULTS.md`](./BENCHMARK_RESULTS.md).*
+*For detailed benchmark metrics and performance test logs across 1 MB, 10 MB, and 50 MB payloads, see [`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md).*
 
 ---
 

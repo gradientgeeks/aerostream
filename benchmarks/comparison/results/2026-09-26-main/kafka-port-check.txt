@@ -1,0 +1,10 @@
+== AeroStream image: aerostream-broker:main
+== kafka-broker-api-versions.sh (Kafka 4.x client) against localhost:9096 (25 s timeout)
+Request METADATA failed on brokers [localhost:9096 (id: -1 rack: null isFenced: false)]
+java.lang.RuntimeException: Request METADATA failed on brokers [localhost:9096 (id: -1 rack: null isFenced: false)]
+
+exit status: 1
+== raw ApiVersions v3 (flexible) request; a correct reply has a compact-array length varint after the error code
+response (first 24 bytes, hex): 000000330000000700000000000600000000000700010000
+bytes 5-6 (after the 4-byte length + corr id... see docs) are the error code; a flexible reply continues with a 1-byte compact array length,
+a classic reply (wrong for v3) continues with a 4-byte int32 length such as 00000006.
