@@ -70,7 +70,7 @@ broker:
 
 ## How it works
 
-* **Controllers** start in order (`OrderedReady`). Pod 0 bootstraps the Raft cluster **only on its first
+* **Controllers** start in parallel. Pod 0 bootstraps the Raft cluster **only on its first
   start** (a marker file on its volume, or always when `controller.replicas=1`); every other start - and
   every other pod - asks the current leader to (re)add it as a voter, retrying against all controllers.
 * **Readiness** of a controller requires that it sees a Raft leader, so a rolling update never replaces

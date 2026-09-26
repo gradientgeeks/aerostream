@@ -9,8 +9,11 @@ metadata:
 spec:
   serviceName: {{ include "aerostream.controller.headless" . }}
   replicas: {{ .Values.controller.replicas }}
-  # Ordered start so pod 0 bootstraps the Raft cluster before the others try to join.
-  podManagementPolicy: OrderedReady
+  # Parallel (not OrderedReady): a controller is only Ready once it sees a Raft leader, and electing one
+  # needs a quorum of the other controllers. With OrderedReady a restart of every controller would
+  # deadlock (pod 1 is never created because pod 0 never becomes Ready). Rolling updates are still
+  # strictly one pod at a time, in reverse ordinal order, waiting for Ready.
+  podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate
   selector:
