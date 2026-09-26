@@ -31,6 +31,8 @@ pub struct BrokerConfig {
     pub compression_type: String,
     /// Client quotas (`[[quotas]]` tables); the controller can override them via heartbeat.
     pub quotas: Vec<crate::kafka::quota::QuotaEntry>,
+    /// Iceberg topics (`[iceberg]` section).
+    pub iceberg: crate::iceberg::IcebergConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -88,6 +90,7 @@ impl Default for BrokerConfig {
             auth: AuthConfig::default(),
             compression_type: "producer".to_string(),
             quotas: Vec::new(),
+            iceberg: crate::iceberg::IcebergConfig::default(),
         }
     }
 }

@@ -8,6 +8,7 @@ mod config;
 mod log;
 mod net;
 mod grpc;
+mod iceberg;
 pub mod kafka;
 pub mod storage;
 
@@ -204,6 +205,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "[AeroMQ Broker] Background Log Compaction cleaner loop spawned (interval=30s, threshold={})",
                 cfg.storage.dirty_ratio_threshold
             );
+        }
+
+        // Iceberg topics: tail iceberg-enabled topics into a warehouse
+        #[cfg(feature = "iceberg")]
+        if cfg.iceberg.enabled {
+            let wh_uri = cfg.iceberg.warehouse.clone();
+            let wh = if let Some(rest) = wh_uri.strip_prefix("s3://") {
+                let (bucket, prefix) = rest.split_once('/').unwrap_or((rest, ""));
+                let mut s3 = cfg.tiered_storage.s3.clone();
+                s3.bucket = bucket.to_string();
+                s3.prefix = None;
+                match storage::S3StorageProvider::new(&s3) {
+                    Ok(p) => Some(iceberg::table::Warehouse::Remote {
+                        provider: Arc::new(p),
+                        bucket: bucket.to_string(),
+                        prefix: prefix.trim_matches('/').to_string(),
+                    }),
+                    Err(e) => {
+                        tracing::error!("[AeroStream Iceberg] S3 warehouse init failed: {}", e);
+                        None
+                    }
+                }
+            } else {
+                Some(iceberg::table::Warehouse::local(&wh_uri))
+            };
+            if let Some(wh) = wh {
+                let mgr = iceberg::IcebergManager::new(cfg.iceberg.clone(), Arc::new(wh), log_manager.clone());
+                mgr.spawn();
+                info!("[AeroStream Iceberg] enabled: warehouse={} topics={}", wh_uri, cfg.iceberg.topics.len());
+            }
         }
 
         // Spawn client registration & control plane heartbeat worker

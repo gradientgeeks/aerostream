@@ -714,6 +714,22 @@ impl LogManager {
         offsets
     }
 
+    /// Lists partition ids of `topic` present on local disk (used by the Iceberg tailer).
+    pub async fn partitions_for_topic(&self, topic: &str) -> Vec<u32> {
+        let mut ids: Vec<u32> = Vec::new();
+        if let Ok(rd) = fs::read_dir(self.base_dir.join(topic)) {
+            for e in rd.flatten() {
+                if let Some(n) = e.file_name().to_str().and_then(|s| s.strip_prefix("partition_")) {
+                    if let Ok(id) = n.parse::<u32>() {
+                        ids.push(id);
+                    }
+                }
+            }
+        }
+        ids.sort_unstable();
+        ids
+    }
+
     pub async fn compact_eligible_partitions(&self) -> io::Result<usize> {
         let parts = self.partitions.lock().await;
         let mut compacted = 0;

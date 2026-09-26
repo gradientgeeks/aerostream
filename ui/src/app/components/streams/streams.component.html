@@ -1,0 +1,153 @@
+<div class="streams-container">
+  <div class="page-header">
+    <div class="header-left">
+      <div class="header-icon-wrap"><mat-icon>query_stats</mat-icon></div>
+      <div>
+        <h1 class="page-title">Stream <span class="accent-title">Processing</span></h1>
+        <p class="page-description">Stateful windowed aggregations, stream-table joins and interactive state queries</p>
+      </div>
+    </div>
+    <button class="btn primary" (click)="showCreate = !showCreate">
+      <mat-icon>add</mat-icon> New job
+    </button>
+  </div>
+
+  @if (showCreate) {
+    <div class="card">
+      <h2>Create stream job</h2>
+      <div class="grid">
+        <label>Name <input [(ngModel)]="form.name" placeholder="spend-per-user" /></label>
+        <label>Type
+          <select [(ngModel)]="form.type">
+            <option value="AGGREGATE">Windowed aggregation</option>
+            <option value="JOIN">Stream-table join</option>
+          </select>
+        </label>
+        <label>Source topic <input [(ngModel)]="form.source_topic" placeholder="orders" /></label>
+        <label>Target topic (optional) <input [(ngModel)]="form.target_topic" placeholder="orders-agg" /></label>
+        <label>Key field (JSON path) <input [(ngModel)]="form.key_field" placeholder="user" /></label>
+        <label>Timestamp field (optional) <input [(ngModel)]="form.timestamp_field" placeholder="ts" /></label>
+
+        @if (form.type === 'AGGREGATE') {
+          <label>Aggregate
+            <select [(ngModel)]="form.agg">
+              @for (a of aggs; track a) { <option [value]="a">{{ a }}</option> }
+            </select>
+          </label>
+          <label>Value field <input [(ngModel)]="form.value_field" placeholder="amount (not needed for count)" /></label>
+          <label>Window
+            <select [(ngModel)]="form.window_type">
+              @for (w of windowTypes; track w) { <option [value]="w">{{ w }}</option> }
+            </select>
+          </label>
+          @if (form.window_type !== 'session') {
+            <label>Size (s) <input type="number" min="1" [(ngModel)]="form.size_s" /></label>
+          }
+          @if (form.window_type === 'hopping') {
+            <label>Advance (s) <input type="number" min="1" [(ngModel)]="form.advance_s" /></label>
+          }
+          @if (form.window_type === 'session') {
+            <label>Inactivity gap (s) <input type="number" min="1" [(ngModel)]="form.gap_s" /></label>
+          }
+          <label>Grace (s) <input type="number" min="0" [(ngModel)]="form.grace_s" /></label>
+        } @else {
+          <label>Table topic <input [(ngModel)]="form.table_topic" placeholder="customers" /></label>
+          <label>Table key field <input [(ngModel)]="form.table_key_field" placeholder="id" /></label>
+          <label>Join type
+            <select [(ngModel)]="form.join_type">
+              <option value="inner">inner</option>
+              <option value="left">left</option>
+            </select>
+          </label>
+        }
+      </div>
+      <div class="actions">
+        <button class="btn" (click)="showCreate = false">Cancel</button>
+        <button class="btn primary" (click)="create()">Start job</button>
+      </div>
+    </div>
+  }
+
+  @if (svc.lastError()) {
+    <div class="card error">Could not reach the controller: {{ svc.lastError() }}</div>
+  }
+
+  <div class="card">
+    <table class="tbl">
+      <thead>
+        <tr><th>Job</th><th>Type</th><th>Source</th><th>Window / join</th><th>Status</th><th>Processed</th><th>Late</th><th>State keys</th><th></th></tr>
+      </thead>
+      <tbody>
+        @for (j of svc.jobs(); track j.name) {
+          <tr [class.sel]="selected()?.name === j.name" (click)="select(j)">
+            <td><b>{{ j.name }}</b></td>
+            <td>{{ j.type === 'JOIN' ? 'Join' : (j.agg | uppercase) }}</td>
+            <td>{{ j.source_topic }}</td>
+            <td>{{ windowLabel(j) }}</td>
+            <td><span class="pill" [class.paused]="j.status === 'PAUSED'">{{ j.status }}</span></td>
+            <td>{{ j.metrics.processed }}</td>
+            <td>{{ j.metrics.late_dropped }}</td>
+            <td>{{ j.metrics.state_keys }}</td>
+            <td class="row-actions" (click)="$event.stopPropagation()">
+              <button class="icon" (click)="toggle(j)" [attr.aria-label]="j.status === 'RUNNING' ? 'Pause' : 'Resume'">
+                <mat-icon>{{ j.status === 'RUNNING' ? 'pause' : 'play_arrow' }}</mat-icon>
+              </button>
+              <button class="icon" (click)="remove(j)" aria-label="Delete"><mat-icon>delete</mat-icon></button>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="9" class="empty">No stream jobs yet. Create one to start aggregating topics.</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  @if (selected(); as s) {
+    <div class="detail">
+      <div class="card">
+        <h2>Interactive query: {{ s.name }}</h2>
+        <div class="row">
+          <input [(ngModel)]="queryKey" placeholder="key, e.g. ann" (keyup.enter)="runQuery()" />
+          <button class="btn primary" (click)="runQuery()">Query state</button>
+        </div>
+        <div class="chips">
+          @for (k of keys().slice(0, 20); track k) {
+            <button class="chip" (click)="runQuery(k)">{{ k }}</button>
+          }
+        </div>
+        @if (windows().length) {
+          <table class="tbl">
+            <thead><tr><th>Window start</th><th>Window end</th><th>Count</th><th>Sum</th><th>Min</th><th>Max</th><th>Avg</th><th>{{ s.agg }}</th></tr></thead>
+            <tbody>
+              @for (w of windows(); track w.window_start + '-' + w.window_end) {
+                <tr>
+                  <td>{{ w.window_start | date: 'mediumTime' }}</td>
+                  <td>{{ w.window_end | date: 'mediumTime' }}</td>
+                  <td>{{ w.count }}</td><td>{{ w.sum }}</td><td>{{ w.min }}</td><td>{{ w.max }}</td>
+                  <td>{{ w.avg | number: '1.0-3' }}</td><td><b>{{ w.value | number: '1.0-3' }}</b></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+        @if (tableRow()) { <pre>{{ tableRow() }}</pre> }
+      </div>
+
+      <div class="card">
+        <h2>Send test event</h2>
+        <div class="row">
+          <input [(ngModel)]="ingestKey" placeholder="record key (optional)" />
+        </div>
+        <textarea rows="3" [(ngModel)]="ingestValue" aria-label="Event JSON"></textarea>
+        <div class="actions"><button class="btn primary" (click)="ingest()">Ingest</button></div>
+      </div>
+
+      <div class="card">
+        <h2>Recent emitted results</h2>
+        <div class="feed">
+          @for (r of results(); track $index) { <pre>{{ r }}</pre> } @empty { <span class="empty">No results yet.</span> }
+        </div>
+      </div>
+    </div>
+  }
+</div>
