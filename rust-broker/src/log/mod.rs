@@ -1,2 +1,2 @@
 pub mod manager;
-pub use manager::{LogManager, PartitionLog};
+pub use manager::LogManager;

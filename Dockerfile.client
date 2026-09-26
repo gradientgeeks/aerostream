@@ -1,0 +1,33 @@
+# Multi-stage Dockerfile for AeroMQ CLI & Benchmark Tool
+# Stage 1: Build
+FROM golang:1.22-alpine AS builder
+
+RUN apk add --no-cache ca-certificates git tzdata
+
+WORKDIR /app
+
+# Copy dependency definitions
+COPY go-controller/go.mod go-controller/go.sum ./go-controller/
+COPY client/go.mod client/go.sum ./client/
+
+# Copy sources
+COPY proto ./proto
+COPY go-controller ./go-controller
+COPY client ./client
+
+# Compile CLI & Benchmark runner
+RUN cd client && \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /bin/client main.go
+
+# Stage 2: Minimal Runtime
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates bash curl
+
+WORKDIR /app
+
+COPY --from=builder /bin/client /usr/local/bin/client
+RUN ln -s /usr/local/bin/client /usr/local/bin/aeromq
+
+ENTRYPOINT ["client"]
+CMD ["--help"]

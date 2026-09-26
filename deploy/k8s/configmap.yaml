@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aeromq-config
+  namespace: aeromq
+  labels:
+    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/part-of: aeromq
+data:
+  controller.toml: |
+    # AeroMQ Go Controller Production Configuration
+    data_dir = "/data"
+    raft_addr = "0.0.0.0:7001"
+    grpc_addr = "0.0.0.0:8001"
+    http_addr = "0.0.0.0:9001"
+
+    [raft]
+    heartbeat_timeout_ms = 1000
+    election_timeout_ms = 1000
+    leader_lease_timeout_ms = 500
+    commit_timeout_ms = 50
+
+    [cluster]
+    failure_detection_interval_ms = 3000
+    broker_inactive_timeout_ms = 8000
+    replica_lag_tolerance = 10
+
+    [tls]
+    enabled = false
+
+    [auth]
+    token = ""
+
+  broker.toml: |
+    # AeroMQ Rust Storage Broker Production Configuration
+    data_port = 9091
+    storage_dir = "/data"
+
+    [storage]
+    # 128 MiB active segment rollover threshold
+    max_segment_size = 134217728
+    # 20 GiB max partition retention
+    max_retention_size = 21474836480
+    # 7 days retention age
+    max_retention_age_secs = 604800
+
+    [tls]
+    enabled = false
+
+    [auth]
+    token = ""

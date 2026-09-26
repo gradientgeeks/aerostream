@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/binary"
 	"flag"
 	"fmt"
@@ -10,15 +12,41 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"sort"
+	"strings"
+	"sync"
 	"time"
 
-	pb "github.com/Uttam-Mahata/aeromq/go-controller/proto/aeromq"
+	pb "github.com/gradientgeeks/aeromq/go-controller/proto/aeromq"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// Security settings shared by the gRPC control-plane connection and the TCP
+// data-plane connections. Populated from CLI flags / env in main().
+var (
+	tlsEnabled     bool
+	tlsCAFile      string
+	tlsServerName  string
+	authToken      string
+)
+
+// bearerToken attaches an "authorization: Bearer <token>" header to every gRPC
+// call. RequireTransportSecurity is false so it also works over plaintext.
+type bearerToken struct{ token string }
+
+func (b bearerToken) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
+	return map[string]string{"authorization": "Bearer " + b.token}, nil
+}
+func (b bearerToken) RequireTransportSecurity() bool { return false }
+
 func main() {
 	controllerAddr := flag.String("controller", "127.0.0.1:8001", "Go controller gRPC address")
+	flag.BoolVar(&tlsEnabled, "tls", false, "Use TLS for controller gRPC and broker data-plane connections")
+	flag.StringVar(&tlsCAFile, "ca", "", "CA certificate (PEM) used to verify server TLS certs")
+	flag.StringVar(&tlsServerName, "tls-server-name", "", "Override the server name used for TLS verification")
+	flag.StringVar(&authToken, "token", os.Getenv("AEROMQ_TOKEN"), "Bearer token for authentication (or AEROMQ_TOKEN env)")
 	flag.Parse()
 
 	args := flag.Args()
@@ -75,8 +103,26 @@ func main() {
 			follow = true
 		}
 		handleConsume(*controllerAddr, args[1], uint32(partition), uint64(offset), follow)
+	case "consume-group":
+		if len(args) < 3 {
+			log.Fatalf("Usage: client consume-group <topic> <group-id> [--follow]")
+		}
+		follow := false
+		if len(args) > 3 && args[3] == "--follow" {
+			follow = true
+		}
+		handleConsumeGroup(*controllerAddr, args[1], args[2], follow)
 	case "integration-test":
 		handleIntegrationTest(*controllerAddr)
+	case "bench":
+		benchCmd := flag.NewFlagSet("bench", flag.ExitOnError)
+		producers := benchCmd.Int("producers", 10, "number of concurrent worker goroutines")
+		messages := benchCmd.Int("messages", 1000, "total messages per producer")
+		size := benchCmd.Int("size", 1024, "payload size in bytes")
+		topic := benchCmd.String("topic", "bench-test", "target topic")
+		partition := benchCmd.Int("partition", 0, "target partition")
+		_ = benchCmd.Parse(args[1:])
+		handleBenchmark(*controllerAddr, *topic, uint32(*partition), *producers, *messages, *size)
 	default:
 		printUsage()
 		os.Exit(1)
@@ -92,15 +138,106 @@ func printUsage() {
 	fmt.Println("  create-topic <topic> <partitions> <replication_factor>      Create a new topic with configurations")
 	fmt.Println("  produce <topic> <partition> <message>                      Publish a message payload to a partition")
 	fmt.Println("  consume <topic> <partition> <offset> [--follow]            Retrieve messages starting from an offset")
+	fmt.Println("  consume-group <topic> <group-id> [--follow]                Consume a topic as part of a consumer group (join/heartbeat/commit)")
+	fmt.Println("  bench [--producers <N>] [--messages <N>] [--size <bytes>]  Run high-concurrency producer benchmark")
+	fmt.Println("        [--topic <name>] [--partition <id>]")
 	fmt.Println("  integration-test                                           Run comprehensive integration test suite")
 }
 
 func connectController(addr string) pb.DiscoveryServiceClient {
-	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	var transportCreds credentials.TransportCredentials
+	if tlsEnabled {
+		if tlsCAFile != "" {
+			c, err := credentials.NewClientTLSFromFile(tlsCAFile, tlsServerName)
+			if err != nil {
+				log.Fatalf("Failed to load CA cert: %v", err)
+			}
+			transportCreds = c
+		} else {
+			transportCreds = credentials.NewTLS(&tls.Config{ServerName: tlsServerName})
+		}
+	} else {
+		transportCreds = insecure.NewCredentials()
+	}
+
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(transportCreds)}
+	if authToken != "" {
+		opts = append(opts, grpc.WithPerRPCCredentials(bearerToken{token: authToken}))
+	}
+
+	conn, err := grpc.Dial(addr, opts...)
 	if err != nil {
 		log.Fatalf("Failed to connect to controller gRPC: %v", err)
 	}
 	return pb.NewDiscoveryServiceClient(conn)
+}
+
+// dialBroker opens a data-plane connection to a broker, using TLS when enabled
+// and performing the AUTH handshake when a token is configured.
+func dialBroker(addr string) (net.Conn, error) {
+	var conn net.Conn
+	var err error
+	if tlsEnabled {
+		serverName := tlsServerName
+		if serverName == "" {
+			if host, _, e := net.SplitHostPort(addr); e == nil {
+				serverName = host
+			}
+		}
+		tlsCfg := &tls.Config{ServerName: serverName}
+		if tlsCAFile != "" {
+			pem, e := os.ReadFile(tlsCAFile)
+			if e != nil {
+				return nil, fmt.Errorf("failed to read CA file: %w", e)
+			}
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(pem) {
+				return nil, fmt.Errorf("failed to parse CA file %q", tlsCAFile)
+			}
+			tlsCfg.RootCAs = pool
+		}
+		conn, err = tls.Dial("tcp", addr, tlsCfg)
+	} else {
+		conn, err = net.Dial("tcp", addr)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if authToken != "" {
+		if err := sendAuthHandshake(conn, authToken); err != nil {
+			conn.Close()
+			return nil, err
+		}
+	}
+	return conn, nil
+}
+
+// sendAuthHandshake sends the AUTH frame ([magic][cmd=0][len][token]) and
+// verifies the broker's status response.
+func sendAuthHandshake(conn net.Conn, token string) error {
+	tokenBytes := []byte(token)
+	frame := make([]byte, 0, 7+len(tokenBytes))
+	frame = append(frame, 0xAE, 0x01, 0) // magic + cmd 0 (AUTH)
+	var lenBuf [4]byte
+	binary.BigEndian.PutUint32(lenBuf[:], uint32(len(tokenBytes)))
+	frame = append(frame, lenBuf[:]...)
+	frame = append(frame, tokenBytes...)
+	if _, err := conn.Write(frame); err != nil {
+		return err
+	}
+
+	resp := make([]byte, 3)
+	if _, err := io.ReadFull(conn, resp); err != nil {
+		return err
+	}
+	if resp[0] != 0xAE || resp[1] != 0x01 {
+		return fmt.Errorf("invalid auth response magic")
+	}
+	if resp[2] != 0 {
+		return fmt.Errorf("data-plane authentication rejected")
+	}
+	return nil
 }
 
 func handleMetadata(addr string) {
@@ -183,7 +320,7 @@ func handleProduce(controllerAddr string, topic string, partition uint32, messag
 	}
 
 	log.Printf("Connecting to broker leader at %s...", brokerAddr)
-	conn, err := net.Dial("tcp", brokerAddr)
+	conn, err := dialBroker(brokerAddr)
 	if err != nil {
 		log.Fatalf("Failed to connect to broker TCP data plane: %v", err)
 	}
@@ -247,7 +384,7 @@ func handleConsume(controllerAddr string, topic string, partition uint32, startO
 		log.Fatalf("Failed to find leader for partition: %v", err)
 	}
 
-	conn, err := net.Dial("tcp", brokerAddr)
+	conn, err := dialBroker(brokerAddr)
 	if err != nil {
 		log.Fatalf("Failed to connect to broker TCP data plane: %v", err)
 	}
@@ -335,6 +472,154 @@ func sendFetch(conn net.Conn, topic string, partition uint32, startOffset uint64
 	return payload, nil
 }
 
+// groupPartitionState tracks the per-partition broker connection and fetch
+// cursor for a single consume-group session.
+type groupPartitionState struct {
+	partition uint32
+	conn      net.Conn
+	offset    uint64
+}
+
+// handleConsumeGroup joins a consumer group for a topic, fetches messages for
+// the partitions assigned to this member, and periodically commits progress
+// and heartbeats back to the controller to stay in the group. Without
+// --follow it performs a single join+fetch+commit pass and exits; with
+// --follow it keeps polling/heartbeating until interrupted.
+func handleConsumeGroup(controllerAddr string, topic string, groupID string, follow bool) {
+	client := connectController(controllerAddr)
+	ctx := context.Background()
+
+	joinResp, err := client.JoinGroup(ctx, &pb.JoinGroupRequest{
+		GroupId: groupID,
+		Topics:  []string{topic},
+	})
+	if err != nil {
+		log.Fatalf("Failed to join consumer group: %v", err)
+	}
+
+	memberID := joinResp.MemberId
+	generationID := joinResp.GenerationId
+	fmt.Printf("Joined group %q as member %q (generation %d)\n", groupID, memberID, generationID)
+
+	if len(joinResp.Assignments) == 0 {
+		fmt.Println("No partitions assigned to this member.")
+		return
+	}
+
+	// Resolve broker addresses for the assigned partition leaders.
+	meta, err := client.GetMetadata(ctx, &pb.MetadataRequest{Topics: []string{topic}})
+	if err != nil {
+		log.Fatalf("Failed to fetch metadata: %v", err)
+	}
+	brokerAddrs := make(map[uint32]string, len(meta.Brokers))
+	for _, b := range meta.Brokers {
+		brokerAddrs[b.BrokerId] = fmt.Sprintf("%s:%d", b.Host, b.Port)
+	}
+
+	// Fetch last-committed offsets for this group/topic so we resume where we
+	// left off instead of always starting at 0.
+	fetchOffsetsResp, err := client.FetchOffsets(ctx, &pb.FetchOffsetsRequest{
+		GroupId: groupID,
+		Topics:  []string{topic},
+	})
+	if err != nil {
+		log.Fatalf("Failed to fetch committed offsets: %v", err)
+	}
+	committed := make(map[uint32]int64, len(fetchOffsetsResp.Offsets))
+	for _, o := range fetchOffsetsResp.Offsets {
+		committed[o.Partition] = o.Offset
+	}
+
+	var states []*groupPartitionState
+	for _, a := range joinResp.Assignments {
+		addr, ok := brokerAddrs[a.LeaderId]
+		if !ok {
+			log.Printf("No broker address found for leader %d of partition %d, skipping", a.LeaderId, a.Partition)
+			continue
+		}
+
+		conn, err := dialBroker(addr)
+		if err != nil {
+			log.Printf("Failed to connect to broker %s for partition %d: %v", addr, a.Partition, err)
+			continue
+		}
+
+		startOffset := uint64(0)
+		if off, ok := committed[a.Partition]; ok && off >= 0 {
+			startOffset = uint64(off)
+		}
+
+		fmt.Printf("  -> Partition %d assigned (leader broker %d @ %s), starting at offset %d\n", a.Partition, a.LeaderId, addr, startOffset)
+		states = append(states, &groupPartitionState{partition: a.Partition, conn: conn, offset: startOffset})
+	}
+	defer func() {
+		for _, s := range states {
+			s.conn.Close()
+		}
+	}()
+
+	if len(states) == 0 {
+		log.Fatalf("No reachable partitions for this member's assignment")
+	}
+
+	const heartbeatInterval = 3 * time.Second
+	// Send the first heartbeat right away, then on the interval thereafter.
+	lastHeartbeat := time.Now().Add(-heartbeatInterval)
+
+	for {
+		gotData := false
+		for _, s := range states {
+			data, err := sendFetch(s.conn, topic, s.partition, s.offset)
+			if err != nil {
+				log.Printf("Fetch failed on partition %d: %v", s.partition, err)
+				continue
+			}
+			if data == nil {
+				continue
+			}
+
+			fmt.Printf("[group %s][partition %d][offset %d]: %s\n", groupID, s.partition, s.offset, string(data))
+			s.offset++
+			gotData = true
+
+			commitResp, err := client.CommitOffsets(ctx, &pb.CommitOffsetsRequest{
+				GroupId:      groupID,
+				MemberId:     memberID,
+				GenerationId: generationID,
+				Offsets: []*pb.TopicPartitionOffset{
+					{Topic: topic, Partition: s.partition, Offset: int64(s.offset)},
+				},
+			})
+			if err != nil {
+				log.Printf("Failed to commit offset for partition %d: %v", s.partition, err)
+			} else if !commitResp.Success {
+				log.Printf("Controller rejected offset commit for partition %d", s.partition)
+			}
+		}
+
+		if time.Since(lastHeartbeat) >= heartbeatInterval {
+			hbResp, err := client.HeartbeatGroup(ctx, &pb.HeartbeatGroupRequest{
+				GroupId:      groupID,
+				MemberId:     memberID,
+				GenerationId: generationID,
+			})
+			if err != nil {
+				log.Printf("Heartbeat failed: %v", err)
+			} else if hbResp.Status != pb.HeartbeatGroupResponse_OK {
+				fmt.Printf("Heartbeat status: %s (a rebalance may be required; re-run consume-group to rejoin)\n", hbResp.Status)
+			}
+			lastHeartbeat = time.Now()
+		}
+
+		if !follow {
+			break
+		}
+		if !gotData {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+}
+
 func handleIntegrationTest(controllerAddr string) {
 	fmt.Println("==================================================")
 	fmt.Println("   AeroMQ Data Plane Integration Test & Benchmark  ")
@@ -409,7 +694,7 @@ func handleIntegrationTest(controllerAddr string) {
 
 	// Step 3: Write 6 messages to trigger segment rollover
 	fmt.Println("[3/7] Producing 6 messages to trigger log segment rollover (limit is 5)...")
-	leaderConn, err := net.Dial("tcp", leaderAddr)
+	leaderConn, err := dialBroker(leaderAddr)
 	if err != nil {
 		log.Fatalf("Failed to connect to leader: %v", err)
 	}
@@ -448,7 +733,7 @@ func handleIntegrationTest(controllerAddr string) {
 
 	// Step 5: Verify Tiered Storage Retrieval
 	fmt.Println("[5/7] Verifying tiered storage retrieval (fetching offset 0 from cold storage)...")
-	leaderConn, err = net.Dial("tcp", leaderAddr)
+	leaderConn, err = dialBroker(leaderAddr)
 	if err != nil {
 		log.Fatalf("Failed to connect to leader: %v", err)
 	}
@@ -499,7 +784,7 @@ func handleIntegrationTest(controllerAddr string) {
 	msgChan := make(chan string)
 	go func() {
 		for {
-			conn, err := net.Dial("tcp", leaderAddr)
+			conn, err := dialBroker(leaderAddr)
 			if err != nil {
 				time.Sleep(100 * time.Millisecond)
 				continue
@@ -601,7 +886,7 @@ func handleIntegrationTest(controllerAddr string) {
 
 	// Produce a message to the new leader
 	fmt.Println("Producing message to new leader...")
-	newLeaderConn, err := net.Dial("tcp", newLeaderAddr)
+	newLeaderConn, err := dialBroker(newLeaderAddr)
 	if err != nil {
 		log.Fatalf("Failed to connect to new leader: %v", err)
 	}
@@ -627,4 +912,364 @@ func handleIntegrationTest(controllerAddr string) {
 	fmt.Println("\n==================================================")
 	fmt.Println("   ALL INTEGRATION TESTS PASSED SUCCESSFULLY!     ")
 	fmt.Println("==================================================")
+}
+
+// sendProduceBytes writes a produce frame using pre-allocated/raw byte slices
+// into a single contiguous buffer to maximize TCP throughput and avoid per-message allocations.
+func sendProduceBytes(conn net.Conn, topicBytes []byte, partition uint32, msgBytes []byte) (uint64, error) {
+	bodyLen := 2 + len(topicBytes) + 4 + 4 + len(msgBytes)
+	packet := make([]byte, 7+bodyLen)
+
+	// Header: [magic (2)] [cmd (1)] [body_len (4)]
+	packet[0] = 0xAE
+	packet[1] = 0x01
+	packet[2] = 1 // Cmd: Produce
+	binary.BigEndian.PutUint32(packet[3:7], uint32(bodyLen))
+
+	// Body: [topic_len (2)] [topic] [partition (4)] [msg_len (4)] [message]
+	binary.BigEndian.PutUint16(packet[7:9], uint16(len(topicBytes)))
+	copy(packet[9:9+len(topicBytes)], topicBytes)
+	offset := 9 + len(topicBytes)
+	binary.BigEndian.PutUint32(packet[offset:offset+4], partition)
+	binary.BigEndian.PutUint32(packet[offset+4:offset+8], uint32(len(msgBytes)))
+	copy(packet[offset+8:], msgBytes)
+
+	if _, err := conn.Write(packet); err != nil {
+		return 0, err
+	}
+
+	respHeader := make([]byte, 11)
+	if _, err := io.ReadFull(conn, respHeader); err != nil {
+		return 0, err
+	}
+
+	if respHeader[0] != 0xAE || respHeader[1] != 0x01 {
+		return 0, fmt.Errorf("invalid response magic")
+	}
+	if respHeader[2] != 0 {
+		return 0, fmt.Errorf("broker error status: %d", respHeader[2])
+	}
+
+	return binary.BigEndian.Uint64(respHeader[3:11]), nil
+}
+
+// ensureTopicExists verifies if the topic & partition exist on the controller.
+// If missing, it creates the topic with sensible defaults and waits for partition leader election.
+func ensureTopicExists(client pb.DiscoveryServiceClient, topic string, partition uint32) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	meta, err := client.GetMetadata(ctx, &pb.MetadataRequest{Topics: []string{topic}})
+	if err == nil {
+		for _, t := range meta.Topics {
+			if t.Topic == topic {
+				for _, p := range t.Partitions {
+					if p.PartitionId == partition {
+						return nil // Topic and target partition already exist
+					}
+				}
+			}
+		}
+	}
+
+	// Topic doesn't exist or partition missing; inspect cluster brokers
+	allMeta, err := client.GetMetadata(ctx, &pb.MetadataRequest{})
+	repFactor := uint32(1)
+	if err == nil && len(allMeta.Brokers) >= 2 {
+		repFactor = 2
+	}
+
+	numPartitions := partition + 1
+	if numPartitions < 1 {
+		numPartitions = 1
+	}
+
+	log.Printf("[Benchmark] Topic %q (partition %d) not found. Auto-creating with %d partition(s) and RF=%d...",
+		topic, partition, numPartitions, repFactor)
+
+	createResp, err := client.CreateTopic(ctx, &pb.CreateTopicRequest{
+		Topic:             topic,
+		Partitions:        numPartitions,
+		ReplicationFactor: repFactor,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create topic: %w", err)
+	}
+	if !createResp.Success {
+		return fmt.Errorf("controller rejected topic creation: %s", createResp.Message)
+	}
+
+	log.Printf("[Benchmark] Topic %q created successfully. Waiting for leader assignment...", topic)
+	time.Sleep(2 * time.Second)
+	return nil
+}
+
+// resolveLeaderWithRetry polls metadata until a partition leader is known and healthy.
+func resolveLeaderWithRetry(controllerAddr, topic string, partition uint32, maxAttempts int) (string, uint32, error) {
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		client := connectController(controllerAddr)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		meta, err := client.GetMetadata(ctx, &pb.MetadataRequest{Topics: []string{topic}})
+		cancel()
+		if err == nil {
+			var leaderID uint32
+			found := false
+			for _, t := range meta.Topics {
+				if t.Topic == topic {
+					for _, p := range t.Partitions {
+						if p.PartitionId == partition {
+							leaderID = p.LeaderId
+							found = true
+							break
+						}
+					}
+				}
+			}
+			if found {
+				for _, b := range meta.Brokers {
+					if b.BrokerId == leaderID {
+						return fmt.Sprintf("%s:%d", b.Host, b.Port), leaderID, nil
+					}
+				}
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return "", 0, fmt.Errorf("timed out resolving partition leader for %s:%d after %d attempts", topic, partition, maxAttempts)
+}
+
+type benchWorkerResult struct {
+	successCount int
+	failCount    int
+	latencies    []time.Duration
+}
+
+// handleBenchmark runs a high-concurrency throughput and latency benchmark against the AeroMQ cluster.
+func handleBenchmark(controllerAddr string, topic string, partition uint32, producers int, messagesPerProducer int, payloadSize int) {
+	if producers <= 0 {
+		log.Fatalf("producers must be > 0 (got %d)", producers)
+	}
+	if messagesPerProducer <= 0 {
+		log.Fatalf("messages must be > 0 (got %d)", messagesPerProducer)
+	}
+	if payloadSize <= 0 {
+		log.Fatalf("size must be > 0 (got %d)", payloadSize)
+	}
+
+	totalExpected := producers * messagesPerProducer
+	totalBytesExpected := float64(totalExpected) * float64(payloadSize)
+
+	fmt.Println("================================================================================")
+	fmt.Println("                       AeroMQ High-Concurrency Benchmark                        ")
+	fmt.Println("================================================================================")
+	fmt.Printf(" Controller Address : %s\n", controllerAddr)
+	fmt.Printf(" Target Topic       : %s (Partition %d)\n", topic, partition)
+	fmt.Printf(" Concurrency        : %d worker goroutines\n", producers)
+	fmt.Printf(" Messages / Worker  : %s msgs (%s total messages)\n", formatInt(messagesPerProducer), formatInt(totalExpected))
+	fmt.Printf(" Payload Size       : %s bytes (%.2f KB)\n", formatInt(payloadSize), float64(payloadSize)/1024.0)
+	fmt.Printf(" Expected Data      : %.2f MB\n", totalBytesExpected/(1024.0*1024.0))
+	fmt.Println("--------------------------------------------------------------------------------")
+
+	client := connectController(controllerAddr)
+	if err := ensureTopicExists(client, topic, partition); err != nil {
+		log.Fatalf("Failed to ensure topic exists: %v", err)
+	}
+
+	leaderAddr, leaderID, err := resolveLeaderWithRetry(controllerAddr, topic, partition, 10)
+	if err != nil {
+		log.Fatalf("Failed to resolve partition leader: %v", err)
+	}
+	fmt.Printf(" Partition Leader   : Broker ID %d at %s\n", leaderID, leaderAddr)
+	fmt.Printf(" Connecting %d workers to partition leader...\n", producers)
+
+	// Pre-allocate payload
+	payload := make([]byte, payloadSize)
+	for i := range payload {
+		payload[i] = byte('A' + (i % 26))
+	}
+	topicBytes := []byte(topic)
+
+	var readyWg sync.WaitGroup
+	readyWg.Add(producers)
+	var doneWg sync.WaitGroup
+	doneWg.Add(producers)
+
+	startSignal := make(chan struct{})
+	results := make([]benchWorkerResult, producers)
+
+	for p := 0; p < producers; p++ {
+		workerID := p
+		go func() {
+			defer doneWg.Done()
+
+			res := &results[workerID]
+			res.latencies = make([]time.Duration, 0, messagesPerProducer)
+
+			conn, err := dialBroker(leaderAddr)
+			if err != nil {
+				log.Printf("[Worker %d] Initial connection failed: %v", workerID, err)
+			}
+			defer func() {
+				if conn != nil {
+					conn.Close()
+				}
+			}()
+
+			readyWg.Done()
+			<-startSignal // Wait for synchronized start
+
+			for i := 0; i < messagesPerProducer; i++ {
+				if conn == nil {
+					var dialErr error
+					conn, dialErr = dialBroker(leaderAddr)
+					if dialErr != nil {
+						res.failCount++
+						continue
+					}
+				}
+
+				t0 := time.Now()
+				_, err := sendProduceBytes(conn, topicBytes, partition, payload)
+				dur := time.Since(t0)
+
+				if err != nil {
+					res.failCount++
+					conn.Close()
+					conn = nil
+				} else {
+					res.successCount++
+					res.latencies = append(res.latencies, dur)
+				}
+			}
+		}()
+	}
+
+	readyWg.Wait()
+	fmt.Println(" All workers established connection. Launching benchmark burst...")
+
+	benchStartTime := time.Now()
+	close(startSignal)
+	doneWg.Wait()
+	totalDuration := time.Since(benchStartTime)
+
+	// Aggregate metrics
+	totalSuccess := 0
+	totalFailures := 0
+	for i := range results {
+		totalSuccess += results[i].successCount
+		totalFailures += results[i].failCount
+	}
+
+	allLatencies := make([]time.Duration, 0, totalSuccess)
+	var sumLatency time.Duration
+	for i := range results {
+		for _, lat := range results[i].latencies {
+			allLatencies = append(allLatencies, lat)
+			sumLatency += lat
+		}
+	}
+	sort.Slice(allLatencies, func(i, j int) bool {
+		return allLatencies[i] < allLatencies[j]
+	})
+
+	sec := totalDuration.Seconds()
+	if sec <= 0 {
+		sec = 0.000001
+	}
+	msgsPerSec := float64(totalSuccess) / sec
+	totalBytesSent := float64(totalSuccess) * float64(payloadSize)
+	mbPerSec := (totalBytesSent / (1024.0 * 1024.0)) / sec
+
+	// Latency percentiles
+	var minLat, avgLat, maxLat, p50, p95, p99, p999 time.Duration
+	if len(allLatencies) > 0 {
+		minLat = allLatencies[0]
+		maxLat = allLatencies[len(allLatencies)-1]
+		avgLat = time.Duration(int64(sumLatency) / int64(len(allLatencies)))
+
+		p50 = calcPercentile(allLatencies, 0.50)
+		p95 = calcPercentile(allLatencies, 0.95)
+		p99 = calcPercentile(allLatencies, 0.99)
+		p999 = calcPercentile(allLatencies, 0.999)
+	}
+
+	successRate := 0.0
+	if totalExpected > 0 {
+		successRate = (float64(totalSuccess) / float64(totalExpected)) * 100.0
+	}
+
+	fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Println(" BENCHMARK RESULTS")
+	fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Printf(" Total Duration        : %v\n", totalDuration.Round(time.Millisecond))
+	fmt.Printf(" Total Messages Sent   : %s\n", formatInt(totalExpected))
+	fmt.Printf(" Successful Writes     : %s (%.2f%%)\n", formatInt(totalSuccess), successRate)
+	fmt.Printf(" Failed Writes         : %s\n", formatInt(totalFailures))
+	fmt.Printf(" Total Data Transferred : %.2f MB\n", totalBytesSent/(1024.0*1024.0))
+	fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Println(" THROUGHPUT:")
+	fmt.Printf("   Messages / Second   : %s msgs/sec\n", formatFloat(msgsPerSec))
+	fmt.Printf("   Data Throughput     : %.2f MB/sec\n", mbPerSec)
+	fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Println(" LATENCY DISTRIBUTION (Per-Message End-to-End ACK):")
+	fmt.Printf("   Min Latency         : %s\n", formatDuration(minLat))
+	fmt.Printf("   Avg Latency         : %s\n", formatDuration(avgLat))
+	fmt.Printf("   p50 (Median)        : %s\n", formatDuration(p50))
+	fmt.Printf("   p95                 : %s\n", formatDuration(p95))
+	fmt.Printf("   p99                 : %s\n", formatDuration(p99))
+	fmt.Printf("   p99.9               : %s\n", formatDuration(p999))
+	fmt.Printf("   Max Latency         : %s\n", formatDuration(maxLat))
+	fmt.Println("================================================================================")
+}
+
+func calcPercentile(sorted []time.Duration, p float64) time.Duration {
+	if len(sorted) == 0 {
+		return 0
+	}
+	idx := int(float64(len(sorted)) * p)
+	if idx >= len(sorted) {
+		idx = len(sorted) - 1
+	}
+	return sorted[idx]
+}
+
+func formatDuration(d time.Duration) string {
+	if d < time.Microsecond {
+		return fmt.Sprintf("%d ns", d.Nanoseconds())
+	}
+	if d < time.Millisecond {
+		return fmt.Sprintf("%.2f µs", float64(d.Nanoseconds())/1000.0)
+	}
+	return fmt.Sprintf("%.2f ms", float64(d.Nanoseconds())/1000000.0)
+}
+
+func formatInt(n int) string {
+	return formatNumber(int64(n))
+}
+
+func formatNumber(n int64) string {
+	in := fmt.Sprintf("%d", n)
+	var out []rune
+	for i, r := range in {
+		if i > 0 && (len(in)-i)%3 == 0 {
+			out = append(out, ',')
+		}
+		out = append(out, r)
+	}
+	return string(out)
+}
+
+func formatFloat(f float64) string {
+	parts := strings.Split(fmt.Sprintf("%.2f", f), ".")
+	intPart := formatNumber(mustParseInt64(parts[0]))
+	if len(parts) > 1 {
+		return intPart + "." + parts[1]
+	}
+	return intPart
+}
+
+func mustParseInt64(s string) int64 {
+	var n int64
+	fmt.Sscanf(s, "%d", &n)
+	return n
 }

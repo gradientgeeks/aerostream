@@ -25,6 +25,11 @@ pub struct PartitionLog {
     // Configurations
     pub max_segment_size: u64,
     pub broker_id: u32,
+    // Root of the broker's configured storage directory (i.e. the `base_dir`
+    // passed into `PartitionLog::new`). Cold-storage segments are nested
+    // under this same root, rather than a hardcoded path relative to the
+    // process's current working directory.
+    storage_base_dir: PathBuf,
     pub max_retention_size: Option<u64>,
     pub max_retention_age: Option<std::time::Duration>,
 
@@ -44,10 +49,11 @@ impl PartitionLog {
         max_retention_size: Option<u64>,
         max_retention_age: Option<std::time::Duration>,
     ) -> io::Result<Self> {
+        let storage_base_dir = base_dir.to_path_buf();
         let partition_dir = base_dir
             .join(topic)
             .join(format!("partition_{}", partition));
-        
+
         fs::create_dir_all(&partition_dir)?;
 
         // Migration step: rename old style files if they exist
@@ -137,6 +143,7 @@ impl PartitionLog {
             next_offset,
             max_segment_size,
             broker_id,
+            storage_base_dir,
             max_retention_size,
             max_retention_age,
             high_watermark: 0,
@@ -145,6 +152,17 @@ impl PartitionLog {
         };
         log.recompute_high_watermark();
         Ok(log)
+    }
+
+    /// Directory where cold-tier segments for this partition are stored,
+    /// nested under the broker's configured storage directory:
+    /// `<storage_base_dir>/cold_storage/broker_{id}/<topic>/partition_{n}`.
+    fn cold_dir(&self) -> PathBuf {
+        self.storage_base_dir
+            .join("cold_storage")
+            .join(format!("broker_{}", self.broker_id))
+            .join(&self.topic)
+            .join(format!("partition_{}", self.partition))
     }
 
     pub fn update_follower_offset(&mut self, replica_id: u32, offset: u64) {
@@ -203,10 +221,8 @@ impl PartitionLog {
         let old_active_seg = self.segments.last().unwrap().clone();
 
         // Copy old segment to cold storage
-        let cold_dir = PathBuf::from(format!("./data/cold_storage/broker_{}", self.broker_id))
-            .join(&self.topic)
-            .join(format!("partition_{}", self.partition));
-        
+        let cold_dir = self.cold_dir();
+
         fs::create_dir_all(&cold_dir)?;
         
         let cold_log_path = cold_dir.join(format!("{:020}.log", old_active_seg.base_offset));
@@ -311,9 +327,7 @@ impl PartitionLog {
     }
 
     fn find_cold_segment(&self, start_offset: u64) -> io::Result<Option<LogSegment>> {
-        let cold_dir = PathBuf::from(format!("./data/cold_storage/broker_{}", self.broker_id))
-            .join(&self.topic)
-            .join(format!("partition_{}", self.partition));
+        let cold_dir = self.cold_dir();
 
         if !cold_dir.exists() {
             return Ok(None);
@@ -553,8 +567,9 @@ mod tests {
         let _ = fs::remove_dir_all(&test_dir);
         fs::create_dir_all(&test_dir).unwrap();
 
-        // Clear existing cold storage for broker 99
-        let cold_dir = PathBuf::from("./data/cold_storage/broker_99");
+        // Cold storage for broker 99 is now derived from the configured
+        // storage dir (test_dir), not a hardcoded "./data/cold_storage" path.
+        let cold_dir = test_dir.join("cold_storage").join("broker_99");
         let _ = fs::remove_dir_all(&cold_dir);
 
         let manager = LogManager::new(&test_dir, 99)

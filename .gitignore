@@ -12,3 +12,28 @@ vendor/
 target/
 **/*.rs.bk
 *.pdb
+
+# Binaries
+bin/
+**/bin/
+
+# Runtime Data and Logs
+data/
+*.log
+*.pid
+controller*.log
+broker*.log
+
+# Node & UI
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.angular/
+**/.angular/
+.npm/
+
+# IDE & OS
+.DS_Store
+.vscode/
+.idea/

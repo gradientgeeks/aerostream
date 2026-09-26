@@ -1,0 +1,540 @@
+@use '@angular/material' as mat;
+@import "tailwindcss";
+
+html {
+  @include mat.theme((
+    color: (
+      theme-type: dark,
+      primary: mat.$cyan-palette,
+      tertiary: mat.$orange-palette,
+    ),
+    density: 0,
+  ));
+}
+
+html.light-theme, body.light-theme {
+  @include mat.theme((
+    color: (
+      theme-type: light,
+      primary: mat.$azure-palette,
+      tertiary: mat.$orange-palette,
+    ),
+  ));
+}
+
+/* ==========================================================================
+   Dual Engine (Go + Rust) Color Palette - Dark Theme (Default)
+   ========================================================================== */
+:root, html, html.dark-theme, body.dark-theme {
+  /* Dual Engine Brand Colors */
+  --app-primary: #00e5ff;          /* Electric Go Cyan */
+  --app-secondary: #ff5722;        /* Rust Ferrum Flame / Orange */
+  --app-accent: #ffb300;           /* Hot cache gold */
+  --app-tertiary: #0284c7;         /* Deep Go Blue */
+
+  /* Dark Theme Surfaces & Backgrounds */
+  --app-bg: #080b11;               /* Dark background */
+  --app-surface: #0e1524;          /* Dark surface / card background */
+  --app-surface-hover: rgba(0, 229, 255, 0.06);
+  --app-border: rgba(0, 229, 255, 0.15);
+
+  /* Typography */
+  --app-text: #ffffff;             /* Text primary */
+  --app-text-muted: #94a3b8;       /* Text muted */
+  --app-text-subtle: #64748b;
+
+  /* Glow Effects */
+  --app-glow: rgba(0, 229, 255, 0.45);          /* Glow color */
+  --app-glow-color: rgba(0, 229, 255, 0.45);
+  --app-glow-secondary: rgba(255, 87, 34, 0.45); /* Rust glow */
+  --app-glow-accent: rgba(255, 179, 0, 0.45);    /* Cache gold glow */
+
+  /* Code Block Styling */
+  --app-code-bg: #050810;          /* Code background */
+  --app-code-text: #00e5ff;        /* Code text */
+
+  /* Cards & Elevating Panels */
+  --app-card-bg: #0e1524;          /* Dark surface / card background */
+  --app-card-border: rgba(0, 229, 255, 0.15);     /* Card border */
+  --app-card-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+
+  /* Tables */
+  --app-table-header: #0e1524;
+  --app-table-border: rgba(0, 229, 255, 0.15);
+  --app-table-hover: rgba(0, 229, 255, 0.04);
+
+  /* Inner / Nested Containers & Inputs */
+  --app-nested-bg: #080b11;
+  --app-nested-border: rgba(0, 229, 255, 0.15);
+  --app-input-bg: #050810;
+  --app-input-border: rgba(0, 229, 255, 0.25);
+  --app-pill-bg: #0e1524;
+  --app-header-bg: #080b11;
+  --app-header-border: rgba(0, 229, 255, 0.15);
+  --app-divider: rgba(0, 229, 255, 0.12);
+  --app-chip-bg: #0e1524;
+
+  /* Scrollbar */
+  --app-scrollbar-track: #080b11;
+  --app-scrollbar-thumb: rgba(0, 229, 255, 0.25);
+  --app-scrollbar-thumb-hover: #00e5ff;
+}
+
+/* ==========================================================================
+   Dual Engine Palette - Light Theme
+   ========================================================================== */
+html.light-theme, body.light-theme {
+  /* Brand Colors */
+  --app-primary: #0284c7;
+  --app-secondary: #ea580c;
+  --app-accent: #d97706;
+  --app-tertiary: #0284c7;
+
+  /* Surfaces & Backgrounds */
+  --app-bg: #f8fafc;
+  --app-surface: #ffffff;
+  --app-surface-hover: rgba(0, 0, 0, 0.04);
+  --app-border: #e2e8f0;
+
+  /* Typography */
+  --app-text: #0f172a;
+  --app-text-muted: #64748b;
+  --app-text-subtle: #94a3b8;
+
+  /* Glow Effects */
+  --app-glow: rgba(2, 132, 199, 0.25);
+  --app-glow-color: rgba(2, 132, 199, 0.25);
+  --app-glow-secondary: rgba(234, 88, 12, 0.25);
+  --app-glow-accent: rgba(217, 119, 6, 0.25);
+
+  /* Code Block Styling */
+  --app-code-bg: #f1f5f9;
+  --app-code-text: #0284c7;
+
+  /* Cards & Elevating Panels */
+  --app-card-bg: #ffffff;
+  --app-card-border: #e2e8f0;
+  --app-card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+
+  /* Tables */
+  --app-table-header: #f1f5f9;
+  --app-table-border: #e2e8f0;
+  --app-table-hover: rgba(0, 0, 0, 0.02);
+
+  /* Inner / Nested Containers & Inputs */
+  --app-nested-bg: #f8fafc;
+  --app-nested-border: #e2e8f0;
+  --app-input-bg: #ffffff;
+  --app-input-border: #cbd5e1;
+  --app-pill-bg: #f1f5f9;
+  --app-header-bg: #ffffff;
+  --app-header-border: #e2e8f0;
+  --app-divider: rgba(226, 232, 240, 0.8);
+  --app-chip-bg: #f1f5f9;
+
+  /* Scrollbar */
+  --app-scrollbar-track: #f8fafc;
+  --app-scrollbar-thumb: #cbd5e1;
+  --app-scrollbar-thumb-hover: #0284c7;
+}
+
+html, body, .mat-app-background {
+  height: 100%;
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+body,
+mat-card,
+.mat-mdc-card,
+mat-table,
+.mat-mdc-table,
+.mat-mdc-dialog-container,
+form,
+input,
+select,
+textarea {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* Material card theme sync */
+mat-card,
+.mat-mdc-card {
+  background-color: var(--app-card-bg) !important;
+  color: var(--app-text) !important;
+  border: 1px solid var(--app-card-border) !important;
+  box-shadow: var(--app-card-shadow) !important;
+  border-radius: 12px !important;
+}
+
+/* Material table default sync */
+.mat-mdc-table {
+  background-color: transparent !important;
+  color: var(--app-text);
+}
+
+.mat-mdc-header-row {
+  background-color: var(--app-table-header) !important;
+}
+
+.mat-mdc-header-cell {
+  color: var(--app-text-muted) !important;
+  border-bottom: 1px solid var(--app-table-border) !important;
+}
+
+.mat-mdc-cell {
+  color: var(--app-text) !important;
+  border-bottom: 1px solid var(--app-divider) !important;
+}
+
+.mat-mdc-row:hover {
+  background-color: var(--app-table-hover) !important;
+}
+
+.mat-mdc-row, .mat-mdc-header-row {
+  transition: background-color 0.15s ease;
+}
+
+/* Material dialog container styling across themes */
+.mat-mdc-dialog-container .mdc-dialog__surface {
+  background-color: var(--app-surface) !important;
+  color: var(--app-text) !important;
+  border: 1px solid var(--app-card-border) !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 16px !important;
+}
+
+/* Form controls & inputs */
+.mat-mdc-form-field {
+  color: var(--app-text);
+}
+
+code, pre {
+  font-family: 'JetBrains Mono', monospace;
+  background-color: var(--app-code-bg);
+  color: var(--app-code-text);
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-scrollbar-thumb) var(--app-scrollbar-track);
+}
+
+/* Scrollbar polish */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--app-scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--app-scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-scrollbar-thumb-hover);
+}
+
+/* ==========================================================================
+   Clean Crisp Outline / Stroked Buttons (No glowing box-shadows)
+   ========================================================================== */
+.mat-mdc-outlined-button,
+button[mat-stroked-button],
+a[mat-stroked-button] {
+  --mdc-outlined-button-outline-color: var(--app-border) !important;
+  border-color: var(--app-border) !important;
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+  transition: all 0.15s ease !important;
+
+  &:hover {
+    --mdc-outlined-button-outline-color: var(--app-primary) !important;
+    border-color: var(--app-primary) !important;
+    color: var(--app-primary) !important;
+    background-color: var(--app-surface-hover) !important;
+    box-shadow: none !important;
+  }
+
+  &[color="primary"],
+  &.mat-primary {
+    --mdc-outlined-button-outline-color: rgba(0, 229, 255, 0.45) !important;
+    border-color: rgba(0, 229, 255, 0.45) !important;
+    color: #00e5ff !important;
+    background: rgba(0, 229, 255, 0.05);
+
+    &:hover {
+      --mdc-outlined-button-outline-color: #00e5ff !important;
+      border-color: #00e5ff !important;
+      background-color: rgba(0, 229, 255, 0.12) !important;
+      box-shadow: none !important;
+    }
+  }
+
+  &[color="accent"],
+  &.mat-accent,
+  &.mat-secondary {
+    --mdc-outlined-button-outline-color: rgba(255, 87, 34, 0.45) !important;
+    border-color: rgba(255, 87, 34, 0.45) !important;
+    color: #ff5722 !important;
+    background: rgba(255, 87, 34, 0.05);
+
+    &:hover {
+      --mdc-outlined-button-outline-color: #ff5722 !important;
+      border-color: #ff5722 !important;
+      background-color: rgba(255, 87, 34, 0.12) !important;
+      box-shadow: none !important;
+    }
+  }
+
+  &[color="warn"],
+  &.mat-warn {
+    --mdc-outlined-button-outline-color: rgba(239, 68, 68, 0.45) !important;
+    border-color: rgba(239, 68, 68, 0.45) !important;
+    color: #ef4444 !important;
+    background: rgba(239, 68, 68, 0.05);
+
+    &:hover {
+      --mdc-outlined-button-outline-color: #ef4444 !important;
+      border-color: #ef4444 !important;
+      background-color: rgba(239, 68, 68, 0.12) !important;
+      box-shadow: none !important;
+    }
+  }
+
+  &:disabled,
+  &[disabled],
+  &.mat-mdc-button-disabled {
+    opacity: 0.5 !important;
+    box-shadow: none !important;
+    cursor: not-allowed !important;
+  }
+}
+
+/* ==========================================================================
+   Flat & Raised Buttons (Clean Crisp Contrast, No glowing bloom)
+   ========================================================================== */
+.mat-mdc-unelevated-button,
+button[mat-flat-button],
+a[mat-flat-button],
+.mat-mdc-raised-button,
+button[mat-raised-button],
+a[mat-raised-button] {
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+  transition: all 0.15s ease !important;
+
+  &[color="primary"],
+  &.mat-primary {
+    background-color: #00e5ff !important;
+    color: #080b11 !important;
+    box-shadow: none !important;
+
+    mat-icon {
+      color: #080b11 !important;
+    }
+
+    &:hover:not([disabled]) {
+      background-color: #33ebff !important;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
+      transform: translateY(-1px);
+    }
+
+    &:active:not([disabled]) {
+      transform: translateY(0);
+    }
+  }
+
+  &[color="accent"],
+  &.mat-accent,
+  &.mat-secondary {
+    background-color: #ff5722 !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+
+    mat-icon {
+      color: #ffffff !important;
+    }
+
+    &:hover:not([disabled]) {
+      background-color: #ff7043 !important;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
+      transform: translateY(-1px);
+    }
+
+    &:active:not([disabled]) {
+      transform: translateY(0);
+    }
+  }
+
+  &[color="warn"],
+  &.mat-warn {
+    background-color: #ef4444 !important;
+    color: #ffffff !important;
+
+    &:hover:not([disabled]) {
+      background-color: #dc2626 !important;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
+      transform: translateY(-1px);
+    }
+  }
+
+  &:disabled,
+  &[disabled],
+  &.mat-mdc-button-disabled {
+    opacity: 0.5 !important;
+    box-shadow: none !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+  }
+}
+
+/* ==========================================================================
+   Light Theme Button Overrides
+   ========================================================================== */
+html.light-theme, body.light-theme {
+  .mat-mdc-outlined-button,
+  button[mat-stroked-button],
+  a[mat-stroked-button] {
+    --mdc-outlined-button-outline-color: var(--app-border) !important;
+    border-color: var(--app-border) !important;
+
+    &:hover {
+      --mdc-outlined-button-outline-color: #0284c7 !important;
+      border-color: #0284c7 !important;
+      color: #0284c7 !important;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.15) !important;
+    }
+
+    &[color="primary"],
+    &.mat-primary {
+      --mdc-outlined-button-outline-color: rgba(2, 132, 199, 0.4) !important;
+      border-color: rgba(2, 132, 199, 0.4) !important;
+      color: #0284c7 !important;
+      background: rgba(2, 132, 199, 0.06);
+
+      &:hover {
+        --mdc-outlined-button-outline-color: #0284c7 !important;
+        border-color: #0284c7 !important;
+        background-color: rgba(2, 132, 199, 0.12) !important;
+        box-shadow: 0 2px 8px rgba(2, 132, 199, 0.2) !important;
+      }
+    }
+
+    &[color="accent"],
+    &.mat-accent,
+    &.mat-secondary {
+      --mdc-outlined-button-outline-color: rgba(234, 88, 12, 0.4) !important;
+      border-color: rgba(234, 88, 12, 0.4) !important;
+      color: #ea580c !important;
+      background: rgba(234, 88, 12, 0.06);
+
+      &:hover {
+        --mdc-outlined-button-outline-color: #ea580c !important;
+        border-color: #ea580c !important;
+        background-color: rgba(234, 88, 12, 0.12) !important;
+        box-shadow: 0 2px 8px rgba(234, 88, 12, 0.2) !important;
+      }
+    }
+  }
+
+  .mat-mdc-unelevated-button,
+  button[mat-flat-button],
+  a[mat-flat-button],
+  .mat-mdc-raised-button,
+  button[mat-raised-button],
+  a[mat-raised-button] {
+    &[color="primary"],
+    &.mat-primary {
+      background-color: #0284c7 !important;
+      color: #ffffff !important;
+      box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3) !important;
+
+      mat-icon {
+        color: #ffffff !important;
+      }
+
+      &:hover:not([disabled]) {
+        background-color: #0369a1 !important;
+        box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4) !important;
+      }
+    }
+
+    &[color="accent"],
+    &.mat-accent,
+    &.mat-secondary {
+      background-color: #ea580c !important;
+      color: #ffffff !important;
+      box-shadow: 0 2px 6px rgba(234, 88, 12, 0.3) !important;
+
+      mat-icon {
+        color: #ffffff !important;
+      }
+
+      &:hover:not([disabled]) {
+        background-color: #c2410c !important;
+        box-shadow: 0 4px 12px rgba(234, 88, 12, 0.4) !important;
+      }
+    }
+  }
+}
+
+/* Global Button Separation & Action Groups */
+.header-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex-wrap: wrap;
+}
+
+.actions-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+mat-dialog-actions,
+.mat-mdc-dialog-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+
+  .mat-mdc-button-base + .mat-mdc-button-base,
+  button + button {
+    margin-left: 0 !important;
+  }
+}
+
+.button-group,
+.btn-group,
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   Dual Engine Theme Utilities (Glow & Badges)
+   ========================================================================== */
+.text-go-cyan { color: #00e5ff !important; }
+.text-rust-orange { color: #ff5722 !important; }
+.text-cache-gold { color: #ffb300 !important; }
+.text-go-blue { color: #0284c7 !important; }
+
+.bg-go-cyan { background-color: #00e5ff !important; }
+.bg-rust-orange { background-color: #ff5722 !important; }
+.bg-cache-gold { background-color: #ffb300 !important; }
+.bg-go-blue { background-color: #0284c7 !important; }
+
+.border-go-cyan { border-color: rgba(0, 229, 255, 0.3) !important; }
+.border-rust-orange { border-color: rgba(255, 87, 34, 0.3) !important; }

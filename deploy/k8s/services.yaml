@@ -1,0 +1,86 @@
+# ---------------------------------------------------------------------------
+# Internal ClusterIP Services (In-Cluster Communication)
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: aeromq-controller
+  namespace: aeromq
+  labels:
+    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/component: controller
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/component: controller
+  ports:
+    - name: grpc
+      port: 8001
+      targetPort: 8001
+    - name: http
+      port: 9001
+      targetPort: 9001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aeromq-broker
+  namespace: aeromq
+  labels:
+    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/component: broker
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/component: broker
+  ports:
+    - name: data
+      port: 9091
+      targetPort: 9091
+---
+# ---------------------------------------------------------------------------
+# External Access Services (LoadBalancer / NodePort for UI and External Clients)
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: aeromq-ui-external
+  namespace: aeromq
+  labels:
+    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/component: controller
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/component: controller
+  ports:
+    - name: http-ui
+      port: 9001
+      targetPort: 9001
+      nodePort: 30901
+    - name: grpc-api
+      port: 8001
+      targetPort: 8001
+      nodePort: 30801
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aeromq-broker-external
+  namespace: aeromq
+  labels:
+    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/component: broker
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: aeromq
+    app.kubernetes.io/component: broker
+  ports:
+    - name: tcp-data
+      port: 9091
+      targetPort: 9091
+      nodePort: 30991

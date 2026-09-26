@@ -1448,7 +1448,7 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x0eHeartbeatGroup\x12\x1d.aeromq.HeartbeatGroupRequest\x1a\x1e.aeromq.HeartbeatGroupResponse\x12L\n" +
 	"\rCommitOffsets\x12\x1c.aeromq.CommitOffsetsRequest\x1a\x1d.aeromq.CommitOffsetsResponse\x12I\n" +
 	"\fFetchOffsets\x12\x1b.aeromq.FetchOffsetsRequest\x1a\x1c.aeromq.FetchOffsetsResponse\x12F\n" +
-	"\vCreateTopic\x12\x1a.aeromq.CreateTopicRequest\x1a\x1b.aeromq.CreateTopicResponseB;Z9github.com/Uttam-Mahata/aeromq/go-controller/proto/aeromqb\x06proto3"
+	"\vCreateTopic\x12\x1a.aeromq.CreateTopicRequest\x1a\x1b.aeromq.CreateTopicResponseB;Z9github.com/gradientgeeks/aeromq/go-controller/proto/aeromqb\x06proto3"
 
 var (
 	file_proto_control_proto_rawDescOnce sync.Once

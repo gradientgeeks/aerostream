@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Uttam-Mahata/aeromq/go-controller/pkg/consensus"
-	pb "github.com/Uttam-Mahata/aeromq/go-controller/proto/aeromq"
+	"github.com/gradientgeeks/aeromq/go-controller/pkg/consensus"
+	pb "github.com/gradientgeeks/aeromq/go-controller/proto/aeromq"
 	"github.com/hashicorp/raft"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -17,23 +17,25 @@ import (
 type Server struct {
 	pb.UnimplementedControlServiceServer
 	pb.UnimplementedDiscoveryServiceServer
-	RaftNode *consensus.RaftNode
-	mu       sync.Mutex
+	RaftNode                 *consensus.RaftNode
+	failureDetectionInterval time.Duration
+	mu                       sync.Mutex
 }
 
-func NewServer(raftNode *consensus.RaftNode) *Server {
+func NewServer(raftNode *consensus.RaftNode, failureDetectionInterval time.Duration) *Server {
 	s := &Server{
-		RaftNode: raftNode,
+		RaftNode:                 raftNode,
+		failureDetectionInterval: failureDetectionInterval,
 	}
-	
+
 	// Start background task to clean up inactive brokers and trigger broker-failover
 	go s.startFailureDetection()
-	
+
 	return s
 }
 
 func (s *Server) startFailureDetection() {
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(s.failureDetectionInterval)
 	for range ticker.C {
 		if s.RaftNode.Raft.State() == raft.Leader {
 			_ = s.RaftNode.Propose(consensus.CmdCleanInactive, nil)

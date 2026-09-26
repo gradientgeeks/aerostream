@@ -1,0 +1,57 @@
+# AeroMQ Go Controller — example configuration.
+#
+# Usage:
+#   ./go-controller/bin/controller --config config/controller.example.toml --bootstrap
+#
+# Any value here can be overridden by an explicit CLI flag (e.g. --grpc-addr).
+
+# Unique Raft node ID.
+node_id = "node1"
+
+# Raft peer communication address.
+raft_addr = "127.0.0.1:7001"
+
+# gRPC API service address (brokers and clients connect here).
+grpc_addr = "127.0.0.1:8001"
+
+# HTTP control API address (/join, /status).
+http_addr = "127.0.0.1:9001"
+
+# Directory for Raft snapshots. Empty = in-memory (snapshots discarded).
+data_dir = ""
+
+# Bootstrap a brand-new single-node Raft cluster on startup.
+bootstrap = false
+
+# Join an existing cluster via the leader's HTTP /join endpoint.
+# join = "http://127.0.0.1:9001"
+
+[raft]
+# hashicorp/raft timing parameters (milliseconds). Larger values are more
+# tolerant of slow networks; smaller values fail over faster.
+heartbeat_timeout_ms    = 1000
+election_timeout_ms     = 1000
+leader_lease_timeout_ms = 500
+commit_timeout_ms       = 50
+
+[cluster]
+# How often the leader sweeps for inactive brokers (milliseconds).
+failure_detection_interval_ms = 3000
+# A broker with no heartbeat within this window is marked inactive (milliseconds).
+broker_inactive_timeout_ms    = 8000
+# Max offset lag for a replica to remain in the ISR.
+replica_lag_tolerance         = 10
+
+[tls]
+# Enable TLS on the gRPC control plane.
+enabled = false
+# Server certificate / key (PEM).
+# cert_file = "config/certs/controller.crt"
+# key_file  = "config/certs/controller.key"
+# When set, enforces mTLS: clients must present a cert signed by this CA.
+# ca_file   = "config/certs/ca.crt"
+
+[auth]
+# Shared bearer token required in the "authorization" metadata of every gRPC
+# request. Must match the brokers' and clients' token. Empty disables auth.
+# token = "change-me-super-secret-token"

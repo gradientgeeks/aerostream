@@ -1,7 +1,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use tonic::transport::Channel;
+use tonic::transport::{Channel, ClientTlsConfig, Certificate};
+use tonic::{Request, metadata::MetadataValue};
 use tracing::{info, error, warn, debug};
 
 pub mod aeromq {
@@ -11,36 +12,80 @@ pub mod aeromq {
 use aeromq::control_service_client::ControlServiceClient;
 use aeromq::discovery_service_client::DiscoveryServiceClient;
 use aeromq::{RegisterBrokerRequest, HeartbeatRequest, MetadataRequest};
+use crate::config::{self, BrokerConfig};
 use crate::log::LogManager;
 
+/// Wrap a message in a `tonic::Request`, attaching the `authorization` bearer
+/// token metadata when one is configured.
+fn authed<T>(msg: T, token: &Option<String>) -> Request<T> {
+    let mut req = Request::new(msg);
+    if let Some(t) = token {
+        if let Ok(val) = MetadataValue::try_from(format!("Bearer {}", t)) {
+            req.metadata_mut().insert("authorization", val);
+        }
+    }
+    req
+}
+
 pub async fn run_control_plane_loop(
-    broker_id: u32,
-    my_host: String,
-    data_port: i32,
-    controller_addr: String,
+    cfg: Arc<BrokerConfig>,
     log_manager: Arc<LogManager>,
 ) {
-    let controller_uri = if !controller_addr.starts_with("http://") && !controller_addr.starts_with("https://") {
-        format!("http://{}", controller_addr)
+    let broker_id = cfg.id;
+    let my_host = cfg.host.clone();
+    let data_port = cfg.data_port;
+    let storage_dir = cfg.resolved_storage_dir();
+
+    let controller_uri = if !cfg.controller.starts_with("http://") && !cfg.controller.starts_with("https://") {
+        format!("http://{}", cfg.controller)
     } else {
-        controller_addr.clone()
+        cfg.controller.clone()
     };
 
     info!("[AeroMQ Broker] Connecting to controller at {}...", controller_uri);
 
+    let auth_token = cfg.auth.token.clone();
+
     loop {
-        // Connect to control plane
-        let channel = match Channel::from_shared(controller_uri.clone()) {
-            Ok(ep) => match ep.connect().await {
-                Ok(ch) => ch,
+        // Build endpoint, attaching TLS config for https:// controllers.
+        let endpoint = match Channel::from_shared(controller_uri.clone()) {
+            Ok(ep) => ep,
+            Err(e) => {
+                error!("[AeroMQ Broker] Invalid controller URI: {:?}. Retrying...", e);
+                sleep(Duration::from_secs(3)).await;
+                continue;
+            }
+        };
+
+        let endpoint = if controller_uri.starts_with("https://") {
+            let mut tls = ClientTlsConfig::new();
+            if let Some(ca_path) = &cfg.tls.ca_file {
+                match std::fs::read(ca_path) {
+                    Ok(pem) => tls = tls.ca_certificate(Certificate::from_pem(pem)),
+                    Err(e) => {
+                        error!("[AeroMQ Broker] Failed to read controller CA {:?}: {}. Retrying...", ca_path, e);
+                        sleep(Duration::from_secs(3)).await;
+                        continue;
+                    }
+                }
+            }
+            match endpoint.tls_config(tls) {
+                Ok(ep) => ep,
                 Err(e) => {
-                    error!("[AeroMQ Broker] Failed to connect to controller: {:?}. Retrying...", e);
+                    error!("[AeroMQ Broker] Invalid TLS config: {:?}. Retrying...", e);
                     sleep(Duration::from_secs(3)).await;
                     continue;
                 }
-            },
+            }
+        } else {
+            endpoint
+        };
+
+        // Connect to control plane
+        let channel = match endpoint.connect().await {
+            Ok(ch) => ch,
             Err(e) => {
-                error!("[AeroMQ Broker] Invalid controller URI: {:?}. Retrying...", e);
+                error!("[AeroMQ Broker] Failed to connect to controller: {:?}. Retrying...", e);
                 sleep(Duration::from_secs(3)).await;
                 continue;
             }
@@ -56,7 +101,7 @@ pub async fn run_control_plane_loop(
             data_port,
         };
 
-        match control_client.register_broker(reg_req).await {
+        match control_client.register_broker(authed(reg_req, &auth_token)).await {
             Ok(resp) => {
                 let resp = resp.into_inner();
                 if resp.success {
@@ -86,14 +131,16 @@ pub async fn run_control_plane_loop(
                 });
             }
 
+            let (disk_usage_bytes, disk_free_bytes) = config::disk_stats(&storage_dir);
+
             let hb_req = HeartbeatRequest {
                 broker_id,
-                disk_usage_bytes: 1024 * 1024, // dummy metrics
-                disk_free_bytes: 1024 * 1024 * 1024,
+                disk_usage_bytes,
+                disk_free_bytes,
                 replica_offsets,
             };
 
-            match control_client.heartbeat(hb_req).await {
+            match control_client.heartbeat(authed(hb_req, &auth_token)).await {
                 Ok(resp) => {
                     let resp = resp.into_inner();
                     debug!("[AeroMQ Broker] Heartbeat acknowledged");
@@ -120,6 +167,7 @@ pub async fn run_control_plane_loop(
                         let topic = follower.topic.clone();
                         let partition = follower.partition;
                         let leader_id = follower.leader_id;
+                        let task_cfg = cfg.clone();
 
                         // Spawn async replication task for this follower partition
                         tokio::spawn(async move {
@@ -130,6 +178,7 @@ pub async fn run_control_plane_loop(
                                 leader_id,
                                 disc_client,
                                 log_mgr,
+                                task_cfg,
                             ).await {
                                 debug!("[AeroMQ Broker] Replication error for partition: {:?}", e);
                             }
@@ -147,6 +196,38 @@ pub async fn run_control_plane_loop(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_authed_attaches_bearer_token_when_configured() {
+        let token = Some("secret-token".to_string());
+        let req = authed(MetadataRequest { topics: vec!["t1".into()] }, &token);
+
+        let header = req
+            .metadata()
+            .get("authorization")
+            .expect("expected authorization metadata to be set");
+        assert_eq!(header.to_str().unwrap(), "Bearer secret-token");
+    }
+
+    #[test]
+    fn test_authed_omits_metadata_when_no_token_configured() {
+        let token: Option<String> = None;
+        let req = authed(MetadataRequest { topics: vec![] }, &token);
+
+        assert!(req.metadata().get("authorization").is_none());
+    }
+
+    #[test]
+    fn test_authed_preserves_inner_message() {
+        let token: Option<String> = None;
+        let req = authed(MetadataRequest { topics: vec!["a".into(), "b".into()] }, &token);
+        assert_eq!(req.get_ref().topics, vec!["a".to_string(), "b".to_string()]);
+    }
+}
+
 async fn replicate_partition(
     broker_id: u32,
     topic: String,
@@ -154,15 +235,16 @@ async fn replicate_partition(
     leader_id: u32,
     mut discovery_client: DiscoveryServiceClient<Channel>,
     log_manager: Arc<LogManager>,
+    cfg: Arc<BrokerConfig>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if leader_id == broker_id {
         return Ok(());
     }
 
     // 1. Get leader address from metadata
-    let meta_resp = discovery_client.get_metadata(MetadataRequest {
+    let meta_resp = discovery_client.get_metadata(authed(MetadataRequest {
         topics: vec![topic.clone()],
-    }).await?.into_inner();
+    }, &cfg.auth.token)).await?.into_inner();
 
     let leader_broker = meta_resp.brokers.iter().find(|b| b.broker_id == leader_id);
     let leader = match leader_broker {
@@ -170,6 +252,7 @@ async fn replicate_partition(
         None => return Err(format!("Leader broker {} not found in cluster metadata", leader_id).into()),
     };
 
+    let leader_host = leader.host.clone();
     let leader_addr = format!("{}:{}", leader.host, leader.port);
 
     // 2. Open local partition to check current next_offset
@@ -179,11 +262,15 @@ async fn replicate_partition(
         guard.next_offset
     };
 
-    // 3. Connect to leader via TCP
-    use tokio::net::TcpStream;
+    // 3. Connect to leader's data plane (TLS + AUTH handshake handled by helper)
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    let mut stream = TcpStream::connect(&leader_addr).await?;
+    let mut stream = crate::net::client::connect_data_plane(
+        &leader_addr,
+        &leader_host,
+        &cfg.tls,
+        &cfg.auth.token,
+    ).await?;
 
     // 4. Send Replica Fetch Request
     // Payload: [replica_id (4)] [topic_len (2)] [topic] [partition (4)] [start_offset (8)] [max_bytes (4)]

@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -60,16 +61,23 @@ type ClusterState struct {
 	Brokers        map[uint32]*BrokerStatus        `json:"brokers"`
 	Topics         map[string]*TopicState          `json:"topics"`
 	ConsumerGroups map[string]*ConsumerGroupState  `json:"consumer_groups"`
-	Offsets        map[string]int64                `json:"offsets"` // key: "group_id:topic:partition"
+	Offsets        map[string]int64                `json:"offsets"` // key: "group_id/topic/partition" (see offsetKey)
 }
 
 // FSM implements raft.FSM
 type FSM struct {
 	mu    sync.RWMutex
 	state ClusterState
+
+	// Cluster tunables (sourced from config).
+	brokerInactiveTimeout time.Duration
+	replicaLagTolerance   int64
 }
 
-func NewFSM() *FSM {
+// NewFSM constructs the cluster state machine. brokerInactiveTimeout is the
+// window after which a silent broker is marked inactive; replicaLagTolerance
+// is the max offset lag for a replica to stay in the ISR.
+func NewFSM(brokerInactiveTimeout time.Duration, replicaLagTolerance int64) *FSM {
 	return &FSM{
 		state: ClusterState{
 			Brokers:        make(map[uint32]*BrokerStatus),
@@ -77,6 +85,8 @@ func NewFSM() *FSM {
 			ConsumerGroups: make(map[string]*ConsumerGroupState),
 			Offsets:        make(map[string]int64),
 		},
+		brokerInactiveTimeout: brokerInactiveTimeout,
+		replicaLagTolerance:   replicaLagTolerance,
 	}
 }
 
@@ -94,6 +104,14 @@ const (
 type Command struct {
 	Op      string          `json:"op"`
 	Payload json.RawMessage `json:"payload"`
+}
+
+// offsetKey builds the composite key used to store/look up a consumer
+// group's committed offset for a given topic-partition in f.state.Offsets.
+// Both Apply (CmdCommitOffset) and GetOffset must use this helper so the
+// write and read paths always agree on the key format.
+func offsetKey(groupID, topic string, partition uint32) string {
+	return fmt.Sprintf("%s/%s/%d", groupID, topic, partition)
 }
 
 func (f *FSM) Apply(log *raft.Log) interface{} {
@@ -251,9 +269,7 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 			Offset    int64  `json:"offset"`
 		}
 		if err := json.Unmarshal(cmd.Payload, &payload); err == nil {
-			key := payload.GroupID + ":" + payload.Topic + ":" + string(rune(payload.Partition)) // better key formatting
-			// Wait, let's use a cleaner key format:
-			key = payload.GroupID + "/" + payload.Topic + "/" + string(rune(payload.Partition))
+			key := offsetKey(payload.GroupID, payload.Topic, payload.Partition)
 			f.state.Offsets[key] = payload.Offset
 		}
 
@@ -261,7 +277,7 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 		// Clean inactive brokers and trigger failover if they were partition leaders
 		now := time.Now()
 		for _, broker := range f.state.Brokers {
-			if broker.Active && now.Sub(broker.LastSeen) > 8*time.Second {
+			if broker.Active && now.Sub(broker.LastSeen) > f.brokerInactiveTimeout {
 				broker.Active = false
 				f.handleBrokerFailure(broker.ID)
 			}
@@ -289,21 +305,21 @@ func (f *FSM) updateISRAndHW() {
 			
 			newISR := []uint32{}
 			leaderBroker, leaderExists := f.state.Brokers[leaderID]
-			if leaderExists && leaderBroker.Active && now.Sub(leaderBroker.LastSeen) <= 8*time.Second {
+			if leaderExists && leaderBroker.Active && now.Sub(leaderBroker.LastSeen) <= f.brokerInactiveTimeout {
 				newISR = append(newISR, leaderID)
 			}
-			
+
 			for _, rID := range partition.ReplicaIDs {
 				if rID == leaderID {
 					continue
 				}
 				broker, exists := f.state.Brokers[rID]
-				if !exists || !broker.Active || now.Sub(broker.LastSeen) > 8*time.Second {
+				if !exists || !broker.Active || now.Sub(broker.LastSeen) > f.brokerInactiveTimeout {
 					continue
 				}
 				offset := partition.ReplicaOffsets[rID]
 				lag := leaderOffset - offset
-				if lag <= 10 {
+				if lag <= f.replicaLagTolerance {
 					newISR = append(newISR, rID)
 				}
 			}
@@ -483,7 +499,7 @@ func (f *FSM) GetMetadata(topics []string) ClusterState {
 func (f *FSM) GetOffset(groupID string, topic string, partition uint32) int64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	key := groupID + "/" + topic + "/" + string(rune(partition))
+	key := offsetKey(groupID, topic, partition)
 	if val, exists := f.state.Offsets[key]; exists {
 		return val
 	}

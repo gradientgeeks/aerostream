@@ -1,0 +1,40 @@
+# Multi-stage Dockerfile for AeroMQ High-Performance Rust Broker
+# Stage 1: Build
+FROM rust:1.80-slim-bookworm AS builder
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends protobuf-compiler pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy proto definitions required by tonic_build in build.rs
+COPY proto/ ./proto/
+
+# Copy manifest and source files
+COPY rust-broker/Cargo.toml rust-broker/Cargo.lock ./rust-broker/
+COPY rust-broker/build.rs ./rust-broker/
+COPY rust-broker/src/ ./rust-broker/src/
+
+# Compile optimized release binary
+RUN cd rust-broker && cargo build --release
+
+# Stage 2: Minimal Debian Runtime (glibc for sendfile zero-copy & sched_setaffinity)
+FROM debian:bookworm-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl procps && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /data
+
+WORKDIR /app
+
+COPY --from=builder /app/rust-broker/target/release/rust-broker /usr/local/bin/rust-broker
+
+# 9091: TCP Data Plane
+EXPOSE 9091
+
+VOLUME ["/data"]
+
+ENTRYPOINT ["rust-broker"]
+CMD ["--id", "1", "--host", "0.0.0.0", "--data-port", "9091", "--controller", "http://controller1:8001", "--storage-dir", "/data"]

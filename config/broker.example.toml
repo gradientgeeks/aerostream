@@ -1,0 +1,48 @@
+# AeroMQ Rust Broker — example configuration.
+#
+# Usage:
+#   ./rust-broker/target/release/rust-broker --config config/broker.example.toml
+#
+# Any value here can be overridden by an explicit CLI flag (e.g. --data-port).
+
+# Unique broker ID within the cluster.
+id = 1
+
+# Bind IP for the TCP data plane.
+host = "127.0.0.1"
+
+# TCP port for client produce/consume operations.
+data_port = 9091
+
+# gRPC endpoint of the Go control plane. Use https:// to enable client TLS to
+# the controller (see [tls].ca_file below).
+controller = "http://127.0.0.1:8001"
+
+# Where partition log files are stored. Defaults to ./data/broker_{id}.
+# storage_dir = "./data/broker_1"
+
+[storage]
+# Max size of an active log segment before it rolls over (bytes). 128 MiB.
+max_segment_size = 134217728
+# Max total on-disk size of a partition before old segments are evicted (bytes). 1 GiB.
+max_retention_size = 1073741824
+# Max age of a segment before it is eligible for deletion (seconds). 7 days.
+max_retention_age_secs = 604800
+
+[tls]
+# Enable TLS on the TCP data plane. NOTE: enabling this disables the sendfile
+# zero-copy fast path — consume/replication data is copied through userspace
+# for encryption.
+enabled = false
+# Server certificate / key (PEM) presented on the data plane.
+# cert_file = "config/certs/broker.crt"
+# key_file  = "config/certs/broker.key"
+# CA used to verify the controller's TLS cert (when controller is https://) and
+# peer brokers during replication.
+# ca_file   = "config/certs/ca.crt"
+
+[auth]
+# Shared bearer token. When set, it is sent as gRPC "authorization" metadata to
+# the controller and as the data-plane AUTH handshake to peer brokers. Empty
+# disables authentication.
+# token = "change-me-super-secret-token"

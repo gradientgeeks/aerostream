@@ -1,0 +1,240 @@
+<div class="overview-container w-full max-w-full overflow-x-hidden">
+  <!-- Progress loader when refreshing -->
+  <mat-progress-bar *ngIf="service.isLoading()" mode="indeterminate" class="loader-bar"></mat-progress-bar>
+
+  <!-- Page Header -->
+  <div class="page-header flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+    <div class="header-titles">
+      <div class="title-row">
+        <mat-icon class="page-icon">dashboard</mat-icon>
+        <h1>Cluster Overview</h1>
+      </div>
+      <p class="subtitle">Distributed Raft Consensus & Rust Storage Broker Topology</p>
+    </div>
+
+    <div class="header-actions">
+      <div class="last-updated" *ngIf="service.lastUpdated() as lastUpdate">
+        <mat-icon class="tiny-icon">update</mat-icon>
+        <span>Updated {{ lastUpdate | date:'HH:mm:ss' }}</span>
+      </div>
+      <button mat-flat-button color="primary" (click)="onRefresh()" [disabled]="service.isLoading()">
+        <mat-icon [class.spin]="service.isLoading()">refresh</mat-icon>
+        Sync State
+      </button>
+    </div>
+  </div>
+
+  <!-- Disconnected Banner -->
+  <div *ngIf="!service.isConnected()" class="offline-banner">
+    <div class="banner-content">
+      <div class="banner-icon-col">
+        <mat-icon class="banner-icon">error_outline</mat-icon>
+      </div>
+      <div class="banner-text">
+        <div class="banner-title">Cluster Controller Unreachable</div>
+        <p class="banner-desc">
+          Unable to establish HTTP connection to AeroMQ controller at <code>{{ service.apiBaseUrl() }}</code>.
+          Ensure the Go controller is running:
+          <span class="cmd-pill">go run ./go-controller/cmd/controller</span>
+        </p>
+      </div>
+      <div class="banner-action">
+        <button mat-stroked-button color="warn" (click)="onRefresh()">
+          <mat-icon>sync</mat-icon>
+          Retry Connection
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Metric Cards Grid -->
+  <div class="metrics-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 w-full max-w-full">
+    <!-- Active Brokers Card -->
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title>Storage Brokers</mat-card-title>
+        <mat-card-subtitle>Live Rust Log Brokers</mat-card-subtitle>
+        <div class="card-icon-avatar brokers-icon">
+          <mat-icon>dns</mat-icon>
+        </div>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="metric-value-row">
+          <span class="metric-large-num">
+            {{ service.activeBrokersCount() }}
+            <span class="metric-total">/ {{ service.totalBrokersCount() }}</span>
+          </span>
+          <span class="status-indicator-badge" [class.healthy]="service.activeBrokersCount() > 0 && service.activeBrokersCount() === service.totalBrokersCount()" [class.warning]="service.activeBrokersCount() < service.totalBrokersCount() || service.totalBrokersCount() === 0">
+            <span class="pulse-dot"></span>
+            {{ service.activeBrokersCount() > 0 ? (service.activeBrokersCount() === service.totalBrokersCount() ? 'All Online' : 'Partial') : 'No Active' }}
+          </span>
+        </div>
+        <div class="metric-footer-note">
+          <span>Active TCP log segments & replication brokers</span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Raft Consensus Card -->
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title>Consensus State</mat-card-title>
+        <mat-card-subtitle>HashiCorp Raft Engine</mat-card-subtitle>
+        <div class="card-icon-avatar consensus-icon">
+          <mat-icon>account_tree</mat-icon>
+        </div>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="metric-value-row">
+          <span class="metric-large-text" [class.is-leader]="service.isLeader()">
+            {{ service.raftState() }}
+          </span>
+          <span class="role-pill" [class.leader-pill]="service.isLeader()" [class.follower-pill]="!service.isLeader()">
+            {{ service.isLeader() ? 'Active Leader' : 'Replica' }}
+          </span>
+        </div>
+        <div class="metric-footer-note">
+          <span class="mono-label">Leader: {{ service.raftLeader() }}</span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Topics & Groups Card -->
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title>Catalog & Consumers</mat-card-title>
+        <mat-card-subtitle>Topics & Active Groups</mat-card-subtitle>
+        <div class="card-icon-avatar topics-icon">
+          <mat-icon>layers</mat-icon>
+        </div>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="metric-value-row">
+          <span class="metric-large-num">
+            {{ service.clusterInfo()?.topics_count ?? 0 }}
+            <span class="metric-label-unit">Topics</span>
+          </span>
+          <span class="group-count-pill">
+            {{ service.clusterInfo()?.groups_count ?? 0 }} Groups
+          </span>
+        </div>
+        <div class="metric-footer-note flex-between">
+          <span>Distributed partitioned logs</span>
+          <a mat-button color="primary" routerLink="/topics" class="card-link">View Topics &rarr;</a>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- System Health Card -->
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title>Cluster Health</mat-card-title>
+        <mat-card-subtitle>System Topology Status</mat-card-subtitle>
+        <div class="card-icon-avatar health-icon">
+          <mat-icon>{{ clusterState().icon }}</mat-icon>
+        </div>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="metric-value-row">
+          <span class="metric-large-text health-text" [ngClass]="clusterState().color">
+            {{ clusterState().text }}
+          </span>
+        </div>
+        <div class="metric-footer-note">
+          <span class="mono-label">Controller ID: {{ service.clusterInfo()?.node_id ?? 'Unknown' }}</span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Brokers Table Section -->
+  <mat-card class="table-card w-full max-w-full overflow-hidden">
+    <div class="table-card-header flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+      <div class="table-title-group">
+        <mat-icon class="table-icon">storage</mat-icon>
+        <div class="table-headings">
+          <h2>Registered Storage Brokers</h2>
+          <p>Heartbeat tracking, addresses, and partition leadership</p>
+        </div>
+      </div>
+      <div class="table-header-meta">
+        <span class="badge-count">{{ service.brokers().length }} brokers</span>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-responsive overflow-x-auto w-full max-w-full">
+      <table mat-table [dataSource]="service.brokers()" [trackBy]="trackByBrokerId" class="brokers-table w-full">
+        <!-- ID Column -->
+        <ng-container matColumnDef="id">
+          <th mat-header-cell *matHeaderCellDef class="whitespace-nowrap">Broker ID</th>
+          <td mat-cell *matCellDef="let broker" class="whitespace-nowrap">
+            <div class="broker-id-badge">
+              <mat-icon class="broker-icon">developer_board</mat-icon>
+              <span class="id-text">Broker-{{ broker.id }}</span>
+            </div>
+          </td>
+        </ng-container>
+
+        <!-- Address Column -->
+        <ng-container matColumnDef="address">
+          <th mat-header-cell *matHeaderCellDef class="whitespace-nowrap">Endpoint Address</th>
+          <td mat-cell *matCellDef="let broker" class="whitespace-nowrap">
+            <div class="address-cell">
+              <span class="host-pill">{{ broker.host }}:{{ broker.port }}</span>
+              <span class="protocol-tag">TCP Log Server</span>
+            </div>
+          </td>
+        </ng-container>
+
+        <!-- Status Column -->
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef class="whitespace-nowrap">Health Status</th>
+          <td mat-cell *matCellDef="let broker" class="whitespace-nowrap">
+            <span class="status-chip" [class.online]="broker.active" [class.offline]="!broker.active">
+              <span class="status-dot"></span>
+              {{ broker.active ? 'ONLINE' : 'OFFLINE' }}
+            </span>
+          </td>
+        </ng-container>
+
+        <!-- Last Seen Column -->
+        <ng-container matColumnDef="last_seen">
+          <th mat-header-cell *matHeaderCellDef class="whitespace-nowrap">Last Heartbeat</th>
+          <td mat-cell *matCellDef="let broker" class="whitespace-nowrap">
+            <div class="heartbeat-cell" [matTooltip]="broker.last_seen ? ('Epoch: ' + broker.last_seen) : 'Never seen'">
+              <mat-icon class="time-icon">schedule</mat-icon>
+              <span>{{ formatLastSeen(broker.last_seen) }}</span>
+            </div>
+          </td>
+        </ng-container>
+
+        <!-- Actions Column -->
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef class="whitespace-nowrap">Details</th>
+          <td mat-cell *matCellDef="let broker" class="whitespace-nowrap">
+            <a mat-stroked-button color="primary" routerLink="/topics" [queryParams]="{broker: broker.id}" class="inspect-btn">
+              <mat-icon>visibility</mat-icon>
+              Inspect Partitions
+            </a>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;" class="broker-row"></tr>
+
+        <!-- Row shown when there is no data -->
+        <tr class="mat-row empty-row" *matNoDataRow>
+          <td class="mat-cell empty-cell" [attr.colspan]="displayedColumns.length">
+            <div class="empty-state">
+              <mat-icon class="empty-icon">dns</mat-icon>
+              <h3>No Storage Brokers Found</h3>
+              <p *ngIf="service.isConnected()">No Rust storage brokers are currently registered with this Raft controller.</p>
+              <p *ngIf="!service.isConnected()">Controller is offline. Start the controller and brokers to see live topology.</p>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </mat-card>
+</div>

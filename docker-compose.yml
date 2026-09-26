@@ -1,0 +1,201 @@
+services:
+  # ---------------------------------------------------------------------------
+  # Go Raft Controllers (3-node Quorum)
+  # ---------------------------------------------------------------------------
+  controller-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.controller
+    image: aeromq-controller:latest
+    container_name: aeromq-controller-1
+    command:
+      - "-id"
+      - "node1"
+      - "-raft-addr"
+      - "controller-1:7001"
+      - "-grpc-addr"
+      - "0.0.0.0:8001"
+      - "-http-addr"
+      - "0.0.0.0:9001"
+      - "-data-dir"
+      - "/data"
+      - "-bootstrap"
+    ports:
+      - "7001:7001"
+      - "8001:8001"
+      - "9001:9001"
+    volumes:
+      - controller-1-data:/data
+    networks:
+      - aeromq-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9001/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+    restart: unless-stopped
+
+  controller-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.controller
+    image: aeromq-controller:latest
+    container_name: aeromq-controller-2
+    command:
+      - "-id"
+      - "node2"
+      - "-raft-addr"
+      - "controller-2:7001"
+      - "-grpc-addr"
+      - "0.0.0.0:8001"
+      - "-http-addr"
+      - "0.0.0.0:9001"
+      - "-data-dir"
+      - "/data"
+      - "-join"
+      - "http://controller-1:9001"
+    ports:
+      - "7002:7001"
+      - "8002:8001"
+      - "9002:9001"
+    volumes:
+      - controller-2-data:/data
+    networks:
+      - aeromq-net
+    depends_on:
+      controller-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9001/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  controller-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.controller
+    image: aeromq-controller:latest
+    container_name: aeromq-controller-3
+    command:
+      - "-id"
+      - "node3"
+      - "-raft-addr"
+      - "controller-3:7001"
+      - "-grpc-addr"
+      - "0.0.0.0:8001"
+      - "-http-addr"
+      - "0.0.0.0:9001"
+      - "-data-dir"
+      - "/data"
+      - "-join"
+      - "http://controller-1:9001"
+    ports:
+      - "7003:7001"
+      - "8003:8001"
+      - "9003:9001"
+    volumes:
+      - controller-3-data:/data
+    networks:
+      - aeromq-net
+    depends_on:
+      controller-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9001/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Rust Storage Brokers (Zero-Copy Commit Log)
+  # ---------------------------------------------------------------------------
+  broker-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.broker
+    image: aeromq-broker:latest
+    container_name: aeromq-broker-1
+    command:
+      - "--id"
+      - "1"
+      - "--host"
+      - "broker-1"
+      - "--data-port"
+      - "9091"
+      - "--controller"
+      - "http://controller-1:8001"
+      - "--storage-dir"
+      - "/data"
+    ports:
+      - "9091:9091"
+    volumes:
+      - broker-1-data:/data
+    networks:
+      - aeromq-net
+    depends_on:
+      controller-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9091' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  broker-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.broker
+    image: aeromq-broker:latest
+    container_name: aeromq-broker-2
+    command:
+      - "--id"
+      - "2"
+      - "--host"
+      - "broker-2"
+      - "--data-port"
+      - "9091"
+      - "--controller"
+      - "http://controller-1:8001"
+      - "--storage-dir"
+      - "/data"
+    ports:
+      - "9092:9091"
+    volumes:
+      - broker-2-data:/data
+    networks:
+      - aeromq-net
+    depends_on:
+      controller-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9091' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  controller-1-data:
+    name: aeromq_controller_1_data
+  controller-2-data:
+    name: aeromq_controller_2_data
+  controller-3-data:
+    name: aeromq_controller_3_data
+  broker-1-data:
+    name: aeromq_broker_1_data
+  broker-2-data:
+    name: aeromq_broker_2_data
+
+networks:
+  aeromq-net:
+    name: aeromq-network
+    driver: bridge

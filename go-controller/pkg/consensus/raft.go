@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	appconfig "github.com/gradientgeeks/aeromq/go-controller/pkg/config"
 	"github.com/hashicorp/raft"
 )
 
@@ -16,27 +17,32 @@ type RaftNode struct {
 	NodeID string
 }
 
-func NewRaftNode(nodeID string, raftAddr string, dataDir string, bootstrap bool) (*RaftNode, error) {
+func NewRaftNode(cfg appconfig.ControllerConfig) (*RaftNode, error) {
+	nodeID := cfg.NodeID
+	raftAddr := cfg.RaftAddr
+	dataDir := cfg.DataDir
+	bootstrap := cfg.Bootstrap
+
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(nodeID)
-	// Accelerate timeouts for local development/simulation
-	config.HeartbeatTimeout = 200 * time.Millisecond
-	config.ElectionTimeout = 200 * time.Millisecond
-	config.LeaderLeaseTimeout = 150 * time.Millisecond
-	config.CommitTimeout = 50 * time.Millisecond
+	// Apply configured timeouts.
+	config.HeartbeatTimeout = cfg.Raft.HeartbeatTimeout()
+	config.ElectionTimeout = cfg.Raft.ElectionTimeout()
+	config.LeaderLeaseTimeout = cfg.Raft.LeaderLeaseTimeout()
+	config.CommitTimeout = cfg.Raft.CommitTimeout()
 
 	// Setup TCP transport
 	addr, err := net.ResolveTCPAddr("tcp", raftAddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve raft addr %s: %w", raftAddr, err)
 	}
-	
+
 	transport, err := raft.NewTCPTransport(raftAddr, addr, 3, 10*time.Second, os.Stderr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tcp transport: %w", err)
 	}
 
-	fsm := NewFSM()
+	fsm := NewFSM(cfg.Cluster.BrokerInactiveTimeout(), cfg.Cluster.ReplicaLagTolerance)
 
 	logStore := raft.NewInmemStore()
 	stableStore := raft.NewInmemStore()
