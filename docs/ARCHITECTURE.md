@@ -61,19 +61,24 @@ AeroStream resolves this dichotomy through clean physical and architectural deco
 3. **Strict Memory Mapping & Cache Management**: Index lookups leverage fixed-size 16-byte entries (`[offset: 8 bytes BE][position: 8 bytes BE]`), allowing sub-microsecond binary searches over memory-mapped files without heap allocations.
 4. **Hardware Affinity**: Tokio worker threads are pinned to isolated CPU cores using [`libc::sched_setaffinity`](file:///home/uttam/projects/AeroMQ/rust-broker/src/main.rs#L144), eliminating thread context switching and cache bouncing.
 
-### Verified Architectural Efficiency Comparison
+### Measured comparison
 
-Tested under strict container constraints (`--cpus=2.0 --memory=2g`) pushing 500 MB total payloads:
+Tested under strict container constraints (`--cpus=2.0 --memory=2g`), single node, median of 3 runs, host networking. AeroStream is shown on its native data-plane port (10 closed-loop producers); Kafka and Redpanda use `kafka-producer-perf-test`.
+Full methodology, per-run ranges, durability caveats and the Kafka-port results are in [`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md).
 
-| Architectural Metric | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++20/Seastar) | AeroStream (Dual-Engine) | Architectural Impact |
-| :--- | :--- | :--- | :--- | :--- |
-| **50 MB Messages (Throughput)** | `48.64 MB/s` | `50.20 MB/s` | **`666.30 MB/s`** | **13.3x–13.7x higher** (Zero memory allocation stall) |
-| **50 MB Messages (p50 Latency)**| `5,606 ms` | `5,212 ms` | **`353 ms`** | **14.8x lower** latency via direct sequential write |
-| **1 MB Messages (Throughput)** | `127.62 MB/s` | `333.78 MB/s` | **`687.08 MB/s`** | **2.06x–5.38x higher** write velocity |
-| **100-Byte High-Frequency** | `13,446 msgs/s` | `10,800 msgs/s` | **`103,890 msgs/s`** | **7.7x–9.6x higher** ingest rate |
-| **Active Memory Utilization** | `1,212 MiB` (60.6%) | `839.3 MiB` (41.0%) | **`1.54 MiB` (0.08%)** | **545x–787x smaller** memory footprint |
-| **Operating System Threads** | 130 JVM threads | 5 OS threads | **3 OS pinned threads** | Zero thread contention or context switches |
-| **Cold Boot to Consensus** | `3,800 ms` | `680 ms` | **`1.8 ms`** | Instant initialization and testing |
+| Metric | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++20/Seastar) | AeroStream (native port) | Note |
+| :--- | ---: | ---: | ---: | :--- |
+| **50 MB messages (MB/s)** | 55.5 | 58.4 | **855.6** (runs 350-881) | large payloads avoid per-message userspace copies on the native path |
+| **10 MB messages (MB/s)** | 170.8 | 218.7 | **592.4** (347-863) | |
+| **1 MB messages (MB/s)** | 320.9 | 375.4 | 378.6 (225-1,210) | level with Redpanda; very noisy |
+| **1 KB messages (msgs/s)** | 44,366 | 60,024 | **120,283** | 10 producers vs 1 |
+| **100 B messages (msgs/s)** | 141,243 | **171,527** | 121,852 | AeroStream behind |
+| **Broker idle memory** | 303 MiB | 141 MiB | **1.4 MiB** | peak under 500 MB writes: ~250-730 MiB (page cache) vs ~1.4 GiB |
+| **OS threads under load** | 130 | 10 | 3 | |
+| **Time until usable** | 3.9-4.2 s | **0.75 s** | 1.8-3.4 s | Raft election plus broker registration |
+
+Over the **Kafka port** (what Kafka clients use) AeroStream reaches 174,520 msgs/s at 100 B and 63,776 at 1 KB, level with or ahead of Kafka and Redpanda, but is still behind at 1-50 MB;
+see [`benchmarks/KAFKA_PORT_PERFORMANCE.md`](../benchmarks/KAFKA_PORT_PERFORMANCE.md).
 
 ---
 

@@ -5,16 +5,34 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
 	appconfig "github.com/gradientgeeks/aerostream/go-controller/pkg/config"
 	"github.com/hashicorp/raft"
+	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
 )
 
 type RaftNode struct {
 	Raft   *raft.Raft
 	FSM    *FSM
 	NodeID string
+
+	closeStore func() error
+}
+
+// Shutdown stops Raft and closes the durable log store (if any).
+func (rn *RaftNode) Shutdown() error {
+	var err error
+	if rn.Raft != nil {
+		err = rn.Raft.Shutdown().Error()
+	}
+	if rn.closeStore != nil {
+		if cerr := rn.closeStore(); err == nil {
+			err = cerr
+		}
+	}
+	return err
 }
 
 func NewRaftNode(cfg appconfig.ControllerConfig) (*RaftNode, error) {
@@ -51,20 +69,32 @@ func NewRaftNode(cfg appconfig.ControllerConfig) (*RaftNode, error) {
 
 	fsm := NewFSM(cfg.Cluster.BrokerInactiveTimeout(), cfg.Cluster.ReplicaLagTolerance)
 
-	logStore := raft.NewInmemStore()
-	stableStore := raft.NewInmemStore()
-	
-	var snapshotStore raft.SnapshotStore
+	// With a data dir the Raft log, current term and vote are durable (BoltDB) next to the snapshots,
+	// so a restarted node keeps its state and a whole-quorum restart recovers (like KRaft's metadata log
+	// on a PersistentVolume). Without one, everything is in memory.
+	var (
+		logStore      raft.LogStore
+		stableStore   raft.StableStore
+		snapshotStore raft.SnapshotStore
+		closeStore    func() error
+	)
 	if dataDir != "" {
-		err = os.MkdirAll(dataDir, 0755)
-		if err != nil {
+		if err := os.MkdirAll(dataDir, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create data dir: %w", err)
 		}
+		boltStore, err := raftboltdb.NewBoltStore(filepath.Join(dataDir, "raft.db"))
+		if err != nil {
+			return nil, fmt.Errorf("failed to open raft log store: %w", err)
+		}
+		logStore, stableStore, closeStore = boltStore, boltStore, boltStore.Close
 		snapshotStore, err = raft.NewFileSnapshotStore(dataDir, 2, os.Stderr)
 		if err != nil {
+			boltStore.Close()
 			return nil, fmt.Errorf("failed to create file snapshot store: %w", err)
 		}
 	} else {
+		mem := raft.NewInmemStore()
+		logStore, stableStore = mem, mem
 		snapshotStore = raft.NewDiscardSnapshotStore()
 	}
 
@@ -73,7 +103,15 @@ func NewRaftNode(cfg appconfig.ControllerConfig) (*RaftNode, error) {
 		return nil, fmt.Errorf("failed to construct raft node: %w", err)
 	}
 
-	if bootstrap {
+	hasState, err := raft.HasExistingState(logStore, stableStore, snapshotStore)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect raft state: %w", err)
+	}
+	if bootstrap && hasState {
+		// Never re-bootstrap a node that already has durable state: it would fork a new cluster.
+		fmt.Fprintf(os.Stderr, "[AeroMQ Controller] existing Raft state found in %s; skipping bootstrap\n", dataDir)
+	}
+	if bootstrap && !hasState {
 		configuration := raft.Configuration{
 			Servers: []raft.Server{
 				{
@@ -86,9 +124,10 @@ func NewRaftNode(cfg appconfig.ControllerConfig) (*RaftNode, error) {
 	}
 
 	return &RaftNode{
-		Raft:   r,
-		FSM:    fsm,
-		NodeID: nodeID,
+		Raft:       r,
+		FSM:        fsm,
+		NodeID:     nodeID,
+		closeStore: closeStore,
 	}, nil
 }
 
@@ -178,4 +217,3 @@ func (rn *RaftNode) Leave(nodeID string) error {
 
 	return nil
 }
-

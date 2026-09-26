@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Shared settings for the comparison benchmark. Source this file; do not run it.
+
+# Identical hardware limits for every broker container.
+export LIMITS="--cpus=2.0 --memory=2g"
+
+export KAFKA_IMAGE="${KAFKA_IMAGE:-apache/kafka:latest}"
+export REDPANDA_IMAGE="${REDPANDA_IMAGE:-redpandadata/redpanda:latest}"
+
+# AeroStream images are built from the code under test (see COMMANDS.md): TAG is "main" or "integration".
+export AERO_TAG="${AERO_TAG:-integration}"
+export AERO_BROKER_IMAGE="aerostream-broker:${AERO_TAG}"
+export AERO_CONTROLLER_IMAGE="${AERO_CONTROLLER_IMAGE:-aerostream-controller:${AERO_TAG}}"
+export AERO_CLIENT="${AERO_CLIENT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/client/bin/client}"
+
+# Container names.
+export KAFKA_NAME=bench-kafka REDPANDA_NAME=bench-redpanda AERO_NAME=bench-aerostream AERO_CTL_NAME=bench-aerostream-controller
+
+# Every container uses host networking (no docker-proxy in the data path). Ports are chosen not to clash
+# with a locally running AeroStream (7001-7003, 8001-8003, 9001-9003, 9091-9093).
+export KAFKA_BOOTSTRAP=localhost:9094            # external listener used by the load generator
+export KAFKA_ADMIN_BOOTSTRAP=localhost:19192     # internal listener used by kafka-topics.sh
+export REDPANDA_BOOTSTRAP=localhost:19092
+export AERO_CONTROLLER_GRPC=127.0.0.1:28001      # dedicated benchmark controller (NOT the one on :8001)
+export AERO_CONTROLLER_HTTP=127.0.0.1:29001
+export AERO_KAFKA_BOOTSTRAP=localhost:9096        # AeroStream Kafka-protocol port (driven with kafka-producer-perf-test)
+
+# 64 MiB message limit so every payload up to 50 MiB fits.
+export MAX_MSG=67108864
+
+# Workloads: label size_bytes kafka_records aero_producers aero_messages_per_producer kafka_extra_props
+# Large-message tests move 500 MB in total; small-message tests match the earlier benchmark (100k x 100 B, 50k x 1 KB).
+export WORKLOADS=(
+  "100B 100 100000 10 10000 "
+  "1KB 1024 50000 10 5000 "
+  "1MB 1048576 500 10 50 "
+  "10MB 10485760 50 10 5 buffer.memory=134217728"
+  "50MB 52428800 10 5 2 buffer.memory=268435456"
+)
+export RUNS="${RUNS:-3}"

@@ -434,7 +434,7 @@ func TestTransformsRESTEndpoints(t *testing.T) {
 	// 6. POST /api/transforms/test -> test Filter transform with dropping payload
 	testFilterBody, _ := json.Marshal(map[string]interface{}{
 		"transform_name": "telemetry-filter-critical",
-		"payload": `{"device_id": "d-99", "level": "DEBUG"}`,
+		"payload":        `{"device_id": "d-99", "level": "DEBUG"}`,
 	})
 	req = httptest.NewRequest(http.MethodPost, "/api/transforms/test", bytes.NewReader(testFilterBody))
 	w = httptest.NewRecorder()
@@ -777,5 +777,3 @@ func TestDrainBrokerRESTEndpoint(t *testing.T) {
 		t.Errorf("expected broker 1 to be marked inactive after drain")
 	}
 }
-
-

@@ -1,0 +1,19 @@
+== AeroStream image: aerostream-broker:integration
+== kafka-broker-api-versions.sh (Kafka 4.x client) against localhost:9096 (25 s timeout)
+127.0.0.1:9096 (id: 10 rack: null isFenced: false) -> (
+	Produce(0): 0 to 7 [usable: 7],
+	Fetch(1): 0 to 11 [usable: 11],
+	ListOffsets(2): 0 to 7 [usable: 7],
+	Metadata(3): 0 to 5 [usable: 5],
+	OffsetCommit(8): 0 to 8 [usable: 8],
+	OffsetFetch(9): 0 to 7 [usable: 7],
+	FindCoordinator(10): 0 to 4 [usable: 4],
+	JoinGroup(11): 0 to 9 [usable: 9],
+	Heartbeat(12): 0 to 4 [usable: 4],
+	LeaveGroup(13): 0 to 5 [usable: 5],
+	SyncGroup(14): 0 to 5 [usable: 5],
+exit status: 0
+== raw ApiVersions v3 (flexible) request; a correct reply has a compact-array length varint after the error code
+response (first 24 bytes, hex): 000000ec000000070000210000000000070000010000000b
+layout: [4-byte length][4-byte correlation id][2-byte error code][array...]. A flexible (v3) reply continues with a 1-byte
+compact array length; a classic (wrong for v3) reply continues with a 4-byte int32 count such as 00000006.

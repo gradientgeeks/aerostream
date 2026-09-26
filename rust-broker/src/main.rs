@@ -8,6 +8,10 @@ mod config;
 mod log;
 mod net;
 mod grpc;
+mod iceberg;
+mod txn;
+mod share;
+pub mod topology;
 pub mod kafka;
 pub mod storage;
 
@@ -44,6 +48,10 @@ struct Args {
     /// Path to store physical partition log files
     #[arg(long)]
     storage_dir: Option<PathBuf>,
+
+    /// Rack / availability zone of this broker (broker.rack)
+    #[arg(long)]
+    rack: Option<String>,
 
     /// Tiered Storage Provider: s3, gcs, azure, local, disabled
     #[arg(long)]
@@ -90,6 +98,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(controller) = args.controller {
         cfg.controller = controller;
+    }
+    if args.rack.is_some() {
+        cfg.rack = args.rack;
     }
     if args.storage_dir.is_some() {
         cfg.storage_dir = args.storage_dir;
@@ -151,6 +162,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .build()?;
 
+    // Data-plane settings: default compression.type and local client quotas.
+    match kafka::compression::CompressionType::parse(&cfg.compression_type) {
+        Some(t) => kafka::compression::registry().set_default(t),
+        None => tracing::warn!("[AeroMQ Broker] Unknown compression_type '{}', using 'producer'", cfg.compression_type),
+    }
+    kafka::quota::manager().set_entries(cfg.quotas.clone());
+
     let cfg = Arc::new(cfg);
 
     runtime.block_on(async move {
@@ -199,6 +217,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
 
+        // Iceberg topics: tail iceberg-enabled topics into a warehouse
+        #[cfg(feature = "iceberg")]
+        if cfg.iceberg.enabled {
+            let wh_uri = cfg.iceberg.warehouse.clone();
+            let wh = if let Some(rest) = wh_uri.strip_prefix("s3://") {
+                let (bucket, prefix) = rest.split_once('/').unwrap_or((rest, ""));
+                let mut s3 = cfg.tiered_storage.s3.clone();
+                s3.bucket = bucket.to_string();
+                s3.prefix = None;
+                match storage::S3StorageProvider::new(&s3) {
+                    Ok(p) => Some(iceberg::table::Warehouse::Remote {
+                        provider: Arc::new(p),
+                        bucket: bucket.to_string(),
+                        prefix: prefix.trim_matches('/').to_string(),
+                    }),
+                    Err(e) => {
+                        tracing::error!("[AeroStream Iceberg] S3 warehouse init failed: {}", e);
+                        None
+                    }
+                }
+            } else {
+                Some(iceberg::table::Warehouse::local(&wh_uri))
+            };
+            if let Some(wh) = wh {
+                let mgr = iceberg::IcebergManager::new(cfg.iceberg.clone(), Arc::new(wh), log_manager.clone());
+                mgr.spawn();
+                info!("[AeroStream Iceberg] enabled: warehouse={} topics={}", wh_uri, cfg.iceberg.topics.len());
+            }
+        }
+
         // Spawn client registration & control plane heartbeat worker
         let grpc_log_manager = log_manager.clone();
         let grpc_cfg = cfg.clone();
@@ -210,6 +258,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let kafka_bind_addr: SocketAddr = format!("{}:{}", cfg.host, cfg.kafka_port)
             .parse()
             .unwrap_or_else(|_| format!("0.0.0.0:{}", cfg.kafka_port).parse().unwrap());
+        // Kafka admin/group-coordinator state + controller topology refresh loop.
+        kafka::admin::init(&cfg, &log_manager);
         let kafka_server = net::KafkaServer::new(kafka_bind_addr, log_manager.clone(), cfg.clone());
         tokio::spawn(async move {
             if let Err(e) = kafka_server.run().await {

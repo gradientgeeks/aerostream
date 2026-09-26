@@ -1,0 +1,200 @@
+{{- $fullname := include "aerostream.fullname" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-controller
+  labels:
+    {{- include "aerostream.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  serviceName: {{ include "aerostream.controller.headless" . }}
+  replicas: {{ .Values.controller.replicas }}
+  # Parallel (not OrderedReady): a controller is only Ready once it sees a Raft leader, and electing one
+  # needs a quorum of the other controllers. With OrderedReady a restart of every controller would
+  # deadlock (pod 1 is never created because pod 0 never becomes Ready). Rolling updates are still
+  # strictly one pod at a time, in reverse ordinal order, waiting for Ready.
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "aerostream.selectorLabels" (dict "ctx" . "component" "controller") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "aerostream.labels" . | nindent 8 }}
+        app.kubernetes.io/component: controller
+        {{- with .Values.controller.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/secret-config.yaml") . | sha256sum }}
+        {{- with .Values.controller.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "aerostream.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controller.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.controller.terminationGracePeriodSeconds }}
+      containers:
+        - name: controller
+          image: {{ include "aerostream.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -eo pipefail
+              ORDINAL="${HOSTNAME##*-}"
+              NODE_ID="node$((ORDINAL + 1))"
+              DOMAIN="{{ include "aerostream.controller.headless" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+              RAFT_ADDR="${HOSTNAME}.${DOMAIN}:{{ .Values.controller.ports.raft }}"
+              REPLICAS={{ .Values.controller.replicas }}
+              MARKER=/data/.aerostream-bootstrapped
+
+              # Bootstrap a new Raft cluster ONLY on the very first start of pod 0 (or always when
+              # running a single controller). Raft state is held in memory, so re-bootstrapping a
+              # restarted pod 0 next to live peers would create a second, split-brain cluster.
+              BOOTSTRAP=""
+              if [ "${ORDINAL}" = "0" ] && { [ "${REPLICAS}" = "1" ] || [ ! -f "${MARKER}" ]; }; then
+                BOOTSTRAP="-bootstrap"
+                touch "${MARKER}"
+              fi
+
+              # Everyone else (and a restarted pod 0) asks the current leader to (re)add it as a voter.
+              # Retries against every controller because only the leader accepts /join.
+              if [ -z "${BOOTSTRAP}" ]; then
+                (
+                  for _ in $(seq 1 120); do
+                    sleep 2
+                    for j in $(seq 0 $((REPLICAS - 1))); do
+                      [ "${j}" = "${ORDINAL}" ] && continue
+                      if curl -sf -m 5 "http://{{ $fullname }}-controller-${j}.${DOMAIN}:{{ .Values.controller.ports.http }}/join?id=${NODE_ID}&addr=${RAFT_ADDR}" >/dev/null 2>&1; then
+                        echo "[aerostream] ${NODE_ID} joined the Raft cluster via controller ${j}"
+                        exit 0
+                      fi
+                    done
+                  done
+                  echo "[aerostream] WARNING: ${NODE_ID} could not join the Raft cluster"
+                ) &
+              fi
+
+              echo "[aerostream] starting ${NODE_ID} raft=${RAFT_ADDR} bootstrap=${BOOTSTRAP:-no}"
+              exec controller \
+                -config /etc/aerostream/controller.toml \
+                -id "${NODE_ID}" \
+                -raft-addr "${RAFT_ADDR}" \
+                -grpc-addr "0.0.0.0:{{ .Values.controller.ports.grpc }}" \
+                -http-addr "0.0.0.0:{{ .Values.controller.ports.http }}" \
+                -data-dir /data/controller \
+                -ui-dir /app/ui \
+                ${BOOTSTRAP}
+          env:
+            - name: AEROSTREAM_DATAPLANE_FILE
+              value: /data/dataplane.json
+            - name: AEROSTREAM_STREAMS_DIR
+              value: /data/streams
+            {{- with .Values.controller.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - {name: raft, containerPort: {{ .Values.controller.ports.raft }}}
+            - {name: grpc, containerPort: {{ .Values.controller.ports.grpc }}}
+            - {name: http, containerPort: {{ .Values.controller.ports.http }}}
+          {{- if .Values.controller.leaveOnShutdown }}
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    ORDINAL="${HOSTNAME##*-}"
+                    if [ "${ORDINAL}" != "0" ]; then
+                      curl -s -X POST "http://{{ $fullname }}-controller-0.{{ include "aerostream.controller.headless" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:{{ .Values.controller.ports.http }}/leave?id=node$((ORDINAL + 1))" || true
+                      sleep 2
+                    fi
+          {{- end }}
+          startupProbe:
+            httpGet: {path: /status, port: http}
+            periodSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: {path: /status, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          # Ready only once this node sees a Raft leader. Controller Raft state is held in memory, so a
+          # rolling update must never replace the next pod until this one has rejoined the quorum.
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  curl -sf -m 2 http://127.0.0.1:{{ .Values.controller.ports.http }}/status | grep -Eq '"leader": *"[^"]+"'
+            periodSeconds: 5
+            timeoutSeconds: 4
+          {{- with .Values.controller.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: config, mountPath: /etc/aerostream, readOnly: true}
+      {{- $aff := .Values.controller.affinity }}
+      {{- if or $aff .Values.controller.podAntiAffinityPreset }}
+      affinity:
+        {{- if $aff }}
+        {{- toYaml $aff | nindent 8 }}
+        {{- else }}
+        {{- include "aerostream.podAntiAffinity" (dict "ctx" . "component" "controller" "preset" .Values.controller.podAntiAffinityPreset) | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.controller.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controller.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controller.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ include "aerostream.configSecret" . }}
+        {{- if not .Values.controller.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if .Values.controller.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "aerostream.selectorLabels" (dict "ctx" . "component" "controller") | nindent 10 }}
+      spec:
+        accessModes: {{- toYaml .Values.controller.persistence.accessModes | nindent 10 }}
+        {{- with .Values.controller.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.controller.persistence.size }}
+  {{- end }}

@@ -14,19 +14,23 @@ Built with a **Dual-Engine Architecture**—pairing a resilient **Go-based Raft 
 
 ## ⚡ Key Highlights & Benchmark Comparison
 
-Under strict hardware constraints (`--cpus=2.0 --memory=2g`), AeroStream significantly outperforms Apache Kafka and Redpanda in both throughput and memory footprint:
+Single node, `--cpus=2.0 --memory=2g` per broker, median of 3 runs, produce path only, all containers on host networking.
+AeroStream is shown on its **native data-plane port** (10 concurrent closed-loop producers); Kafka and Redpanda are driven by `kafka-producer-perf-test.sh`.
 
-| Benchmark Scenario | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++/Seastar) | AeroStream (Rust Data Plane) | AeroStream Advantage |
-| :--- | :--- | :--- | :--- | :--- |
-| **50 MB Messages (Throughput)** | `48.64 MB/s` | `50.20 MB/s` | **`666.30 MB/s`** | **13.3x vs Redpanda, 13.7x vs Kafka** |
-| **50 MB Messages (p50 Latency)** | `5,606 ms` | `5,212 ms` | **`353 ms`** | **14.8x lower latency** |
-| **1 MB Messages (Throughput)** | `127.62 MB/s` | `333.78 MB/s` | **`687.08 MB/s`** | **2.06x vs Redpanda, 5.38x vs Kafka** |
-| **100-Byte High-Frequency** | `13,446 msgs/s` | `10,800 msgs/s` | **`103,890 msgs/s`** | **7.7x to 9.6x higher throughput** |
-| **Memory Footprint (50MB Stream)**| `1,212 MiB` (60.6%) | `839.3 MiB` (41.0%) | **`1.54 MiB` (0.08%)** | **545x to 787x lower RAM** |
-| **Thread Count** | 130 JVM threads | 5 OS threads | **3 OS pinned threads** | **Zero thread thrashing** |
-| **Cold Boot Time** | `3.80 s` | `680 ms` | **`1.8 ms`** | **377x to 2,100x faster startup** |
+| Benchmark scenario | Apache Kafka 4.3.1 | Redpanda 26.2 | AeroStream (native port) |
+| :--- | ---: | ---: | ---: |
+| **50 MB messages (MB/s)** | 55.5 | 58.4 | **855.6** (runs 350-881) |
+| **10 MB messages (MB/s)** | 170.8 | 218.7 | **592.4** (347-863) |
+| **1 MB messages (MB/s)** | 320.9 | 375.4 | 378.6 (225-1,210) |
+| **1 KB messages (msgs/s)** | 44,366 | 60,024 | **120,283** |
+| **100 B messages (msgs/s)** | 141,243 | **171,527** | 121,852 |
+| **Broker idle memory** | 303 MiB | 141 MiB | **1.4 MiB** |
+| **Broker peak memory under load** | 1,454 MiB | 1,386 MiB | **354 MiB** |
 
-*For the complete methodology and detailed benchmark traces, see [BENCHMARK_RESULTS.md](docs/BENCHMARK_RESULTS.md).*
+AeroStream leads on large messages (native port) and on memory footprint. On its **Kafka port** (what Kafka clients use) it now reaches 174,520 msgs/s at 100 B and 63,776 at 1 KB
+(Kafka 141,243 / 44,366; Redpanda 171,527 / 60,024; it was 18,925 / 5,116 before profiling-driven fixes), but is still behind Kafka and Redpanda at 1-50 MB (about 200 / 144 / 29 MB/s). Kafka and AeroStream acknowledge
+from the OS page cache while Redpanda flushes before acknowledging by default. Read the caveats in [BENCHMARK.md](benchmarks/BENCHMARK.md) (methodology, closed-loop native client, durability differences, run-to-run noise)
+and [KAFKA_PORT_PERFORMANCE.md](benchmarks/KAFKA_PORT_PERFORMANCE.md) before drawing conclusions.
 
 ---
 
@@ -183,9 +187,10 @@ cd client && go test -v ./...
 * **[Operator & Deployment Guide](docs/OPERATOR_GUIDE.md)**: Cluster bootstrapping, Kubernetes StatefulSets, automated scale-down, broker draining, and monitoring.
 * **[REST & Wire Protocol API Reference](docs/API_REFERENCE.md)**: Complete endpoint schemas, Schema Registry, Stream Transforms, ACLs, and Kafka wire framing.
 * **[Feature Comparison & Evolution Roadmap](docs/FEATURE_COMPARISON_AND_ROADMAP.md)**: Detailed breakdown vs. Apache Kafka and Redpanda, and Next-Gen Enterprise Roadmap (Phases 9–14).
-* **[Comprehensive 3-Way Benchmark Results](docs/BENCHMARK_RESULTS.md)**: Real-world performance under strict container limits (1 MB, 10 MB, 50 MB payloads).
+* **[Benchmark Results & Process](benchmarks/BENCHMARK.md)**: Kafka / Redpanda / AeroStream under strict container limits, with scripts, methodology and the Kafka-port investigation ([details](benchmarks/KAFKA_PORT_PERFORMANCE.md)).
 * **[Python FastAPI Integration Example](examples/fastapi-app/README.md)**: Full-featured sample backend showcasing dual Kafka-wire and HTTP-REST streaming.
 * **[Kubernetes Deployment Manifests](deploy/k8s/)**: Production-ready StatefulSet and Service definitions with preStop hooks.
+* **[Helm Chart](deploy/helm/aerostream/README.md)**: Controller and broker StatefulSets with PVC-backed Raft state, rack awareness, and `helm test`.
 
 ---
 

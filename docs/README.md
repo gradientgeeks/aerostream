@@ -30,7 +30,7 @@ Choose your path based on your role:
 ### 1. 🏛️ System Architects & Technical Evaluators
 * **[Architecture Deep-Dive](ARCHITECTURE.md)**: Exhaustive technical analysis of the dual-engine design, HashiCorp Raft consensus, Rust zero-copy `sendfile(2)` kernel dispatch, memory-mapped (`mmap`) append-only logs, and the 3-thread deterministic execution model.
 * **[Feature Comparison & Evolution Roadmap](FEATURE_COMPARISON_AND_ROADMAP.md)**: Head-to-head comparison against **Apache Kafka** and **Redpanda**, detailing implemented capabilities (Phases 1–8) and the Next-Generation Enterprise Horizon (Phases 9–14).
-* **[Comprehensive 3-Way Benchmark Results](BENCHMARK_RESULTS.md)**: Real-world empirical performance under strict container limits (`2 vCPU, 2 GB RAM`), highlighting the 13x throughput advantage at 50 MB payloads.
+* **[Benchmark Results & Process](../benchmarks/BENCHMARK.md)**: Kafka / Redpanda / AeroStream under strict container limits (`2 vCPU, 2 GB RAM`), with scripts, methodology and caveats, highlighting the 13x throughput advantage at 50 MB payloads.
 
 ### 2. 🚀 Application Developers & Integrators
 * **[REST & Wire Protocol API Reference](API_REFERENCE.md)**: Complete HTTP REST API schemas, request/response payloads, and binary Kafka Wire Protocol frame structures (`Produce`, `Fetch`, `Metadata`, `ApiVersions`, `InitProducerId`).
@@ -99,7 +99,7 @@ Illustrates the 3-node Raft controller quorum, broker replication sets, and auto
 | **[`docs/OPERATOR_GUIDE.md`](OPERATOR_GUIDE.md)** | Bare-metal, Docker, and Kubernetes deployment & operational runbook |
 | **[`docs/API_REFERENCE.md`](API_REFERENCE.md)** | Complete REST API schemas and Kafka wire protocol specification |
 | **[`docs/FEATURE_COMPARISON_AND_ROADMAP.md`](FEATURE_COMPARISON_AND_ROADMAP.md)** | Kafka/Redpanda comparative analysis & Next-Gen Enterprise Roadmap (Phases 9–14) |
-| **[`docs/BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md)** | Host and container performance benchmarks across 100B, 1KB, 1MB, 10MB, and 50MB messages |
-| **[`deploy/DOCKER_BENCHMARK_RESULTS.md`](../deploy/DOCKER_BENCHMARK_RESULTS.md)** | Isolated 3-way container benchmark data tables (`--cpus=2.0 --memory=2g`) |
+| **[`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md)** | Host and container performance benchmarks across 100B, 1KB, 1MB, 10MB, and 50MB messages |
+| **[`benchmarks/KAFKA_PORT_PERFORMANCE.md`](../benchmarks/KAFKA_PORT_PERFORMANCE.md)** | Kafka-port profiling, fixes and sources; (old `deploy/DOCKER_BENCHMARK_RESULTS.md` is a pointer). Original description: isolated 3-way container benchmark data tables (`--cpus=2.0 --memory=2g`) |
 | **[`examples/fastapi-app/README.md`](../examples/fastapi-app/README.md)** | Python FastAPI microservice integration guide and automated test suite |
 | **[`deploy/k8s/`](../deploy/k8s/)** | Kubernetes StatefulSet manifests and headless service configurations |

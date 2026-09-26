@@ -24,6 +24,10 @@ pub struct PartitionLog {
     pub active_log_file: File,
     pub active_idx_file: File,
     pub next_offset: u64,
+    // Tracked sizes of the active segment files (avoid a metadata()/lseek syscall per append).
+    active_len: u64,
+    active_idx_len: u64,
+    last_retention_check: std::time::Instant,
 
     // Configurations
     pub max_segment_size: u64,
@@ -53,6 +57,9 @@ pub struct PartitionLog {
     // Idempotent producer sequence tracking
     pub producer_tracker: ProducerStateTracker,
     pub producer_states: HashMap<i64, ProducerState>,
+
+    // Transaction index (ongoing txns for LSO, aborted txns for read_committed fetch)
+    pub txn_index: crate::txn::PartitionTxnIndex,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -152,9 +159,11 @@ impl PartitionLog {
             active_seg.base_offset
         };
 
-        // Put seek back to end
-        active_idx_file.seek(SeekFrom::End(0))?;
+        // Appends use positioned writes at the tracked lengths
+        let active_len = active_log_file.metadata()?.len();
+        let active_idx_len = index_len;
 
+        let partition_dir_for_txn = partition_dir.clone();
         let mut log = Self {
             topic: topic.to_string(),
             partition,
@@ -163,6 +172,9 @@ impl PartitionLog {
             active_log_file,
             active_idx_file,
             next_offset,
+            active_len,
+            active_idx_len,
+            last_retention_check: std::time::Instant::now(),
             max_segment_size,
             broker_id,
             storage_base_dir,
@@ -178,6 +190,7 @@ impl PartitionLog {
             replica_ids: Vec::new(),
             producer_tracker: ProducerStateTracker::new(),
             producer_states: HashMap::new(),
+            txn_index: crate::txn::PartitionTxnIndex::open(&partition_dir_for_txn),
         };
         log.recompute_high_watermark();
         Ok(log)
@@ -290,27 +303,34 @@ impl PartitionLog {
     }
 
     pub fn append(&mut self, data: &[u8]) -> io::Result<u64> {
-        let cur_len = self.active_log_file.metadata()?.len();
-        if cur_len + data.len() as u64 > self.max_segment_size && cur_len > 0 {
+        use std::os::unix::fs::FileExt;
+
+        let mut rolled = false;
+        if self.active_len + data.len() as u64 > self.max_segment_size && self.active_len > 0 {
             self.roll_over()?;
+            rolled = true;
         }
 
-        let pos = self.active_log_file.metadata()?.len();
-        // Seek to end before writing (append mode manually simulated for flexibility)
-        self.active_log_file.seek(SeekFrom::End(0))?;
-        self.active_log_file.write_all(data)?;
-        self.active_log_file.flush()?;
+        // Positioned writes at the tracked lengths: no metadata(), lseek or split index writes per record.
+        let pos = self.active_len;
+        self.active_log_file.write_all_at(data, pos)?;
+        self.active_len += data.len() as u64;
 
         let offset = self.next_offset;
-        self.active_idx_file.seek(SeekFrom::End(0))?;
-        self.active_idx_file.write_all(&offset.to_be_bytes())?;
-        self.active_idx_file.write_all(&pos.to_be_bytes())?;
-        self.active_idx_file.flush()?;
+        let mut entry = [0u8; 16];
+        entry[..8].copy_from_slice(&offset.to_be_bytes());
+        entry[8..].copy_from_slice(&pos.to_be_bytes());
+        self.active_idx_file.write_all_at(&entry, self.active_idx_len)?;
+        self.active_idx_len += 16;
 
         self.next_offset += 1;
 
-        // Clean up retention
-        self.clean_retention()?;
+        // Retention is enforced on a timer (like Kafka's log cleaner) and after a roll, not after every record:
+        // it stats every segment file.
+        if rolled || self.last_retention_check.elapsed() >= std::time::Duration::from_secs(1) {
+            self.clean_retention()?;
+            self.last_retention_check = std::time::Instant::now();
+        }
 
         self.recompute_high_watermark();
         Ok(offset)
@@ -396,6 +416,8 @@ impl PartitionLog {
 
         self.active_log_file = new_log_file;
         self.active_idx_file = new_idx_file;
+        self.active_len = 0;
+        self.active_idx_len = 0;
 
         self.segments.push(LogSegment {
             base_offset: new_base_offset,
@@ -651,6 +673,11 @@ pub struct LogManager {
     pub tiered_provider: Option<Arc<dyn crate::storage::TieredStorageProvider>>,
 
     partitions: Mutex<HashMap<(String, u32), Arc<Mutex<PartitionLog>>>>,
+
+    /// Lazily-created transaction coordinator (see `crate::txn`).
+    pub txn_coord: std::sync::OnceLock<Arc<crate::txn::TxnCoordinator>>,
+    /// Lazily-created share-group coordinator (see `crate::share`).
+    pub share_coord: std::sync::OnceLock<Arc<crate::share::ShareCoordinator>>,
 }
 
 impl LogManager {
@@ -667,7 +694,13 @@ impl LogManager {
             offload_tx: None,
             tiered_provider: None,
             partitions: Mutex::new(HashMap::new()),
+            txn_coord: std::sync::OnceLock::new(),
+            share_coord: std::sync::OnceLock::new(),
         }
+    }
+
+    pub fn base_dir(&self) -> &Path {
+        &self.base_dir
     }
 
     pub fn with_limits(
@@ -714,6 +747,22 @@ impl LogManager {
         offsets
     }
 
+    /// Lists partition ids of `topic` present on local disk (used by the Iceberg tailer).
+    pub async fn partitions_for_topic(&self, topic: &str) -> Vec<u32> {
+        let mut ids: Vec<u32> = Vec::new();
+        if let Ok(rd) = fs::read_dir(self.base_dir.join(topic)) {
+            for e in rd.flatten() {
+                if let Some(n) = e.file_name().to_str().and_then(|s| s.strip_prefix("partition_")) {
+                    if let Ok(id) = n.parse::<u32>() {
+                        ids.push(id);
+                    }
+                }
+            }
+        }
+        ids.sort_unstable();
+        ids
+    }
+
     pub async fn compact_eligible_partitions(&self) -> io::Result<usize> {
         let parts = self.partitions.lock().await;
         let mut compacted = 0;
@@ -741,6 +790,24 @@ impl LogManager {
                 }
             }
         })
+    }
+
+    /// Drop all local partitions of `topic` and remove their on-disk directories (used by DeleteTopics).
+    /// Returns the number of partitions removed.
+    pub async fn delete_topic(&self, topic: &str) -> io::Result<usize> {
+        let mut parts = self.partitions.lock().await;
+        let keys: Vec<(String, u32)> = parts.keys().filter(|(t, _)| t == topic).cloned().collect();
+        let mut removed = 0;
+        for k in keys {
+            if let Some(log) = parts.remove(&k) {
+                let dir = log.lock().await.partition_dir.clone();
+                if dir.exists() {
+                    std::fs::remove_dir_all(&dir)?;
+                }
+                removed += 1;
+            }
+        }
+        Ok(removed)
     }
 
     pub async fn get_partition(&self, topic: &str, partition: u32) -> io::Result<Arc<Mutex<PartitionLog>>> {

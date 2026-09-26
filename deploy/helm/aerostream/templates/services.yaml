@@ -1,0 +1,84 @@
+# Headless: stable per-pod DNS. publishNotReadyAddresses so a pod can resolve its own name
+# (Raft binds to it) before it is Ready.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aerostream.controller.headless" . }}
+  labels:
+    {{- include "aerostream.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "aerostream.selectorLabels" (dict "ctx" . "component" "controller") | nindent 4 }}
+  ports:
+    - {name: raft, port: {{ .Values.controller.ports.raft }}, targetPort: raft}
+    - {name: grpc, port: {{ .Values.controller.ports.grpc }}, targetPort: grpc}
+    - {name: http, port: {{ .Values.controller.ports.http }}, targetPort: http}
+---
+# REST API + web console (/aerostream/console) + gRPC control plane.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aerostream.controller.service" . }}
+  labels:
+    {{- include "aerostream.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+  {{- with .Values.controller.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.controller.service.type }}
+  {{- if and (eq .Values.controller.service.type "LoadBalancer") .Values.controller.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.controller.service.loadBalancerIP }}
+  {{- end }}
+  selector:
+    {{- include "aerostream.selectorLabels" (dict "ctx" . "component" "controller") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.controller.ports.http }}
+      targetPort: http
+      {{- if and .Values.controller.service.nodePort (ne .Values.controller.service.type "ClusterIP") }}
+      nodePort: {{ .Values.controller.service.nodePort }}
+      {{- end }}
+    - name: grpc
+      port: {{ .Values.controller.ports.grpc }}
+      targetPort: grpc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aerostream.broker.headless" . }}
+  labels:
+    {{- include "aerostream.labels" . | nindent 4 }}
+    app.kubernetes.io/component: broker
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "aerostream.selectorLabels" (dict "ctx" . "component" "broker") | nindent 4 }}
+  ports:
+    - {name: data, port: {{ .Values.broker.ports.data }}, targetPort: data}
+    - {name: kafka, port: {{ .Values.broker.ports.kafka }}, targetPort: kafka}
+---
+# Client bootstrap Service: point Kafka clients at <name>:9092 and read the broker list from Metadata.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aerostream.broker.service" . }}
+  labels:
+    {{- include "aerostream.labels" . | nindent 4 }}
+    app.kubernetes.io/component: broker
+  {{- with .Values.broker.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.broker.service.type }}
+  selector:
+    {{- include "aerostream.selectorLabels" (dict "ctx" . "component" "broker") | nindent 4 }}
+  ports:
+    - {name: kafka, port: {{ .Values.broker.ports.kafka }}, targetPort: kafka}
+    - {name: data, port: {{ .Values.broker.ports.data }}, targetPort: data}
