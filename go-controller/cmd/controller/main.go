@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	appconfig "github.com/gradientgeeks/aeromq/go-controller/pkg/config"
-	"github.com/gradientgeeks/aeromq/go-controller/pkg/consensus"
-	"github.com/gradientgeeks/aeromq/go-controller/pkg/grpcserver"
-	"github.com/gradientgeeks/aeromq/go-controller/pkg/rest"
-	pb "github.com/gradientgeeks/aeromq/go-controller/proto/aeromq"
+	appconfig "github.com/gradientgeeks/aerostream/go-controller/pkg/config"
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/consensus"
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/grpcserver"
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/rest"
+	pb "github.com/gradientgeeks/aerostream/go-controller/proto/aeromq"
 	"google.golang.org/grpc"
 )
 
@@ -134,32 +134,46 @@ func main() {
 		if err == nil {
 			if fi, err := os.Stat(resolvedUIDir); err == nil && fi.IsDir() {
 				indexPath := filepath.Join(resolvedUIDir, "index.html")
+				spaHandler := func(prefix string) http.HandlerFunc {
+					return func(w http.ResponseWriter, r *http.Request) {
+						trimmed := strings.TrimPrefix(r.URL.Path, prefix)
+						if trimmed == "" || trimmed == "/" {
+							http.ServeFile(w, r, indexPath)
+							return
+						}
+						targetPath := filepath.Join(resolvedUIDir, filepath.Clean(trimmed))
+						if fi, err := os.Stat(targetPath); err == nil && !fi.IsDir() {
+							http.ServeFile(w, r, targetPath)
+							return
+						}
+						// SPA route fallback to index.html
+						http.ServeFile(w, r, indexPath)
+					}
+				}
+
+				// Primary AeroStream Console endpoint
+				http.HandleFunc("/aerostream/console", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/aerostream/console/", http.StatusMovedPermanently)
+				})
+				http.HandleFunc("/aerostream/console/", spaHandler("/aerostream/console/"))
+
+				// Backward compatibility alias: /aeromq/console
 				http.HandleFunc("/aeromq/console", func(w http.ResponseWriter, r *http.Request) {
-					http.Redirect(w, r, "/aeromq/console/", http.StatusMovedPermanently)
+					http.Redirect(w, r, "/aerostream/console/", http.StatusMovedPermanently)
 				})
 				http.HandleFunc("/aeromq/console/", func(w http.ResponseWriter, r *http.Request) {
-					trimmed := strings.TrimPrefix(r.URL.Path, "/aeromq/console/")
-					if trimmed == "" || trimmed == "/" {
-						http.ServeFile(w, r, indexPath)
-						return
-					}
-					targetPath := filepath.Join(resolvedUIDir, filepath.Clean(trimmed))
-					if fi, err := os.Stat(targetPath); err == nil && !fi.IsDir() {
-						http.ServeFile(w, r, targetPath)
-						return
-					}
-					// SPA route fallback to index.html
-					http.ServeFile(w, r, indexPath)
+					http.Redirect(w, r, "/aerostream/console/", http.StatusMovedPermanently)
 				})
+
 				// Root redirect to console
 				http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == "/" {
-						http.Redirect(w, r, "/aeromq/console/", http.StatusFound)
+						http.Redirect(w, r, "/aerostream/console/", http.StatusFound)
 						return
 					}
 					http.NotFound(w, r)
 				})
-				log.Printf("[AeroMQ Controller] Web UI Console active at http://%s/aeromq/console (serving %s)", cfg.HTTPAddr, resolvedUIDir)
+				log.Printf("[AeroStream Controller] Web UI Console active at http://%s/aerostream/console (serving %s)", cfg.HTTPAddr, resolvedUIDir)
 			} else {
 				log.Printf("[AeroMQ Controller] Warning: ui-dir %s is not an accessible directory", *uiDir)
 			}

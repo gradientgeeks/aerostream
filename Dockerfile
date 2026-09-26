@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for AeroMQ Full-Stack Container (Controller + Broker + Console UI)
+# Multi-stage Dockerfile for AeroStream Full-Stack Container (Controller + Broker + Console UI)
 
 # --- Stage 1: Build Angular Web UI Console ---
 FROM node:20-slim AS ui-builder
@@ -6,7 +6,7 @@ WORKDIR /app/ui
 COPY ui/package*.json ./
 RUN npm ci
 COPY ui/ ./
-RUN npm run build -- --base-href /aeromq/console/
+RUN npm run build -- --base-href /aerostream/console/
 
 # --- Stage 2: Build Go Controller ---
 FROM golang:1.22-alpine AS controller-builder

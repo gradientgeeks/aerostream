@@ -1,4 +1,4 @@
-module github.com/gradientgeeks/aeromq/go-controller
+module github.com/gradientgeeks/aerostream/go-controller
 
 go 1.22
 

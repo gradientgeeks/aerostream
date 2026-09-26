@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gradientgeeks/aeromq/go-controller/pkg/consensus"
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/consensus"
 )
 
 type Server struct {

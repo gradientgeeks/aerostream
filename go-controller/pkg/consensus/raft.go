@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	appconfig "github.com/gradientgeeks/aeromq/go-controller/pkg/config"
+	appconfig "github.com/gradientgeeks/aerostream/go-controller/pkg/config"
 	"github.com/hashicorp/raft"
 )
 

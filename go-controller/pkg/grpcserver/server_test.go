@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	appconfig "github.com/gradientgeeks/aeromq/go-controller/pkg/config"
-	"github.com/gradientgeeks/aeromq/go-controller/pkg/consensus"
-	pb "github.com/gradientgeeks/aeromq/go-controller/proto/aeromq"
+	appconfig "github.com/gradientgeeks/aerostream/go-controller/pkg/config"
+	"github.com/gradientgeeks/aerostream/go-controller/pkg/consensus"
+	pb "github.com/gradientgeeks/aerostream/go-controller/proto/aeromq"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

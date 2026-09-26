@@ -1,11 +1,11 @@
-module github.com/gradientgeeks/aeromq/client
+module github.com/gradientgeeks/aerostream/client
 
 go 1.22
 
-replace github.com/gradientgeeks/aeromq/go-controller => ../go-controller
+replace github.com/gradientgeeks/aerostream/go-controller => ../go-controller
 
 require (
-	github.com/gradientgeeks/aeromq/go-controller v0.0.0
+	github.com/gradientgeeks/aerostream/go-controller v0.0.0
 	google.golang.org/grpc v1.64.0
 )
 

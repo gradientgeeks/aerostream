@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: gradientgeeks/aeromq
+  IMAGE_NAME: gradientgeeks/aerostream
 
 jobs:
   build-and-push:

@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/gradientgeeks/aeromq/go-controller/proto/aeromq"
+	pb "github.com/gradientgeeks/aerostream/go-controller/proto/aeromq"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"

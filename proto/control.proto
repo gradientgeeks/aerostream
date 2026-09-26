@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package aeromq;
 
-option go_package = "github.com/gradientgeeks/aeromq/go-controller/proto/aeromq";
+option go_package = "github.com/gradientgeeks/aerostream/go-controller/proto/aeromq";
 
 // The ControlService is used by Rust Brokers to report health and receive commands.
 service ControlService {

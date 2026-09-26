@@ -2,9 +2,9 @@
 set -eo pipefail
 
 echo "======================================================"
-echo " Starting AeroMQ Full-Stack Cluster"
+echo " Starting AeroStream Full-Stack Cluster"
 echo " Engine: Dual Go Consensus + Rust Zero-Copy Broker"
-echo " Console: http://0.0.0.0:${HTTP_PORT:-9001}/aeromq/console"
+echo " Console: http://0.0.0.0:${HTTP_PORT:-9001}/aerostream/console"
 echo " Data Plane: port ${DATA_PORT:-9091}"
 echo "======================================================"
 
@@ -63,8 +63,8 @@ rust-broker \
 BROKER_PID=$!
 
 echo "======================================================"
-echo " AeroMQ Full-Stack is READY!"
-echo " Web UI:     http://localhost:${HTTP_PORT}/aeromq/console"
+echo " AeroStream Full-Stack is READY!"
+echo " Web UI:     http://localhost:${HTTP_PORT}/aerostream/console"
 echo " REST API:   http://localhost:${HTTP_PORT}/api/cluster"
 echo " Data Plane: localhost:${DATA_PORT}"
 echo "======================================================"
