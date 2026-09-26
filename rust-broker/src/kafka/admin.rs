@@ -573,6 +573,10 @@ async fn delete_topics(st: &Arc<AdminState>, v: i16, rd: &mut Rd<'_>) -> CodecRe
                     let r = admin_result(c.delete_topic(n.clone()).await);
                     if r.0 == E_NONE {
                         mutated = true;
+                        // Remove this broker's local logs for the topic (other brokers keep theirs until purged).
+                        if let Err(e) = st.log_manager.delete_topic(n).await {
+                            warn!("[AeroStream Kafka] failed to remove local logs of deleted topic {}: {}", n, e);
+                        }
                     }
                     r
                 }
