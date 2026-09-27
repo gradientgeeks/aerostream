@@ -57,7 +57,22 @@ async fn handle_kafka_connection(
     log_manager: Arc<LogManager>,
     cfg: Arc<BrokerConfig>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::io::AsRawFd;
+        let fd = stream.as_raw_fd();
+        unsafe {
+            let buf_size: libc::c_int = 4 * 1024 * 1024; // 4MB buffer for 1MB-50MB Kafka batches
+            libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+            libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+            let quickack: libc::c_int = 1;
+            libc::setsockopt(fd, libc::IPPROTO_TCP, libc::TCP_QUICKACK, &quickack as *const _ as *const libc::c_void, std::mem::size_of_val(&quickack) as libc::socklen_t);
+        }
+    }
+
     let mut len_buf = [0u8; 4];
+    // Reusable connection-level frame buffer to eliminate memory reallocation and page-faults:
+    let mut frame_buf: Vec<u8> = Vec::with_capacity(256 * 1024);
 
     loop {
         match stream.read_exact(&mut len_buf).await {
@@ -74,13 +89,9 @@ async fn handle_kafka_connection(
             break;
         }
 
-        // Read straight into spare capacity: `vec![0; n]` would memset (and page-fault) the whole frame first,
-        // which is expensive for multi-megabyte produce requests.
-        let mut frame_buf: Vec<u8> = Vec::with_capacity(frame_len as usize);
-        let got = (&mut stream).take(frame_len as u64).read_to_end(&mut frame_buf).await?;
-        if got != frame_len as usize {
-            return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof).into());
-        }
+        // Reuse connection buffer capacity; physical pages stay resident across frames:
+        frame_buf.resize(frame_len as usize, 0);
+        stream.read_exact(&mut frame_buf).await?;
 
         let mut ctx = RequestCtx::default();
         let resp = handle_kafka_frame_ctx(&frame_buf, &log_manager, &cfg, &mut ctx).await?;

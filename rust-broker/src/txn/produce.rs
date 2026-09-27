@@ -66,8 +66,8 @@ pub fn append_payload(
             }
         }
         let first = log.next_offset;
-        for e in to_entries(b, first) {
-            match log.append(&e) {
+        if count <= 1 {
+            match log.append_batch_slice(first as i64, b) {
                 Ok(off) => {
                     if transactional {
                         log.txn_index.note_data(pid, epoch, off);
@@ -76,6 +76,20 @@ pub fn append_payload(
                 Err(e) => {
                     tracing::error!("[AeroMQ Txn] append failed: {}", e);
                     return Some(ProduceOutcome { error: err::KAFKA_STORAGE_ERROR, base_offset: -1 });
+                }
+            }
+        } else {
+            for e in to_entries(b, first) {
+                match log.append(&e) {
+                    Ok(off) => {
+                        if transactional {
+                            log.txn_index.note_data(pid, epoch, off);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("[AeroMQ Txn] append failed: {}", e);
+                        return Some(ProduceOutcome { error: err::KAFKA_STORAGE_ERROR, base_offset: -1 });
+                    }
                 }
             }
         }

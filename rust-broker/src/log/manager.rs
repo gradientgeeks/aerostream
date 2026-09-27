@@ -364,6 +364,44 @@ impl PartitionLog {
         Ok(offset)
     }
 
+    /// Appends a raw record batch slice with in-place base-offset patching directly on disk.
+    /// This bypasses heap cloning of large multi-megabyte record batches.
+    pub fn append_batch_slice(&mut self, base_offset: i64, batch: &[u8]) -> io::Result<u64> {
+        use std::os::unix::fs::FileExt;
+
+        let mut rolled = false;
+        if self.active_len + batch.len() as u64 > self.max_segment_size && self.active_len > 0 {
+            self.roll_over()?;
+            rolled = true;
+        }
+
+        let pos = self.active_len;
+        // In-place base offset patching directly at disk position without cloning the batch:
+        let off_bytes = base_offset.to_be_bytes();
+        self.active_log_file.write_all_at(&off_bytes, pos)?;
+        if batch.len() > 8 {
+            self.active_log_file.write_all_at(&batch[8..], pos + 8)?;
+        }
+        self.active_len += batch.len() as u64;
+
+        let offset = self.next_offset;
+        let mut entry = [0u8; 16];
+        entry[..8].copy_from_slice(&offset.to_be_bytes());
+        entry[8..].copy_from_slice(&pos.to_be_bytes());
+        self.active_idx_file.write_all_at(&entry, self.active_idx_len)?;
+        self.active_idx_len += 16;
+
+        self.next_offset += 1;
+
+        if rolled || self.last_retention_check.elapsed() >= std::time::Duration::from_secs(1) {
+            self.clean_retention()?;
+            self.last_retention_check = std::time::Instant::now();
+        }
+
+        self.recompute_high_watermark();
+        Ok(offset)
+    }
+
     /// Compacts closed segments using key-offset deduplication and tombstone eviction.
     pub fn compact_partition_with_stats(&mut self) -> io::Result<crate::log::compactor::CompactionStats> {
         if self.segments.len() <= 1 {
