@@ -26,6 +26,7 @@ pub enum ApiKey {
     CreateTopics = 19,
     DeleteTopics = 20,
     InitProducerId = 22,
+    SaslAuthenticate = 36,
     Unknown(i16),
 }
 
@@ -54,6 +55,7 @@ impl From<i16> for ApiKey {
             19 => ApiKey::CreateTopics,
             20 => ApiKey::DeleteTopics,
             22 => ApiKey::InitProducerId,
+            36 => ApiKey::SaslAuthenticate,
             other => ApiKey::Unknown(other),
         }
     }
@@ -84,6 +86,7 @@ impl From<ApiKey> for i16 {
             ApiKey::CreateTopics => 19,
             ApiKey::DeleteTopics => 20,
             ApiKey::InitProducerId => 22,
+            ApiKey::SaslAuthenticate => 36,
             ApiKey::Unknown(v) => v,
         }
     }

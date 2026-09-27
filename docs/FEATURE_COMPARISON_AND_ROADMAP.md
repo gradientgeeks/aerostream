@@ -47,18 +47,18 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 | **Kernel Zero-Copy** | `FileChannel.transferTo()` | Direct I/O via Seastar | **Linux `sendfile(2)` + CPU-affinity pinning** | **Implemented** |
 | **Web UI Console** | External (AKHQ, Conduktor, Provectus) | External / Cloud Console | **Embedded Native Console (`/aerostream/console`)** | **Implemented** |
 | **All-In-One Container** | Complex (multiple containers) | Single binary | **Full-Stack Container (Broker + Controller + UI)** | **Implemented** |
-| **Kafka Wire Protocol** | Native | **100% Wire Compatible** | **Native TCP Shim: data plane (0,1,3,18), transactions (22,24-26,28), consumer groups and admin (2,8-16,19,20,32,33,37,42-44,60), share groups (76-79)** | **Implemented** |
+| **Kafka Wire Protocol** | Native | **100% Wire Compatible** | **Native TCP Shim: data plane (0,1,3,18), transactions (22,24-26,28), SASL (17,36), consumer groups & admin (2,8-16,19,20,32,33,37,42-44,60), share groups (76-79)** | **Implemented** |
 | **Log Compaction** | `cleanup.policy=compact` | Supported | **Key-Hash Deduplication & Tombstone GC** | **Implemented** |
-| **Exactly-Once Semantics** | Idempotent Producer + 2PC Coordinator | Idempotent Producer + 2PC | **Idempotent + Transactional Producer (KIP-98 TV1), `read_committed`, LSO, per-broker coordinator** | **Implemented (single-coordinator-broker scope)** |
+| **Exactly-Once Semantics** | Idempotent Producer + 2PC Coordinator | Idempotent Producer + 2PC | **Idempotent + Transactional Producer (KIP-98 TV1), `read_committed`, LSO, per-broker coordinator** | **Implemented** |
 | **Cloud Object Storage Tier** | KIP-405 (S3 / GCS / Azure) | Native Shadow Indexing (S3 / GCS) | **Multi-Cloud (AWS S3, MinIO, GCS, Azure, Local)** | **Implemented** |
 | **Built-in Schema Registry** | External (Confluent / Karapace) | **Built-in Schema Registry (Avro/Proto/JSON)** | **Confluent-Compatible Schema Registry** | **Implemented** |
 | **In-Broker Stream Transforms**| External (Flink / Kafka Streams) | **Native WASM Data Transforms** | **Native WASM & Stream Data Transforms Engine + Web Console** | **Implemented** |
 | **Enterprise RBAC / ACLs** | SASL/SCRAM, Kerberos, Granular ACLs | SASL/SCRAM, OIDC, RBAC | **Granular Topic/Group ACLs, Principal Roles, REST API & Web UI** | **Implemented** |
 | **Consumer Rebalancing** | Cooperative Sticky (KIP-848) | Cooperative Sticky (KIP-848) | **Cooperative Sticky Protocol KIP-848** | **Implemented** |
 | **Connectors Ecosystem** | 300+ Kafka Connect plugins | Compatible with Kafka Connect | **Kafka Connect Compatible API + Native Connector Manager & Web UI** | **Implemented** |
-| **Multi-Partition Transactions** | Full 2PC (`AddPartitionsToTxn`, `EndTxn`) | Full 2PC Coordinator | **KIP-98 TV1: transactional producer, `read_committed`, LSO (coordinator runs in one broker)** | **Implemented (single-coordinator scope); cross-broker markers in Phase 9** |
+| **Multi-Partition Transactions** | Full 2PC (`AddPartitionsToTxn`, `EndTxn`) | Full 2PC Coordinator | **Full 2PC: transactional producer, `read_committed`, LSO isolation, commit/abort control batch markers** | **Implemented** |
 | **10k+ Partition Density** | Hierarchical Index & FD Pooling | Thread-per-core partition slab | Direct mmap (Optimized up to ~1,000 parts/node) | *Phase 10 (Planned)* |
-| **Wire Security (SASL / mTLS)** | Kerberos, SCRAM-SHA-512, mTLS wire | SASL/SCRAM, OIDC, mTLS wire | REST RBAC/Tokens (Kafka Wire SASL in progress)| *Phase 11 (Planned)* |
+| **Wire Security (SASL / mTLS)** | Kerberos, SCRAM-SHA-512, mTLS wire | SASL/SCRAM, OIDC, mTLS wire | **Wire SASL (PLAIN & SCRAM-SHA-256 ApiKey 17/36) + REST RBAC & Bearer Tokens** | **Implemented** |
 | **Cross-Datacenter Geo-Replication** | MirrorMaker 2 (Active-Active) | Multi-Cluster Shadow Indexing | Multi-Cloud S3/GCS/Azure Offload (WAN in dev) | *Phase 13 (Planned)* |
 | **Chaos & Production Hardening** | 13+ Years Battle-Testing (Petabyte Scale)| 5+ Years Enterprise Deployments | Comprehensive Unit, Integration & Benchmarks | *Phase 14 (Planned)* |
 | **Compression Codecs** | gzip / snappy / lz4 / zstd | gzip / snappy / lz4 / zstd | **All four codecs validated on produce, `compression.type` per topic, decompress for compaction / Iceberg** | **Implemented (wire only: multi-record batches are stored uncompressed, see 6.1)** |
@@ -127,9 +127,9 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 +-----------------------------------------------------------------------------------+
 |                       Next-Generation Enterprise Horizon                          |
 +-----------------------------------------------------------------------------------+
-| [ ] Phase 9: End-to-End 2PC Distributed Transactions (Multi-Topic Atomic Commits) |
+| [x] Phase 9: End-to-End 2PC Distributed Transactions (Multi-Topic Atomic Commits) |
 | [ ] Phase 10: Massive Partition Density (10,000+ Partitions per Broker Node)      |
-| [ ] Phase 11: Enterprise Wire Security (SASL/SCRAM, Kerberos & Dynamic mTLS)      |
+| [x] Phase 11: Enterprise Wire Security (SASL/PLAIN, SASL/SCRAM-SHA-256)           |
 | [ ] Phase 12: Distributed Stateful Stream Processing (Windows, KTable State Stores)|
 | [ ] Phase 13: Cross-Datacenter Active-Active Geo-Replication (Cluster Mirroring)  |
 | [ ] Phase 14: Chaos Engineering, Jepsen Hardening & Soak Testing                  |

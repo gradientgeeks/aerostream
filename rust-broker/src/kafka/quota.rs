@@ -247,7 +247,6 @@ pub fn response_not_delayed(api_key: i16, api_version: i16) -> bool {
     }
 }
 
-/// Per-request state carried from the frame dispatcher into produce/fetch handlers.
 #[derive(Debug, Clone, Default)]
 pub struct RequestCtx {
     pub client_id: String,
@@ -256,6 +255,7 @@ pub struct RequestCtx {
     pub base_throttle_ms: u32,
     /// Final throttle decided while handling this request.
     pub throttle_ms: u32,
+    pub sasl_state: crate::kafka::sasl::SaslState,
 }
 
 impl RequestCtx {
@@ -265,6 +265,7 @@ impl RequestCtx {
             user: user.unwrap_or("ANONYMOUS").to_string(),
             base_throttle_ms: 0,
             throttle_ms: 0,
+            sasl_state: crate::kafka::sasl::SaslState::default(),
         }
     }
 }

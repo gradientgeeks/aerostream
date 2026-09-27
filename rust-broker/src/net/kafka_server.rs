@@ -85,6 +85,7 @@ async fn handle_kafka_connection(
     let mut len_buf = [0u8; 4];
     // Reusable connection-level frame buffer to eliminate memory reallocation and page-faults:
     let mut frame_buf: Vec<u8> = Vec::with_capacity(256 * 1024);
+    let mut conn_sasl = crate::kafka::sasl::SaslState::default();
 
     loop {
         match stream.read_exact(&mut len_buf).await {
@@ -106,8 +107,10 @@ async fn handle_kafka_connection(
         frame_buf.resize(frame_len as usize, 0);
         stream.read_exact(&mut frame_buf).await?;
 
-        let mut ctx = RequestCtx::default();
+        let mut ctx = RequestCtx::new(None, conn_sasl.authenticated_user());
+        ctx.sasl_state = conn_sasl.clone();
         let resp = handle_kafka_frame_ctx(&frame_buf, &log_manager, &cfg, &mut ctx).await?;
+        conn_sasl = ctx.sasl_state;
         let (api_key, api_version) = if frame_buf.len() >= 4 {
             (i16::from_be_bytes([frame_buf[0], frame_buf[1]]), i16::from_be_bytes([frame_buf[2], frame_buf[3]]))
         } else {
@@ -186,7 +189,10 @@ async fn handle_kafka_frame_inner(
     let api_version = cursor.get_i16();
     let correlation_id = cursor.get_i32();
     let client_id = read_kafka_string(&mut cursor)?;
-    *ctx = RequestCtx::new(client_id.as_deref(), None);
+    let prev_user = ctx.user.clone();
+    let prev_sasl = ctx.sasl_state.clone();
+    *ctx = RequestCtx::new(client_id.as_deref(), Some(&prev_user));
+    ctx.sasl_state = prev_sasl;
     if !quota::manager().is_empty() {
         // Throttle owed from earlier request-time usage is reported on this response too.
         ctx.base_throttle_ms = quota::manager().peek(quota::Metric::Request, &ctx.user, &ctx.client_id);
@@ -197,6 +203,21 @@ async fn handle_kafka_frame_inner(
         18 => {
             // ApiVersions
             let resp = handle_api_versions(correlation_id, api_version)?;
+            Ok(Some(resp))
+        }
+        17 => {
+            // SaslHandshake
+            let rest = &frame[cursor.position() as usize..];
+            let resp = crate::kafka::sasl::handle_sasl_handshake(api_version, correlation_id, rest, &mut ctx.sasl_state)?;
+            Ok(Some(resp))
+        }
+        36 => {
+            // SaslAuthenticate
+            let rest = &frame[cursor.position() as usize..];
+            let resp = crate::kafka::sasl::handle_sasl_authenticate(api_version, correlation_id, rest, &mut ctx.sasl_state, cfg)?;
+            if let Some(user) = ctx.sasl_state.authenticated_user() {
+                ctx.user = user.to_string();
+            }
             Ok(Some(resp))
         }
         3 => {
@@ -261,9 +282,10 @@ fn handle_api_versions(
         (3, 0, 5),  // Metadata: v0 - v5
         (18, 0, 3), // ApiVersions: v0 - v3
     ];
-    // Transactions (22/24/25/26/28) and share groups (76-79).
+    // Transactions (22/24/25/26/28), share groups (76-79), and SASL (17/36).
     apis.extend_from_slice(&crate::txn::api::TXN_API_VERSIONS);
     apis.extend_from_slice(&crate::share::api::SHARE_API_VERSIONS);
+    apis.extend_from_slice(&crate::kafka::sasl::SASL_API_VERSIONS);
     apis.extend_from_slice(crate::kafka::admin::ADMIN_APIS);
     apis.sort();
 
@@ -998,14 +1020,15 @@ mod tests {
             4 + crate::kafka::admin::ADMIN_APIS.len()
                 + crate::txn::api::TXN_API_VERSIONS.len()
                 + crate::share::api::SHARE_API_VERSIONS.len()
+                + crate::kafka::sasl::SASL_API_VERSIONS.len()
         );
         let mut keys = Vec::new();
         for _ in 0..num_keys {
             keys.push(cursor.get_i16());
             cursor.advance(4); // min/max version
         }
-        // Transactions (22/24/25/26/28) and share groups (76-79) are advertised.
-        for k in [22i16, 24, 25, 26, 28, 76, 77, 78, 79] {
+        // Transactions (22/24/25/26/28), share groups (76-79), and SASL (17/36) are advertised.
+        for k in [17i16, 22, 24, 25, 26, 28, 36, 76, 77, 78, 79] {
             assert!(keys.contains(&k), "missing api key {}", k);
         }
     }
@@ -1490,6 +1513,7 @@ mod topology_tests {
             4 + ADMIN_APIS.len()
                 + crate::txn::api::TXN_API_VERSIONS.len()
                 + crate::share::api::SHARE_API_VERSIONS.len()
+                + crate::kafka::sasl::SASL_API_VERSIONS.len()
         );
         let mut keys = vec![];
         for _ in 0..n {
