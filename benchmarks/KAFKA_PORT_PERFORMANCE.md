@@ -28,6 +28,11 @@ Startup improved from 3.4 s to 1.8-3.4 s (bimodal, see 3.3). Sizes from 1 MB up 
 
 An attempt to also stop pinning worker threads under a CPU quota was **reverted**: the small-message results got worse and the run-to-run variance did not improve, so the hypothesis was not supported by the data.
 
+## 2a. Write stalls under a memory limit (fixed September 27)
+Large-message noise and the collapse from 50 KB upward came from dirty page cache filling the container's memory limit plus a synchronous segment copy on every roll.
+Fixed with paced `sync_file_range` writeback and hard-linked cold archives; see [BENCHMARK.md](BENCHMARK.md) section 0 for evidence and before/after numbers.
+Kafka-port medians after the fix: 1 KB 67.7, 10 KB 160.5, 50 KB 215.5, 100 KB 246.0, 250 KB 380.6, 500 KB 380.0, 1 MB 346.3, 10 MB 203.8 MB/s.
+
 ## 3. Still open
 
 ### 3.1 Store the client batch as the unit (largest remaining item)

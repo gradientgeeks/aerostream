@@ -10,7 +10,9 @@ median_row() {  # $1 = system, $2 = workload -> "MB/s msgs/s avg p50 p95 p99 max
 SYSTEMS=(kafka redpanda aerostream aerostream-kafka)
 echo "| Workload | System | MB/s (median) | MB/s (min-max of runs) | msgs/s | avg ms | p50 ms | p95 ms | p99 ms | max ms |"
 echo "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
-for w in 100B 1KB 1MB 10MB 50MB; do
+# workloads present in this session, ordered by size (100B < 1KB < ... < 50MB)
+WL=$(cut -f1 "$DIR"/*-summary.tsv 2>/dev/null | sort -u | awk '{n=$1+0; u=$1; sub(/^[0-9.]+/,"",u); m=(u=="B")?1:(u=="KB")?1024:(u=="MB")?1048576:1; print n*m, $1}' | sort -n | cut -d" " -f2)
+for w in $WL; do
   for s in "${SYSTEMS[@]}"; do
     [ -f "$DIR/$s-summary.tsv" ] || continue
     row=$(median_row "$s" "$w")

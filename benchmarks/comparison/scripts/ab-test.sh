@@ -3,11 +3,11 @@
 # scaling, background load) hits both sides equally. Sequential sessions on a laptop are too noisy to resolve +-20%.
 #   usage: ab-test.sh <sideA> <sideB> <rounds> <system: aerostream|aerostream-kafka>
 #   a side is  <image-tag>[:<broker-config.toml>]   e.g.  integration   or   integration:/tmp/nocompact.toml
-#   env:   ONLY="100B 1KB"  RUNS=3   (passed through to run-all.sh); controller image defaults to aerostream-controller:integration
+#   env:   ONLY="100B 1KB"  RUNS=3   (passed through to run-all.sh); controller image from env.sh (AERO_CONTROLLER_IMAGE overrides)
 set -euo pipefail
-D="$(cd "$(dirname "$0")" && pwd)"
+D="$(cd "$(dirname "$0")" && pwd)"; source "$D/env.sh"
 SA="$1"; SB="$2"; ROUNDS="$3"; SYS="${4:-aerostream}"; STAMP=$(date +%Y%m%d-%H%M%S)
-export AERO_CONTROLLER_IMAGE="${AERO_CONTROLLER_IMAGE:-aerostream-controller:integration}"
+# controller image: env.sh default unless AERO_CONTROLLER_IMAGE is set
 label() { local t="${1%%:*}" c=""; [[ "$1" == *:* ]] && c="+$(basename "${1#*:}" .toml)"; echo "$t$c"; }
 LA=$(label "$SA"); LB=$(label "$SB"); [ "$LA" = "$LB" ] && { echo "sides have the same label"; exit 2; }
 for r in $(seq 1 "$ROUNDS"); do
@@ -17,7 +17,7 @@ for r in $(seq 1 "$ROUNDS"); do
   done
 done
 echo "workload  side  median-of-rounds (MB/s)   per-round medians"
-for w in ${ONLY:-100B 1KB 1MB 10MB 50MB}; do
+for w in ${ONLY:-$(for x in "${WORKLOADS[@]}"; do echo "${x%% *}"; done)}; do
   for L in "$LA" "$LB"; do
     vals=$(for r in $(seq 1 "$ROUNDS"); do
       "$D/report.sh" "$D/../results/ab-$STAMP/$L-round$r" | awk -F'|' -v w="$w" -v s="$SYS" '$2 ~ "^ "w" $" && $3 ~ s {gsub(/ /,"",$4); print $4}' | head -1

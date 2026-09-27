@@ -9,7 +9,78 @@ Raw tool output, per-run summaries and resource samples: [comparison/results/](c
 
 ---
 
-## 1. Summary (latest: `quay.io/gradientgeeks/aerostream:latest`, September 27, 2026)
+## 0. Production-size sweep, 1 KB - 10 MB (latest, September 27, 2026)
+
+Most production Kafka traffic is 1 KB - 1 MB (Kafka's default max message size), so this sweep covers 1, 10, 50, 100, 250, 500 KB, 1 MB and 10 MB.
+Same containers, tools and `--cpus=2.0 --memory=2g` limits as below; median of 3 runs (min-max in brackets); 10 KB and up move 500 MB per run, so each system writes
+about 11 GB in one session. Kafka and Redpanda: `results/2026-09-27-sweep-1KB-10MB`. AeroStream with the write-path fix (section 0.2):
+`results/2026-09-27-sweep-1KB-10MB-writeback` (same machine, run directly afterwards). Best median per row in bold.
+
+| Size | Kafka | Redpanda | AeroStream native | AeroStream Kafka port |
+| :--- | ---: | ---: | ---: | ---: |
+| 1KB | 42.6 (26-50) | 57.2 (56-73) | **168.1** (166-169) | 67.7 (65-85) |
+| 10KB | 91.1 (75-112) | 145.2 (92-178) | **718.9** (684-803) | 160.5 (158-166) |
+| 50KB | 228.4 (214-237) | 257.4 (224-276) | **949.1** (904-967) | 215.5 (211-224) |
+| 100KB | 202.1 (200-278) | 331.7 (325-357) | **1010.9** (987-1073) | 246.0 (136-294) |
+| 250KB | 239.0 (215-246) | 367.7 (259-377) | **1041.0** (1010-1071) | 380.6 (341-381) |
+| 500KB | 379.4 (225-394) | 341.0 (322-400) | **1027.8** (1000-1106) | 380.0 (191-400) |
+| 1MB | **382.9** (229-403) | 364.4 (239-386) | 283.7 (267-301) | 346.3 (305-377) |
+| 10MB | 232.7 (176-244) | **295.5** (289-302) | 286.0 (282-297) | 203.8 (94-229) |
+
+* **AeroStream native** sustains about **0.7-1.0 GB/s from 10 KB to 500 KB, 3-5x Kafka and Redpanda**, with runs within about +-5% and worst-case latency 8-14 ms.
+* At 1 MB and 10 MB it holds about 285 MB/s: level with Kafka and Redpanda at 10 MB, behind them at 1 MB. Those workloads run last in the session, after ~9 GB written,
+  where this laptop's SSD sustains much less than its burst rate (see 0.3).
+* **AeroStream Kafka port** (Kafka clients): ahead of Kafka at 1 KB - 250 KB and level at 500 KB; behind Kafka and Redpanda at 1 MB (346 vs 364-383) and 10 MB (204 vs 233-296);
+  behind Redpanda at 100 KB.
+* Durability is not equalised: Kafka and AeroStream acknowledge from the page cache, Redpanda flushes before acknowledging by default. AeroStream's native client runs 10 closed-loop producers.
+
+### 0.1 Why AeroStream was noisy (and collapsed from 50 KB up) before the fix
+Before the fix the same sweep gave AeroStream native 36-1,250 MB/s runs with 2-5 second stalls from 50 KB upward (table 0.2). Evidence (`scripts/memprobe.sh`, which reads the broker cgroup's
+`memory.stat` / `memory.events` between runs):
+* Median latency never changed (about 6 ms at 1 MB); slow runs contained **one 0.5-5 s stall**.
+* The broker accepts writes at 1-1.6 GB/s, faster than the disk persists them, so each 500 MB run left ~926 MB of **dirty page cache**, which is charged to the container's 2 GiB memory limit.
+  From the second run the cgroup was full, the kernel reclaimed on the write path (`pgscan_direct`, `memory.events max` rising) and the writer waited for a large flush. With an 8 GiB limit the stalls largely disappeared.
+* Each 128 MiB segment roll also **copied the whole segment to `cold_storage/` synchronously**, on the append path, doubling page-cache writes (927 MB per 500 MB run).
+* Kafka's producer is slower than the disk, so its writeback keeps up; Redpanda bypasses the page cache (direct I/O), which is why both were steady.
+
+### 0.2 The fix (`rust-broker/src/log/manager.rs`)
+1. **Paced writeback**: every `storage.writeback_bytes` (default 8 MiB) the broker calls `sync_file_range(SYNC_FILE_RANGE_WRITE)` on the newly appended range, so the kernel writes data out continuously
+   instead of in one large stall (the same technique as RocksDB's `bytes_per_sync`). Dirty data stayed below 17 MB in the probe.
+2. **Cold archive by hard link**: a sealed segment is linked into `cold_storage/` instead of copied (no data copy, no extra page cache; compaction replaces files by rename, so the link keeps the sealed segment).
+   If linking is impossible (different filesystem) the copy runs on a background thread, as Kafka's RemoteLogManager does for tiered storage.
+3. Optional **`storage.drop_cache_after_writeback`** (default off): waits for each written-back range and drops it from the page cache.
+
+Before (baseline sweep, `2026-09-27-sweep-1KB-10MB`) vs after (`2026-09-27-sweep-1KB-10MB-writeback`):
+
+| Size | Native before | Native after | Worst latency before -> after | Kafka port before | Kafka port after |
+| :--- | ---: | ---: | :--- | ---: | ---: |
+| 1KB | 170.7 (169-171) | 168.1 (166-169) | 0.91 ms -> 1.45 ms | 67.8 (64-77) | 67.7 (65-85) |
+| 10KB | 322.0 (287-616) | 718.9 (684-803) | 611.12 ms -> 7.84 ms | 126.9 (109-135) | 160.5 (158-166) |
+| 50KB | 188.6 (68-1176) | 949.1 (904-967) | 2082.54 ms -> 7.78 ms | 194.8 (181-199) | 215.5 (211-224) |
+| 100KB | 164.0 (43-1250) | 1010.9 (987-1073) | 2460.53 ms -> 9.98 ms | 135.3 (77-190) | 246.0 (136-294) |
+| 250KB | 58.9 (36-1250) | 1041.0 (1010-1071) | 5109.50 ms -> 11.67 ms | 75.3 (74-128) | 380.6 (341-381) |
+| 500KB | 50.6 (43-1028) | 1027.8 (1000-1106) | 2130.48 ms -> 13.69 ms | 94.5 (78-214) | 380.0 (191-400) |
+| 1MB | 99.5 (36-110) | 283.7 (267-301) | 1973.33 ms -> 193.59 ms | 383.7 (100-402) | 346.3 (305-377) |
+| 10MB | 53.4 (34-66) | 286.0 (282-297) | 3319.84 ms -> 474.00 ms | 78.4 (78-111) | 203.8 (94-229) |
+
+### 0.3 Dropping written pages from the cache is not a good default
+`results/2026-09-27-sweep-1KB-10MB-writeback-dropcache`: waiting for writeback paces the broker to the disk, which on this machine sustains far less than its burst rate once several GB have been
+written. It lowers peak memory slightly but costs throughput everywhere from 10 KB up, so it stays opt-in for memory-starved deployments.
+
+| Size | Native, writeback | Native, writeback + drop cache | Kafka port, writeback | Kafka port, writeback + drop cache |
+| :--- | ---: | ---: | ---: | ---: |
+| 1KB | 168.1 | 163.4 | 67.7 | 71.0 |
+| 10KB | 718.9 | 540.2 | 160.5 | 189.3 |
+| 50KB | 949.1 | 725.2 | 215.5 | 241.7 |
+| 100KB | 1010.9 | 771.1 | 246.0 | 154.7 |
+| 250KB | 1041.0 | 612.8 | 380.6 | 183.8 |
+| 500KB | 1027.8 | 86.0 | 380.0 | 121.2 |
+| 1MB | 283.7 | 87.3 | 346.3 | 230.4 |
+| 10MB | 286.0 | 111.8 | 203.8 | 100.5 |
+
+---
+
+## 1. Summary (earlier session: `quay.io/gradientgeeks/aerostream:latest`, September 27, 2026)
 
 Median of **3 runs** per workload, same containers, tools and limits as below. Results: `comparison/results/2026-09-27-quay-verify` (full table in section 3.0).
 
