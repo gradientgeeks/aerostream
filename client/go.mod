@@ -1,6 +1,6 @@
 module github.com/gradientgeeks/aerostream/client
 
-go 1.26
+go 1.24
 
 replace github.com/gradientgeeks/aerostream/go-controller => ../go-controller
 
