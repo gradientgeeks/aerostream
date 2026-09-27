@@ -543,7 +543,7 @@ from aerostream_client import AeroStreamClient
 
 client = AeroStreamClient(
     kafka_host="127.0.0.1",
-    kafka_port=9093,
+    kafka_port=9092,
     http_url="http://127.0.0.1:9001"
 )
 
@@ -558,19 +558,19 @@ for r in records:
 ```
 
 #### Option B: Standard Kafka Clients (`confluent-kafka` or `kafka-python`)
-AeroStream brokers implement Kafka Wire Protocol natively on port 9093. Existing standard Kafka producers and consumers work out of the box:
+AeroStream brokers implement Kafka Wire Protocol natively on port 9092. Existing standard Kafka producers and consumers work out of the box:
 
 ```python
 from confluent_kafka import Producer, Consumer
 
 # Producer
-p = Producer({'bootstrap.servers': 'localhost:9093'})
+p = Producer({'bootstrap.servers': 'localhost:9092'})
 p.produce('orders', key='cust_1', value='{"status": "CONFIRMED"}')
 p.flush()
 
 # Consumer
 c = Consumer({
-    'bootstrap.servers': 'localhost:9093',
+    'bootstrap.servers': 'localhost:9092',
     'group.id': 'order-processor-group',
     'auto.offset.reset': 'earliest'
 })
@@ -626,7 +626,7 @@ Spring Boot applications connect using standard `spring-kafka`:
 ```yaml
 spring:
   kafka:
-    bootstrap-servers: localhost:9093
+    bootstrap-servers: localhost:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -697,3 +697,126 @@ Response:
   ]
 }
 ```
+
+---
+
+### 5.5 .NET / C# Integration (`Confluent.Kafka`)
+
+AeroStream is verified 100% compatible with .NET 8 / 9 using the official `Confluent.Kafka` client library.
+
+#### Project Configuration (`.csproj`)
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Confluent.Kafka" Version="2.15.1" />
+  </ItemGroup>
+</Project>
+```
+
+#### Idempotent Producer & Consumer Example
+```csharp
+using System;
+using System.Threading.Tasks;
+using Confluent.Kafka;
+
+class Program
+{
+    static async Task Main(string[] args)
+    {
+        var config = new ProducerConfig
+        {
+            BootstrapServers = "127.0.0.1:9092",
+            EnableIdempotence = true, // KIP-98 exactly-once semantics
+            Acks = Acks.All
+        };
+
+        using var producer = new ProducerBuilder<string, string>(config).Build();
+        var report = await producer.ProduceAsync("orders", new Message<string, string>
+        {
+            Key = "order-101",
+            Value = "{\"status\": \"CONFIRMED\", \"amount\": 149.99}"
+        });
+        Console.WriteLine($"Delivered to {report.TopicPartitionOffset}");
+
+        var consumerConfig = new ConsumerConfig
+        {
+            BootstrapServers = "127.0.0.1:9092",
+            GroupId = "order-processing-group",
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            EnableAutoCommit = true
+        };
+
+        using var consumer = new ConsumerBuilder<string, string>(consumerConfig).Build();
+        consumer.Subscribe("orders");
+        var cr = consumer.Consume(TimeSpan.FromSeconds(5));
+        if (cr != null)
+        {
+            Console.WriteLine($"Consumed: {cr.Message.Key} -> {cr.Message.Value}");
+        }
+    }
+}
+```
+
+*For the complete automated 4-test test suite, see [`examples/dotnet-app/`](../examples/dotnet-app/).*
+
+---
+
+## 6. Troubleshooting & Operational Diagnostics
+
+### 6.1 `Error: "Invalid protocol magic bytes"` on Broker Connection
+
+#### Symptoms & Log Signature
+The broker logs show rapid repeated connection attempts from an internal or client IP address failing immediately:
+```text
+2026-09-27T07:41:48.646104Z ERROR rust_broker::net::server: [AeroMQ Broker] Error handling connection from 127.0.0.1:58198: "Invalid protocol magic bytes"
+2026-09-27T07:41:48.694697Z INFO  rust_broker::net::server: [AeroMQ Broker] Accepted connection from 127.0.0.1:58208 on CPU core 11
+2026-09-27T07:41:48.694841Z ERROR rust_broker::net::server: [AeroMQ Broker] Error handling connection from 127.0.0.1:58208: "Invalid protocol magic bytes"
+```
+
+#### Dual-Listener Architecture Context
+AeroStream runs two distinct TCP socket listeners per broker instance:
+1. **Port 9091 (`rust_broker::net::server`)**: The **Native AeroStream Protocol**. All frames sent to this port **must** start with the 2-byte magic header `0xAE 0x51` (`AE`, `RO`), followed by command and body length.
+2. **Port 9092 (`rust_broker::net::kafka_server`)**: The **Kafka Wire Protocol Engine**. It parses standard Kafka framing: `[int32 message_length][int16 api_key][int16 api_version][int32 correlation_id]...`.
+
+#### Root Cause Analysis
+This error occurs when a **Kafka client** inadvertently connects to the **native data port (9091)** instead of the **Kafka wire port (9092)**:
+
+1. **Bootstrap & Metadata Request**:
+   The Kafka client (e.g. `librdkafka`, `Confluent.Kafka`, Java `kafka-clients`) connects to `bootstrap.servers = 127.0.0.1:9092` and issues a `MetadataRequest` (ApiKey 3) or `FindCoordinatorRequest` (ApiKey 10).
+2. **Advertised Port Misconfiguration**:
+   If the broker's advertised broker topology lists the node's internal data port (`9091`) instead of its Kafka port (`9092`), `librdkafka` and standard Kafka client drivers dynamically update their internal node routing table with `host:9091`.
+3. **Protocol Collision**:
+   The Kafka client disconnects from the bootstrap socket and reconnects to `127.0.0.1:9091`, sending standard Kafka binary frames (such as `00 00 00 23 00 03 ...`).
+4. **Header Rejection**:
+   The native server reads the first two bytes (`0x00 0x00`), fails the `is_valid_magic` validation (`0x00 0x00 != 0xAE 0x51`), and terminates the connection with `"Invalid protocol magic bytes"`. The client driver immediately retries, creating an error loop.
+
+```
+Kafka Client                                  AeroStream Broker
+────────────                                  ─────────────────
+   │                                                  │
+   │─── 1. MetadataRequest (ApiKey 3) ───────────────>│ Port 9092 (Kafka Listener)
+   │                                                  │
+   │<── 2. MetadataResponse (brokers=[host:9091]) ────│ ⚠️ Advertised Data Port!
+   │                                                  │
+   │─── 3. Reconnect to 127.0.0.1:9091 ──────────────>│ Port 9091 (Native Listener)
+   │                                                  │
+   │─── 4. Send Kafka Frame (00 00 00 ...) ──────────>│ Expects [0xAE, 0x51]!
+   │                                                  │
+   │<── 5. TCP RST ("Invalid protocol magic bytes") ──│ ❌ Connection Terminated
+```
+
+#### Resolution & Prevention
+1. **Dynamic Metadata Port Override**:
+   [`rust-broker/src/net/kafka_server.rs`](../rust-broker/src/net/kafka_server.rs) and [`rust-broker/src/kafka/admin.rs`](../rust-broker/src/kafka/admin.rs) ensure that `MetadataResponse` (ApiKey 3) and `FindCoordinatorResponse` (ApiKey 10) strictly advertise `cfg.kafka_port` (default 9092) for Kafka clients.
+2. **Client Configuration Verification**:
+   Always configure Kafka client libraries to point to the designated Kafka port (`9092`):
+   - `.NET / C#`: `BootstrapServers = "127.0.0.1:9092"`
+   - `Python`: `bootstrap_servers=['127.0.0.1:9092']`
+   - `Java / Spring`: `spring.kafka.bootstrap-servers=localhost:9092`
+   - Only native Go and Rust client drivers should connect to port `9091`.

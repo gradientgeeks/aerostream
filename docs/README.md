@@ -43,6 +43,7 @@ Choose your path based on your role:
 * **[Operator & Deployment Guide](OPERATOR_GUIDE.md)**: Production deployment on bare-metal / VMs, systemd unit templates, kernel tuning (`sysctl`), and multi-node cluster configuration.
 * **[Kubernetes Deployment Guide](../deploy/k8s/)**: Helm-free, production-ready StatefulSet manifests with headless services, persistent volume claims, and automated `preStop` scale-down hooks.
 * **Cluster Lifecycle & Zero-Downtime Operations**: Step-by-step procedures for bootstrapping, graceful broker partition draining (`POST /api/brokers/{id}/drain`), and Raft consensus node removal (`/leave`) (see [Operator Guide](OPERATOR_GUIDE.md#3-cluster-lifecycle-management)).
+* **[Troubleshooting & Operational Diagnostics](OPERATOR_GUIDE.md#6-troubleshooting--operational-diagnostics)**: Common error signatures (e.g. `Invalid protocol magic bytes`), dual-listener port routing, and socket connection isolation.
 
 ---
 
