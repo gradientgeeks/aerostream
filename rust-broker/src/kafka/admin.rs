@@ -132,7 +132,16 @@ impl AdminState {
     /// (node id, host, kafka port) of the coordinator for `key`.
     pub fn coordinator_node(&self, key: &str) -> (i32, String, i32) {
         match self.topo.coordinator_for(key) {
-            Some(b) => (b.id, b.host, b.kafka_port),
+            Some(b) => {
+                let port = if b.id == self.my_id() {
+                    self.cfg.kafka_port
+                } else if b.kafka_port > 0 {
+                    b.kafka_port
+                } else {
+                    self.cfg.kafka_port
+                };
+                (b.id, b.host, port)
+            }
             None => (self.my_id(), self.cfg.host.clone(), self.cfg.kafka_port),
         }
     }

@@ -383,7 +383,16 @@ pub(crate) async fn handle_metadata_with_snapshot(
     // Brokers array (all live brokers when the controller view is available)
     let self_rack = cfg.rack.clone();
     let brokers: Vec<(i32, String, i32, Option<String>)> = if cluster {
-        snap.brokers.values().map(|b| (b.id, b.host.clone(), b.kafka_port, b.rack.clone())).collect()
+        snap.brokers.values().map(|b| {
+            let port = if b.id == my_id {
+                cfg.kafka_port
+            } else if b.kafka_port > 0 {
+                b.kafka_port
+            } else {
+                cfg.kafka_port
+            };
+            (b.id, b.host.clone(), port, b.rack.clone())
+        }).collect()
     } else {
         vec![(my_id, cfg.host.clone(), cfg.kafka_port, self_rack)]
     };

@@ -161,6 +161,24 @@ for message in consumer:
     break
 ```
 
+### 6. Official .NET / C# Client Usage (`Confluent.Kafka`)
+AeroStream is fully compatible with .NET 8 / 9 via official `Confluent.Kafka`:
+```csharp
+using Confluent.Kafka;
+
+var config = new ProducerConfig {
+    BootstrapServers = "localhost:9092",
+    EnableIdempotence = true // KIP-98 exactly-once semantics
+};
+using var producer = new ProducerBuilder<string, string>(config).Build();
+var deliveryReport = await producer.ProduceAsync("orders", new Message<string, string> {
+    Key = "order-1002",
+    Value = "{\"status\": \"CONFIRMED\"}"
+});
+Console.WriteLine($"Delivered to {deliveryReport.TopicPartitionOffset}");
+```
+*Full 4-test .NET test suite located in [`examples/dotnet-app/`](examples/dotnet-app/).*
+
 ---
 
 ## 🧪 Testing

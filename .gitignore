@@ -48,3 +48,7 @@ dist/
 *.pyo
 *.pyd
 .pytest_cache/
+
+# .NET
+obj/
+**/obj/
