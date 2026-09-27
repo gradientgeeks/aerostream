@@ -754,15 +754,16 @@ The Go Control Plane has been upgraded to target **Go 1.26** (`go 1.26` in [`go-
 
 ---
 
-### 6.2 Modern Rust (Rust 1.85 – 1.98 & Edition 2024) Performance Features in `rust-broker`
+### 6.2 Modern Rust (Rust 1.85 – 1.98.1 & Edition 2024) Performance Features in `rust-broker`
 
-The Rust Storage Data Plane has been upgraded to **Rust Edition 2024** (`edition = "2024"` in [`rust-broker/Cargo.toml`](file:///home/uttam/projects/AeroMQ/rust-broker/Cargo.toml)) and compiled with **rustc 1.98.0**, introducing advanced language and code generation enhancements:
+The Rust Storage Data Plane has been upgraded to **Rust Edition 2024** (`edition = "2024"` in [`rust-broker/Cargo.toml`](file:///home/uttam/projects/AeroMQ/rust-broker/Cargo.toml)) and compiled with **rustc 1.98.1** (released September 3, 2026), incorporating advanced compiler vectorization and critical stability fixes:
 
 ```
 +─────────────────────────────────────────────────────────────────────────────────────────────+
-|                       Rust Edition 2024 & rustc 1.98 Optimizations                          |
+|                      Rust Edition 2024 & rustc 1.98.1 Optimizations                         |
 +─────────────────────────────────────────────────────────────────────────────────────────────+
 |  * Rust Edition 2024: RPIT lifetime capture rules & async closures for zero-copy pipelines  |
+|  * rustc 1.98.1 Patch: Eliminates trait object vtable miscompilation in dynamic dispatch    |
 |  * ThinLTO & Codegen Units = 1: Cross-crate vectorization and function inlining             |
 |  * Panic Abort & Symbol Stripping: Minimal binary size, eliminates landing pad unwind tables|
 |  * Scoped Generation Disambiguation: Isolates coroutine `gen` keyword from wire identifiers|
@@ -773,6 +774,7 @@ The Rust Storage Data Plane has been upgraded to **Rust Edition 2024** (`edition
 
 1. **Rust Edition 2024 & Modern Async Ergonomics**:
    - Rust 2024 standardizes Return-Position `impl Trait` (RPIT) lifetime capture rules, simplifying asynchronous zero-copy trait methods in [`TieredStorageProvider`](file:///home/uttam/projects/AeroMQ/rust-broker/src/storage/provider.rs) without unnecessary heap boxes.
+   - **rustc 1.98.1 Stability**: Resolves the trait object vtable generation bug from 1.98.0, guaranteeing safe dynamic dispatch when swapping object storage backends (`S3StorageProvider`, `AzureBlobStorageProvider`, `GcsStorageProvider`).
    - Preserves strict identifier hygiene: keywords such as `gen` (stabilized for coroutine generators) are cleanly isolated in test suites and wire protocol structures.
 2. **Release Profile Tuning (`Cargo.toml`)**:
    ```toml
