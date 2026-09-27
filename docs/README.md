@@ -104,4 +104,5 @@ Illustrates the 3-node Raft controller quorum, broker replication sets, and auto
 | **[`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md)** | Host and container performance benchmarks across 100B, 1KB, 1MB, 10MB, and 50MB messages |
 | **[`benchmarks/KAFKA_PORT_PERFORMANCE.md`](../benchmarks/KAFKA_PORT_PERFORMANCE.md)** | Kafka-port profiling, fixes and sources; (old `deploy/DOCKER_BENCHMARK_RESULTS.md` is a pointer). Original description: isolated 3-way container benchmark data tables (`--cpus=2.0 --memory=2g`) |
 | **[`examples/fastapi-app/README.md`](../examples/fastapi-app/README.md)** | Python FastAPI microservice integration guide and automated test suite |
+| **[`docs/DOCKER_QUICKSTART.md`](DOCKER_QUICKSTART.md)** | Developer Docker container guide with multi-language code snippets and Compose |
 | **[`deploy/k8s/`](../deploy/k8s/)** | Kubernetes StatefulSet manifests and headless service configurations |

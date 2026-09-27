@@ -67,20 +67,17 @@ and [KAFKA_PORT_PERFORMANCE.md](benchmarks/KAFKA_PORT_PERFORMANCE.md) before dra
 You can run the full AeroStream stack (Controller, Zero-Copy Broker, and Web Console) using the official multi-architecture container image:
 
 ```bash
-docker run -d \
-  --name aerostream \
-  -p 9091:9091 \
-  -p 9092:9092 \
-  -p 9001:9001 \
-  -p 8001:8001 \
-  -p 7001:7001 \
+docker run -d --name aerostream \
+  -p 9091:9091 -p 9092:9092 -p 9001:9001 -p 8001:8001 -p 7001:7001 \
   -v aerostream_data:/data \
-  ghcr.io/gradientgeeks/aerostream:latest
+  quay.io/gradientgeeks/aerostream:latest
 ```
+
+> 📖 **Developer Guide**: For comprehensive multi-language code snippets (Python, .NET, Node.js, Java, REST) and Docker Compose instructions, see the **[Docker Quickstart Guide](docs/DOCKER_QUICKSTART.md)**.
 
 ### Accessing Endpoints:
 * **Web Console UI**: [http://localhost:9001/aerostream/console](http://localhost:9001/aerostream/console)
-* **Kafka Wire Protocol**: `localhost:9092`
+* **Kafka Wire Protocol**: `localhost:9092` (point any Kafka producer/consumer here)
 * **Native TCP Data Plane**: `localhost:9091`
 * **REST Management API & Schema Registry**: `http://localhost:9001`
 * **gRPC Control Plane**: `localhost:8001`
