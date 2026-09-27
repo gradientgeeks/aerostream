@@ -4,14 +4,9 @@ Welcome to the official web showcase and documentation portal for **AeroStream**
 
 ---
 
-## 🎯 Architecture & Separation of Concerns
+## 🎯 Overview
 
-The AeroStream codebase maintains a clear separation between its administrative operations console and its public-facing showcase & documentation website:
-
-| App Directory | Purpose | Target URL | Deployment Model |
-| :--- | :--- | :--- | :--- |
-| `ui/` | **Embedded Web Console** | `localhost:9001/aerostream/console` | Compiled into static Go assets and embedded directly inside the `go-controller` and `rust-broker` binary images for cluster monitoring, topic creation, partition rebalancing, and live broker telemetry. |
-| `site/` (This App) | **Public Showcase & Docs Portal** | `https://aerostream.gradientgeeks.com` | Standalone Angular 21 application deployed to CDN / static hosting (Cloudflare Pages, Firebase Hosting, AWS S3/CloudFront) showcasing benchmark results, architecture deep dives, Kafka wire compatibility, and interactive documentation. |
+This is the public-facing showcase and technical documentation portal for **AeroStream**, designed for deployment to CDN / static hosting (e.g. Cloudflare Pages, Firebase Hosting, AWS S3/CloudFront) at [`aerostream.gradientgeeks.com`](https://aerostream.gradientgeeks.com). It showcases benchmark results, architecture deep dives, Kafka wire compatibility, and interactive documentation.
 
 ---
 
