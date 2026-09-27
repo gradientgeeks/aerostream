@@ -28,6 +28,12 @@ max_segment_size = 134217728
 max_retention_size = 1073741824
 # Max age of a segment before it is eligible for deletion (seconds). 7 days.
 max_retention_age_secs = 604800
+# Start page-cache writeback of each active segment every N bytes (0 disables). Keeps dirty pages from piling up into
+# multi-second write stalls, especially under a container memory limit. 8 MiB.
+writeback_bytes = 8388608
+# After a range has been written back, drop it from the page cache. Caps page-cache use but paces writes to the disk
+# (much lower throughput); only for memory-starved deployments.
+drop_cache_after_writeback = false
 
 [tls]
 # Enable TLS on the TCP data plane. NOTE: enabling this disables the sendfile

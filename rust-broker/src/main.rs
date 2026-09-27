@@ -200,7 +200,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 cfg.storage.compaction_enabled,
                 cfg.storage.dirty_ratio_threshold,
                 std::time::Duration::from_secs(cfg.storage.tombstone_retention_secs),
-            );
+            )
+            .with_writeback(cfg.storage.writeback_bytes, cfg.storage.drop_cache_after_writeback);
 
         if cfg.tiered_storage.enabled {
             log_manager_builder = log_manager_builder.with_tiered_storage(tiered_provider.clone(), offload_tx);

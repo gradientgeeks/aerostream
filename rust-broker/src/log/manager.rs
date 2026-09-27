@@ -4,7 +4,7 @@ use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use tracing::info;
+use tracing::{debug, info, warn};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PartitionKey {
@@ -56,6 +56,14 @@ pub struct PartitionLog {
     active_len: u64,
     active_idx_len: u64,
     last_retention_check: std::time::Instant,
+    /// Start of the active-segment byte range whose writeback has not been started yet.
+    writeback_start: u64,
+    /// Start of the range handed to writeback on the previous step (dropped from the page cache next time).
+    writeback_prev_start: u64,
+    /// Start writeback every this many bytes (0 disables). See `write_back_progress`.
+    pub writeback_bytes: u64,
+    /// After a range has been written back, drop it from the page cache (POSIX_FADV_DONTNEED).
+    pub drop_cache_after_writeback: bool,
 
     // Configurations
     pub max_segment_size: u64,
@@ -203,6 +211,10 @@ impl PartitionLog {
             active_len,
             active_idx_len,
             last_retention_check: std::time::Instant::now(),
+            writeback_start: active_len,
+            writeback_prev_start: active_len,
+            writeback_bytes: 0,
+            drop_cache_after_writeback: false,
             max_segment_size,
             broker_id,
             storage_base_dir,
@@ -345,6 +357,7 @@ impl PartitionLog {
         let pos = self.active_len;
         self.active_log_file.write_all_at(data, pos)?;
         self.active_len += data.len() as u64;
+        self.write_back_progress();
 
         let offset = self.next_offset;
         let mut entry = [0u8; 16];
@@ -385,6 +398,7 @@ impl PartitionLog {
             self.active_log_file.write_all_at(&batch[8..], pos + 8)?;
         }
         self.active_len += batch.len() as u64;
+        self.write_back_progress();
 
         let offset = self.next_offset;
         let mut entry = [0u8; 16];
@@ -432,38 +446,110 @@ impl PartitionLog {
         crate::log::compactor::compute_dirty_ratio(closed, self.tombstone_retention)
     }
 
+    /// Paced writeback of the active segment (like RocksDB's `bytes_per_sync`).
+    ///
+    /// Appends only dirty the page cache. Left alone, dirty pages pile up until the kernel (or, in a container, the
+    /// memory cgroup limit) forces the writer to wait for a large flush, which shows up as multi-second stalls. Every
+    /// `writeback_bytes` we ask the kernel to start writing the newly appended range (`SYNC_FILE_RANGE_WRITE`, does not
+    /// wait). With `drop_cache_after_writeback`, the range started on the previous step is waited for and dropped from
+    /// the page cache, which caps the broker's page-cache footprint and throttles the writer to the disk's speed.
+    fn write_back_progress(&mut self) {
+        if self.writeback_bytes == 0 || self.active_len - self.writeback_start < self.writeback_bytes {
+            return;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::io::AsRawFd;
+            let fd = self.active_log_file.as_raw_fd();
+            let (start, len) = (self.writeback_start, self.active_len - self.writeback_start);
+            // SAFETY: plain syscalls on a valid, open file descriptor; failures are only advisory.
+            unsafe {
+                libc::sync_file_range(fd, start as libc::off64_t, len as libc::off64_t, libc::SYNC_FILE_RANGE_WRITE);
+                if self.drop_cache_after_writeback && self.writeback_prev_start < start {
+                    let (ps, pl) = (self.writeback_prev_start, start - self.writeback_prev_start);
+                    libc::sync_file_range(
+                        fd,
+                        ps as libc::off64_t,
+                        pl as libc::off64_t,
+                        libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER,
+                    );
+                    libc::posix_fadvise(fd, ps as libc::off_t, pl as libc::off_t, libc::POSIX_FADV_DONTNEED);
+                }
+            }
+            self.writeback_prev_start = start;
+        }
+        self.writeback_start = self.active_len;
+    }
+
+    /// Archives a sealed segment into `cold_dir`. A hard link shares the file's data blocks, so this costs no copy and
+    /// no extra page cache, and the archived copy survives retention deleting the local name (compaction replaces
+    /// segment files by rename, so the link keeps the segment exactly as it was sealed). If linking is not possible
+    /// (different filesystem), the segment is copied on a background thread instead of on the append path.
+    fn archive_sealed_segment(&self, seg: &LogSegment) -> io::Result<()> {
+        let cold_dir = self.cold_dir();
+        fs::create_dir_all(&cold_dir)?;
+        let cold_log_path = cold_dir.join(format!("{:020}.log", seg.base_offset));
+        let cold_idx_path = cold_dir.join(format!("{:020}.idx", seg.base_offset));
+        let _ = fs::remove_file(&cold_log_path);
+        let _ = fs::remove_file(&cold_idx_path);
+
+        let offload = self.offload_tx.clone().map(|tx| {
+            (tx, crate::storage::offloader::OffloadTask::new(
+                &self.topic, self.partition, seg.base_offset, &cold_log_path, &cold_idx_path,
+            ))
+        });
+
+        if fs::hard_link(&seg.log_path, &cold_log_path).is_ok() && fs::hard_link(&seg.idx_path, &cold_idx_path).is_ok() {
+            debug!("[AeroMQ Broker] Segment {} sealed; linked into cold storage {:?}", seg.base_offset, cold_log_path);
+            if let Some((tx, task)) = offload {
+                let _ = tx.try_send(task);
+            }
+            return Ok(());
+        }
+        let _ = fs::remove_file(&cold_log_path);
+        // Open the sources now: retention may unlink them before the copy runs; open handles keep the data readable.
+        let mut src_log = File::open(&seg.log_path)?;
+        let mut src_idx = File::open(&seg.idx_path)?;
+        let base = seg.base_offset;
+        std::thread::spawn(move || {
+            let mut copy = || -> io::Result<()> {
+                io::copy(&mut src_log, &mut File::create(&cold_log_path)?)?;
+                io::copy(&mut src_idx, &mut File::create(&cold_idx_path)?)?;
+                Ok(())
+            };
+            match copy() {
+                Ok(()) => {
+                    info!("[AeroMQ Broker] Segment {} copied to cold storage {:?} (background)", base, cold_log_path);
+                    if let Some((tx, task)) = offload {
+                        let _ = tx.try_send(task);
+                    }
+                }
+                Err(e) => warn!("[AeroMQ Broker] Background cold-storage copy of segment {} failed: {}", base, e),
+            }
+        });
+        Ok(())
+    }
+
     fn roll_over(&mut self) -> io::Result<()> {
         self.active_log_file.flush()?;
         self.active_idx_file.flush()?;
 
         let old_active_seg = self.segments.last().unwrap().clone();
 
-        // Copy old segment to cold storage
-        let cold_dir = self.cold_dir();
-
-        fs::create_dir_all(&cold_dir)?;
-        
-        let cold_log_path = cold_dir.join(format!("{:020}.log", old_active_seg.base_offset));
-        let cold_idx_path = cold_dir.join(format!("{:020}.idx", old_active_seg.base_offset));
-        
-        fs::copy(&old_active_seg.log_path, &cold_log_path)?;
-        fs::copy(&old_active_seg.idx_path, &cold_idx_path)?;
-        info!(
-            "[AeroMQ Broker] Segment {} rolled over and copied to cold storage: {:?}",
-            old_active_seg.base_offset, cold_log_path
-        );
-
-        // Dispatch offload task to tiered object storage if configured
-        if let Some(ref tx) = self.offload_tx {
-            let task = crate::storage::offloader::OffloadTask::new(
-                &self.topic,
-                self.partition,
-                old_active_seg.base_offset,
-                &cold_log_path,
-                &cold_idx_path,
-            );
-            let _ = tx.try_send(task);
+        // Start writeback of the unflushed tail of the sealed segment, then archive it (link, no data copy).
+        if self.writeback_bytes > 0 && self.active_len > self.writeback_start {
+            #[cfg(target_os = "linux")]
+            unsafe {
+                use std::os::unix::io::AsRawFd;
+                libc::sync_file_range(
+                    self.active_log_file.as_raw_fd(),
+                    self.writeback_start as libc::off64_t,
+                    (self.active_len - self.writeback_start) as libc::off64_t,
+                    libc::SYNC_FILE_RANGE_WRITE,
+                );
+            }
         }
+        self.archive_sealed_segment(&old_active_seg)?;
 
         // Create new active segment
         let new_base_offset = self.next_offset;
@@ -486,6 +572,8 @@ impl PartitionLog {
         self.active_idx_file = new_idx_file;
         self.active_len = 0;
         self.active_idx_len = 0;
+        self.writeback_start = 0;
+        self.writeback_prev_start = 0;
 
         self.segments.push(LogSegment {
             base_offset: new_base_offset,
@@ -740,6 +828,10 @@ pub struct LogManager {
     pub offload_tx: Option<tokio::sync::mpsc::Sender<crate::storage::offloader::OffloadTask>>,
     pub tiered_provider: Option<Arc<dyn crate::storage::TieredStorageProvider>>,
 
+    // Paced writeback (see PartitionLog::write_back_progress)
+    pub writeback_bytes: u64,
+    pub drop_cache_after_writeback: bool,
+
     partitions: RwLock<HashMap<PartitionKey, Arc<Mutex<PartitionLog>>>>,
 
     /// Lazily-created transaction coordinator (see `crate::txn`).
@@ -761,6 +853,8 @@ impl LogManager {
             tombstone_retention: std::time::Duration::from_secs(86400),
             offload_tx: None,
             tiered_provider: None,
+            writeback_bytes: 0,
+            drop_cache_after_writeback: false,
             partitions: RwLock::new(HashMap::new()),
             txn_coord: std::sync::OnceLock::new(),
             share_coord: std::sync::OnceLock::new(),
@@ -792,6 +886,12 @@ impl LogManager {
         self.compaction_enabled = enabled;
         self.dirty_ratio_threshold = dirty_ratio_threshold;
         self.tombstone_retention = tombstone_retention;
+        self
+    }
+
+    pub fn with_writeback(mut self, writeback_bytes: u64, drop_cache_after_writeback: bool) -> Self {
+        self.writeback_bytes = writeback_bytes;
+        self.drop_cache_after_writeback = drop_cache_after_writeback;
         self
     }
 
@@ -937,6 +1037,8 @@ impl LogManager {
         log.tombstone_retention = self.tombstone_retention;
         log.offload_tx = self.offload_tx.clone();
         log.tiered_provider = self.tiered_provider.clone();
+        log.writeback_bytes = self.writeback_bytes;
+        log.drop_cache_after_writeback = self.drop_cache_after_writeback;
 
         let shared = Arc::new(Mutex::new(log));
         parts.insert(PartitionKey::new(topic, partition), shared.clone());
@@ -1016,5 +1118,43 @@ mod tests {
         // Clean up
         let _ = fs::remove_dir_all(&test_dir);
         let _ = fs::remove_dir_all(&cold_dir);
+    }
+
+    #[tokio::test]
+    async fn writeback_and_cache_drop_keep_data_intact_across_rolls() {
+        let dir = tempfile::tempdir().unwrap();
+        let manager = LogManager::new(dir.path(), 7)
+            .with_limits(64 * 1024, None, None)
+            .with_writeback(8 * 1024, true);
+        let part = manager.get_partition("wb", 0).await.unwrap();
+        let mut log = part.lock().await;
+        let payload = |i: u64| vec![(i % 251) as u8; 3000];
+        for i in 0..100u64 {
+            assert_eq!(log.append(&payload(i)).unwrap(), i);
+        }
+        assert!(log.segments.len() > 1, "expected segment rolls");
+        for i in [0u64, 21, 22, 57, 99] {
+            let (file, pos, len) = log.read_from_offset(i, 3000).unwrap().unwrap();
+            let mut buf = vec![0u8; len as usize];
+            std::os::unix::fs::FileExt::read_exact_at(&file, &mut buf, pos).unwrap();
+            assert_eq!(buf, payload(i), "offset {}", i);
+        }
+    }
+
+    #[tokio::test]
+    async fn sealed_segment_is_hard_linked_into_cold_storage() {
+        use std::os::unix::fs::MetadataExt;
+        let dir = tempfile::tempdir().unwrap();
+        let manager = LogManager::new(dir.path(), 8).with_limits(100, None, None);
+        let part = manager.get_partition("cold", 0).await.unwrap();
+        let mut log = part.lock().await;
+        log.append(&[1; 60]).unwrap();
+        log.append(&[2; 60]).unwrap(); // rolls segment 0
+        let local = log.segments[0].log_path.clone();
+        let cold = dir.path().join("cold_storage").join("broker_8").join("cold").join("partition_0").join(format!("{:020}.log", 0));
+        assert!(cold.exists());
+        assert_eq!(fs::metadata(&local).unwrap().ino(), fs::metadata(&cold).unwrap().ino(), "archived by hard link, not copy");
+        fs::remove_file(&local).unwrap(); // as retention would
+        assert_eq!(fs::read(&cold).unwrap(), vec![1u8; 60]);
     }
 }

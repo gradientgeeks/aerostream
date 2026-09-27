@@ -60,6 +60,12 @@ pub struct StorageConfig {
     pub dirty_ratio_threshold: f64,
     /// Duration in seconds to retain tombstones before deleting them (default 86400 = 24h).
     pub tombstone_retention_secs: u64,
+    /// Start page-cache writeback of each partition's active segment every this many bytes (0 disables).
+    /// Prevents dirty pages from piling up into multi-second write stalls, notably under a container memory limit.
+    pub writeback_bytes: u64,
+    /// After a range has been written back, drop it from the page cache. Caps page-cache use and paces the writer
+    /// to the disk, at the cost of serving very recent reads from disk.
+    pub drop_cache_after_writeback: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -123,6 +129,8 @@ impl Default for StorageConfig {
             compaction_enabled: false,
             dirty_ratio_threshold: 0.5,
             tombstone_retention_secs: 86400,
+            writeback_bytes: 8 * 1024 * 1024,
+            drop_cache_after_writeback: false,
         }
     }
 }

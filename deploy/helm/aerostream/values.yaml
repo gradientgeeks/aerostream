@@ -143,6 +143,8 @@ broker:
     compactionEnabled: true
     dirtyRatioThreshold: 0.5
     tombstoneRetentionSecs: 86400
+    writebackBytes: 8388608            # start page-cache writeback every 8 MiB (0 disables)
+    dropCacheAfterWriteback: false     # true caps page cache but paces writes to the disk
 
   # Transactions (KIP-98) - the coordinator runs inside the broker.
   txn:
