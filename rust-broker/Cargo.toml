@@ -1,7 +1,7 @@
 [package]
 name = "rust-broker"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [features]
 default = ["iceberg"]
@@ -37,3 +37,10 @@ tonic-build = "0.11"
 
 [dev-dependencies]
 tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -792,7 +792,7 @@ async fn join(e: &Env, v: i16, group: &str, member: &str) -> (i16, i32, String, 
         r.i32().unwrap();
     }
     let code = r.i16().unwrap();
-    let gen = r.i32().unwrap();
+    let generation = r.i32().unwrap();
     if v >= 7 {
         assert_eq!(r.nstr().unwrap().as_deref(), Some("consumer"));
         assert_eq!(r.nstr().unwrap().as_deref(), Some("range"));
@@ -813,7 +813,7 @@ async fn join(e: &Env, v: i16, group: &str, member: &str) -> (i16, i32, String, 
         assert_eq!(r.bytes().unwrap(), b"meta");
         r.tagged().unwrap();
     }
-    (code, gen, leader, member_id, members)
+    (code, generation, leader, member_id, members)
 }
 
 #[tokio::test]
@@ -839,15 +839,15 @@ async fn full_group_lifecycle_on_the_wire() {
     for (i, v) in [(0, 0i16), (1, 2), (2, 5), (3, 6), (4, 9)] {
         let e = env_with(&[(1, None)], 1);
         let group = format!("wire-group-{i}");
-        let (code, gen, leader, member, members) = join(&e, v, &group, "").await;
-        assert_eq!((code, gen), (0, 1), "join v{v}");
+        let (code, generation, leader, member, members) = join(&e, v, &group, "").await;
+        assert_eq!((code, generation), (0, 1), "join v{v}");
         assert_eq!(leader, member);
         assert_eq!(members, vec![member.clone()]);
 
         // SyncGroup
         let sv = [0i16, 1, 3, 4, 5][i];
         let out = call(&e.st, 14, sv, |w| {
-            w.str(&group).i32(gen).str(&member);
+            w.str(&group).i32(generation).str(&member);
             if sv >= 3 {
                 w.nstr(None);
             }
@@ -870,7 +870,7 @@ async fn full_group_lifecycle_on_the_wire() {
         assert_eq!(r.bytes().unwrap(), b"my-assignment");
 
         // Heartbeat ok + bad generation
-        for (g_, expect) in [(gen, 0i16), (gen + 5, 22)] {
+        for (g_, expect) in [(generation, 0i16), (generation + 5, 22)] {
             let hv = [0i16, 1, 3, 4, 4][i];
             let out = call(&e.st, 12, hv, |w| {
                 w.str(&group).i32(g_).str(&member);
@@ -892,7 +892,7 @@ async fn full_group_lifecycle_on_the_wire() {
         let out = call(&e.st, 8, ov, |w| {
             w.str(&group);
             if ov >= 1 {
-                w.i32(gen).str(&member);
+                w.i32(generation).str(&member);
             }
             if ov >= 7 {
                 w.nstr(None);
