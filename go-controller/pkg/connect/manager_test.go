@@ -8,7 +8,7 @@ import (
 )
 
 func TestConnectorManager_Defaults(t *testing.T) {
-	cm := connect.NewManager()
+	cm := connect.NewManager().SeedDefaultConnectors()
 
 	plugins := cm.ListPlugins()
 	if len(plugins) != 4 {
@@ -130,7 +130,7 @@ func TestConnectorManager_RegisterAndLifecycle(t *testing.T) {
 }
 
 func TestConnectorManager_StopAndRestart(t *testing.T) {
-	cm := connect.NewManager()
+	cm := connect.NewManager().SeedDefaultConnectors()
 	connName := "s3-cold-storage-sink"
 
 	// 1. StopConnector (KIP-875)
@@ -182,7 +182,7 @@ func TestConnectorManager_StopAndRestart(t *testing.T) {
 }
 
 func TestConnectorManager_TaskOperations(t *testing.T) {
-	cm := connect.NewManager()
+	cm := connect.NewManager().SeedDefaultConnectors()
 	connName := "s3-cold-storage-sink"
 
 	// 1. GetTaskStatus
@@ -216,7 +216,7 @@ func TestConnectorManager_TaskOperations(t *testing.T) {
 }
 
 func TestConnectorManager_Topics(t *testing.T) {
-	cm := connect.NewManager()
+	cm := connect.NewManager().SeedDefaultConnectors()
 	connName := "s3-cold-storage-sink"
 
 	topics, err := cm.GetConnectorTopics(connName)
@@ -243,7 +243,7 @@ func TestConnectorManager_Topics(t *testing.T) {
 }
 
 func TestConnectorManager_UpdateConfig(t *testing.T) {
-	cm := connect.NewManager()
+	cm := connect.NewManager().SeedDefaultConnectors()
 	connName := "s3-cold-storage-sink"
 
 	updated, err := cm.UpdateConnectorConfig(connName, map[string]string{

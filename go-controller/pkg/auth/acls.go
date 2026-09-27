@@ -74,11 +74,16 @@ func NewAclManager() *AclManager {
 		rules: make(map[string]*AclRule),
 		users: make(map[string]*User),
 	}
-	mgr.seedDefaults()
+	// Production root administrator
+	mgr.users["admin"] = &User{
+		Username:  "admin",
+		Role:      RoleSuperAdmin,
+		CreatedAt: time.Now().UTC(),
+	}
 	return mgr
 }
 
-func (m *AclManager) seedDefaults() {
+func (m *AclManager) SeedDefaults() *AclManager {
 	now := time.Now().UTC()
 
 	// 1. Seed Users
@@ -177,6 +182,7 @@ func (m *AclManager) seedDefaults() {
 	for _, r := range defaultRules {
 		m.rules[r.ID] = r
 	}
+	return m
 }
 
 func (m *AclManager) AddRule(rule *AclRule) error {

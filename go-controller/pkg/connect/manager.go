@@ -146,7 +146,10 @@ func NewManager() *ConnectorManager {
 	for _, p := range plugins {
 		cm.plugins[p.Class] = p
 	}
+	return cm
+}
 
+func (cm *ConnectorManager) SeedDefaultConnectors() *ConnectorManager {
 	now := time.Now().UTC()
 	defaultWorker := "aerostream-worker-1"
 

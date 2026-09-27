@@ -35,8 +35,9 @@
       <div class="quick-chips">
         <span class="chip-label">Quick:</span>
         <button type="button" class="quick-chip" (click)="setPrincipal('User:*')">All Users (*)</button>
-        <button type="button" class="quick-chip" (click)="setPrincipal('User:order_producer')">order_producer</button>
-        <button type="button" class="quick-chip" (click)="setPrincipal('User:billing_consumer')">billing_consumer</button>
+        @for (u of aclService.users(); track u.username) {
+          <button type="button" class="quick-chip" (click)="setPrincipal('User:' + u.username)">{{ u.username }}</button>
+        }
       </div>
     </div>
 

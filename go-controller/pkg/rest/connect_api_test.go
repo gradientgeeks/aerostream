@@ -13,6 +13,7 @@ import (
 
 func setupTestServer() *http.ServeMux {
 	server := rest.NewServer(nil, "127.0.0.1:0")
+	server.ConnectorManager().SeedDefaultConnectors()
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
 	return mux

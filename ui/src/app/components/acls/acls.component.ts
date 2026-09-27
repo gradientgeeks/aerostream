@@ -76,60 +76,44 @@ export class AclsComponent implements OnInit {
   readonly lastEvaluatedAt = signal<string | null>(null);
 
   readonly evaluatorForm: FormGroup = this.fb.group({
-    principal: ['User:order_producer', [Validators.required]],
-    resource_type: ['TOPIC', [Validators.required]],
-    resource_name: ['orders-2026', [Validators.required]],
-    operation: ['WRITE', [Validators.required]],
+    principal: ['User:admin', [Validators.required]],
+    resource_type: ['CLUSTER', [Validators.required]],
+    resource_name: ['*', [Validators.required]],
+    operation: ['ALL', [Validators.required]],
   });
 
   readonly testScenarios: TestScenario[] = [
     {
-      label: 'Order Producer -> Write orders-2026',
-      principal: 'User:order_producer',
-      resource_type: 'TOPIC',
-      resource_name: 'orders-2026',
-      operation: 'WRITE',
-      expected: 'ALLOW',
-    },
-    {
-      label: 'Billing Consumer -> Read orders-2026',
-      principal: 'User:billing_consumer',
-      resource_type: 'TOPIC',
-      resource_name: 'orders-2026',
-      operation: 'READ',
-      expected: 'ALLOW',
-    },
-    {
-      label: 'Billing Consumer -> Write audit-log (Explicit Deny)',
-      principal: 'User:billing_consumer',
-      resource_type: 'TOPIC',
-      resource_name: 'audit-security-events',
-      operation: 'WRITE',
-      expected: 'DENY',
-    },
-    {
-      label: 'Auditor -> Describe Cluster',
-      principal: 'User:auditor',
-      resource_type: 'CLUSTER',
-      resource_name: '*',
-      operation: 'DESCRIBE',
-      expected: 'ALLOW',
-    },
-    {
-      label: 'Auditor -> Write Topic (Zero-Trust Deny)',
-      principal: 'User:auditor',
-      resource_type: 'TOPIC',
-      resource_name: 'orders-2026',
-      operation: 'WRITE',
-      expected: 'DENY',
-    },
-    {
       label: 'Admin -> Alter Cluster (SUPER_ADMIN Global)',
       principal: 'User:admin',
       resource_type: 'CLUSTER',
-      resource_name: 'raft-config',
-      operation: 'ALTER',
+      resource_name: '*',
+      operation: 'ALL',
       expected: 'ALLOW',
+    },
+    {
+      label: 'Admin -> Write Topic (SUPER_ADMIN Global)',
+      principal: 'User:admin',
+      resource_type: 'TOPIC',
+      resource_name: 'orders-2026',
+      operation: 'WRITE',
+      expected: 'ALLOW',
+    },
+    {
+      label: 'Guest / Anonymous -> Write Topic (Zero-Trust Deny)',
+      principal: 'User:guest',
+      resource_type: 'TOPIC',
+      resource_name: 'orders-2026',
+      operation: 'WRITE',
+      expected: 'DENY',
+    },
+    {
+      label: 'Unauthorized Client -> Alter Cluster (Zero-Trust Deny)',
+      principal: 'User:unauthorized_client',
+      resource_type: 'CLUSTER',
+      resource_name: '*',
+      operation: 'ALTER',
+      expected: 'DENY',
     },
   ];
 

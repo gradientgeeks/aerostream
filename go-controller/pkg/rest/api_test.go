@@ -258,6 +258,7 @@ func TestPhase5SchemaRegistryOrdersValueEndToEnd(t *testing.T) {
 
 func TestAclRESTEndpoints(t *testing.T) {
 	server := rest.NewServer(nil, "127.0.0.1:0")
+	server.AclManager().SeedDefaults()
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
 
@@ -357,6 +358,7 @@ func TestAclRESTEndpoints(t *testing.T) {
 
 func TestTransformsRESTEndpoints(t *testing.T) {
 	server := rest.NewServer(nil, "127.0.0.1:0")
+	server.TransformEngine().SeedDefaultTransforms()
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
 
@@ -479,6 +481,7 @@ func TestTransformsRESTEndpoints(t *testing.T) {
 
 func TestConnectorsRESTEndpoints(t *testing.T) {
 	server := rest.NewServer(nil, "127.0.0.1:0")
+	server.ConnectorManager().SeedDefaultConnectors()
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
 
