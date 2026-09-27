@@ -139,7 +139,7 @@ export class RegisterSchemaDialogComponent implements OnInit {
           this.isSubmitting.set(false);
           this.validationResult.set({
             valid: false,
-            error: err?.message || 'Failed to register schema with registry',
+            error: err?.error?.message || err?.message || 'Failed to register schema with registry',
           });
         },
       });

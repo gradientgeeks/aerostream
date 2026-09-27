@@ -13,6 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 import { RegisteredSchema, SchemaType } from '../../models/schema.model';
 import { SchemaService } from '../../services/schema.service';
@@ -36,6 +37,7 @@ import { RegisterSchemaDialogComponent } from './register-schema-dialog.componen
     MatTooltipModule,
     MatTabsModule,
     MatDividerModule,
+    MatProgressSpinnerModule,
   ],
   templateUrl: './schema-registry.component.html',
   styleUrl: './schema-registry.component.scss',
@@ -80,20 +82,39 @@ export class SchemaRegistryComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.refresh();
+
     // Listen for query parameter e.g. /schemas?subject=orders-value
     this.route.queryParams.subscribe((params) => {
-      if (params['subject']) {
-        const subject = params['subject'];
+      const subject = params['subject'];
+      if (subject) {
         if (this.schemaService.hasSubject(subject)) {
           this.selectedSubject.set(subject);
         } else if (this.schemaService.hasSubject(`${subject}-value`)) {
           this.selectedSubject.set(`${subject}-value`);
         }
-      } else {
-        const list = this.schemaService.schemas();
-        if (list.length > 0 && !this.selectedSubject()) {
-          this.selectedSubject.set(list[0].subject);
+      }
+    });
+  }
+
+  refresh(): void {
+    this.schemaService.loadSchemas().subscribe((schemas) => {
+      const subjectParam = this.route.snapshot.queryParams['subject'];
+      if (subjectParam) {
+        if (this.schemaService.hasSubject(subjectParam)) {
+          this.selectedSubject.set(subjectParam);
+          return;
+        } else if (this.schemaService.hasSubject(`${subjectParam}-value`)) {
+          this.selectedSubject.set(`${subjectParam}-value`);
+          return;
         }
+      }
+      if (schemas.length > 0) {
+        if (!this.selectedSubject() || !schemas.some((s) => s.subject === this.selectedSubject())) {
+          this.selectedSubject.set(schemas[0].subject);
+        }
+      } else {
+        this.selectedSubject.set(null);
       }
     });
   }
@@ -130,6 +151,43 @@ export class SchemaRegistryComponent implements OnInit {
           }
         );
       }
+    });
+  }
+
+  deleteSubject(subject: string): void {
+    if (
+      !confirm(
+        `Are you sure you want to delete schema subject "${subject}"? This will remove all versions from the registry.`
+      )
+    ) {
+      return;
+    }
+
+    this.schemaService.deleteSubject(subject).subscribe({
+      next: () => {
+        this.snackBar.open(`Subject "${subject}" successfully deleted`, 'Close', {
+          duration: 3500,
+          horizontalPosition: 'end',
+          verticalPosition: 'bottom',
+        });
+        const remaining = this.schemaService.schemas();
+        if (remaining.length > 0) {
+          this.selectedSubject.set(remaining[0].subject);
+        } else {
+          this.selectedSubject.set(null);
+        }
+      },
+      error: (err) => {
+        this.snackBar.open(
+          `Failed to delete subject "${subject}": ${err?.error?.message || err?.message || 'Error'}`,
+          'Close',
+          {
+            duration: 5000,
+            horizontalPosition: 'end',
+            verticalPosition: 'bottom',
+          }
+        );
+      },
     });
   }
 
@@ -170,6 +228,6 @@ export class SchemaRegistryComponent implements OnInit {
   }
 
   formatLines(text: string): string[] {
-    return text.split('\n');
+    return text ? text.split('\n') : [];
   }
 }

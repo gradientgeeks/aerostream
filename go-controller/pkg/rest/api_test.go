@@ -141,6 +141,18 @@ func TestSchemaRegistryRESTEndpoints(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &getSubjResp); err != nil || getSubjResp["compatibility"] != "NONE" {
 		t.Fatalf("expected NONE, got %s", w.Body.String())
 	}
+
+	// 9. DELETE /subjects/{subject}
+	req = httptest.NewRequest(http.MethodDelete, "/subjects/payments-value", nil)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 from DELETE /subjects/payments-value, got %d: %s", w.Code, w.Body.String())
+	}
+	var deletedVersions []int
+	if err := json.Unmarshal(w.Body.Bytes(), &deletedVersions); err != nil || len(deletedVersions) != 1 || deletedVersions[0] != 1 {
+		t.Fatalf("expected deleted versions [1], got %v", deletedVersions)
+	}
 }
 
 func TestPhase5SchemaRegistryOrdersValueEndToEnd(t *testing.T) {

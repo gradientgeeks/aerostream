@@ -831,6 +831,25 @@ func (s *Server) handleSubjects(w http.ResponseWriter, r *http.Request) {
 	restPath := strings.TrimPrefix(path, "subjects/")
 	idx := strings.Index(restPath, "/versions")
 	if idx == -1 {
+		rawSubject := restPath
+		subject, err := url.PathUnescape(rawSubject)
+		if err != nil || subject == "" {
+			writeError(w, http.StatusBadRequest, 400, "Invalid subject")
+			return
+		}
+		if r.Method == http.MethodDelete {
+			versions, err := s.schemaRegistry.DeleteSubject(subject)
+			if err != nil {
+				if errors.Is(err, schemaregistry.ErrSubjectNotFound) {
+					writeError(w, http.StatusNotFound, 40401, fmt.Sprintf("Subject '%s' not found.", subject))
+					return
+				}
+				writeError(w, http.StatusInternalServerError, 500, err.Error())
+				return
+			}
+			json.NewEncoder(w).Encode(versions)
+			return
+		}
 		writeError(w, http.StatusNotFound, 404, "Not found")
 		return
 	}

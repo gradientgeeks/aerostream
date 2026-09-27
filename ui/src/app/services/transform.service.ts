@@ -10,57 +10,6 @@ import {
   TransformType,
 } from '../models/transform.model';
 
-const FALLBACK_TRANSFORMS: StreamTransform[] = [
-  {
-    id: 'xform-pii-masker-orders',
-    name: 'pii-masker-orders',
-    source_topic: 'orders',
-    target_topic: 'orders-sanitized',
-    type: 'MASK_PII',
-    config: {
-      fields_to_mask: 'credit_card,cvv,password,email',
-      mask_pattern: '***',
-    },
-    code: '// Native inline PII masking filter for AeroStream\nmask_fields(["credit_card", "cvv", "password", "email"]);',
-    status: 'RUNNING',
-    messages_processed: 1420,
-    messages_filtered: 0,
-    created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
-  },
-  {
-    id: 'xform-telemetry-filter-critical',
-    name: 'telemetry-filter-critical',
-    source_topic: 'telemetry-events',
-    target_topic: 'alerts-critical',
-    type: 'FILTER',
-    config: {
-      filter_expression: 'level == "CRITICAL"',
-    },
-    code: '// Inline stream filter dropping non-critical telemetry\nfilter: record.level == "CRITICAL";',
-    status: 'RUNNING',
-    messages_processed: 8950,
-    messages_filtered: 7412,
-    created_at: new Date(Date.now() - 5 * 3600000).toISOString(),
-  },
-  {
-    id: 'xform-wasm-geo-enricher',
-    name: 'wasm-geo-enricher',
-    source_topic: 'clickstream',
-    target_topic: 'clickstream-enriched',
-    type: 'WASM',
-    config: {
-      runtime: 'wasm32-wasi',
-      memory_pages: '2',
-      action: 'uppercase_keys',
-    },
-    code: '(module\n  (type $t0 (func (param i32 i32) (result i32)))\n  (func $transform (export "transform") (type $t0)\n    (local.get 0)\n  )\n  (memory (export "memory") 1)\n)',
-    status: 'RUNNING',
-    messages_processed: 4210,
-    messages_filtered: 145,
-    created_at: new Date(Date.now() - 1 * 3600000).toISOString(),
-  },
-];
-
 @Injectable({
   providedIn: 'root',
 })
@@ -70,6 +19,7 @@ export class TransformService {
   readonly transforms = signal<StreamTransform[]>([]);
   readonly isLoading = signal<boolean>(false);
   readonly lastError = signal<string | null>(null);
+  private readonly executionLatencies = signal<number[]>([]);
 
   readonly metrics = computed<TransformMetrics>(() => {
     const list = this.transforms();
@@ -77,13 +27,29 @@ export class TransformService {
     const filteredRecords = list.reduce((sum, t) => sum + (t.messages_filtered || 0), 0);
     const piiMaskedStreams = list.filter((t) => t.type === 'MASK_PII').length;
 
+    const latencies = this.executionLatencies();
+    let avgLatencyMs = 0;
+    if (latencies.length > 0) {
+      const sum = latencies.reduce((acc, val) => acc + val, 0);
+      avgLatencyMs = Number((sum / latencies.length).toFixed(3));
+    }
+
     return {
       activeTransforms,
       filteredRecords,
       piiMaskedStreams,
-      avgLatencyMs: 0.48,
+      avgLatencyMs,
     };
   });
+
+  /**
+   * Records a measured test execution latency (in milliseconds) and updates the running average.
+   */
+  recordExecutionLatency(ms: number): void {
+    if (typeof ms === 'number' && !isNaN(ms) && ms >= 0) {
+      this.executionLatencies.update((prev) => [...prev.slice(-99), ms]);
+    }
+  }
 
   private getApiUrl(path: string): string {
     const custom = typeof localStorage !== 'undefined' ? localStorage.getItem('aeromq_api_url') : null;
@@ -102,13 +68,15 @@ export class TransformService {
 
   loadTransforms(): void {
     this.isLoading.set(true);
+    this.lastError.set(null);
     this.fetchTransforms().subscribe({
       next: (data) => {
-        this.transforms.set(data && data.length > 0 ? data : FALLBACK_TRANSFORMS);
+        this.transforms.set(data || []);
         this.isLoading.set(false);
       },
-      error: () => {
-        this.transforms.set(FALLBACK_TRANSFORMS);
+      error: (err) => {
+        this.lastError.set(err?.message || 'Failed to fetch transforms');
+        this.transforms.set([]);
         this.isLoading.set(false);
       },
     });
@@ -123,8 +91,8 @@ export class TransformService {
         }
       }),
       catchError((err) => {
-        console.warn('Could not fetch transforms from API, using defaults:', err);
-        return of(FALLBACK_TRANSFORMS);
+        console.warn('Could not fetch transforms from API:', err);
+        return of([]);
       })
     );
   }

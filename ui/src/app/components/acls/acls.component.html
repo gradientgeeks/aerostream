@@ -13,7 +13,7 @@
     </div>
 
     <div class="header-actions">
-      <button mat-stroked-button class="action-btn" (click)="aclService.refreshAll()" [disabled]="aclService.loading()">
+      <button mat-stroked-button class="action-btn" (click)="refresh()" [disabled]="aclService.loading()">
         <mat-icon [class.spinning]="aclService.loading()">refresh</mat-icon>
         <span>Sync Policies</span>
       </button>
@@ -110,200 +110,233 @@
       <mat-tab>
         <ng-template mat-tab-label>
           <mat-icon class="tab-icon">verified_user</mat-icon>
-          <span>ACL Policies ({{ filteredRules().length }})</span>
+          <span>ACL Policies ({{ aclService.rules().length }})</span>
         </ng-template>
 
         <div class="tab-pane-content">
-          <!-- Filter Bar -->
-          <div class="filter-bar">
-            <div class="search-box">
-              <mat-icon class="search-icon">search</mat-icon>
-              <input
-                type="text"
-                placeholder="Search principal, resource, or operation..."
-                [ngModel]="ruleSearch()"
-                (ngModelChange)="ruleSearch.set($event)"
-                class="search-input"
-              />
-              @if (ruleSearch()) {
-                <button mat-icon-button (click)="ruleSearch.set('')" class="clear-search-btn">
-                  <mat-icon>close</mat-icon>
-                </button>
-              }
+          @if (aclService.loading()) {
+            <div class="tab-loading-state">
+              <mat-spinner diameter="44"></mat-spinner>
+              <p class="loading-text">Fetching ACL policies from controller...</p>
             </div>
-
-            <div class="filter-chips-row">
-              <!-- Resource Type filter -->
-              <div class="filter-group">
-                <span class="filter-label">Resource:</span>
-                <div class="chip-options">
-                  <button
-                    type="button"
-                    class="filter-chip"
-                    [class.active]="selectedTypeFilter() === 'ALL'"
-                    (click)="selectedTypeFilter.set('ALL')"
-                  >
-                    All
+          } @else if (aclService.rules().length === 0) {
+            <div class="empty-policies-container">
+              <mat-card class="empty-policies-card">
+                <div class="empty-card-icon">
+                  <mat-icon>shield_outlined</mat-icon>
+                </div>
+                <h2 class="empty-card-title">No ACL Policies Configured</h2>
+                <p class="empty-card-description">
+                  Define fine-grained access control policies for topics, consumer groups, or the cluster.
+                </p>
+                <div class="empty-card-actions">
+                  <button mat-flat-button color="primary" class="primary-action-btn" (click)="openCreateAclDialog()">
+                    <mat-icon>add_moderator</mat-icon>
+                    <span>Create ACL Rule</span>
                   </button>
-                  <button
-                    type="button"
-                    class="filter-chip"
-                    [class.active]="selectedTypeFilter() === 'TOPIC'"
-                    (click)="selectedTypeFilter.set('TOPIC')"
-                  >
-                    Topic
-                  </button>
-                  <button
-                    type="button"
-                    class="filter-chip"
-                    [class.active]="selectedTypeFilter() === 'GROUP'"
-                    (click)="selectedTypeFilter.set('GROUP')"
-                  >
-                    Group
-                  </button>
-                  <button
-                    type="button"
-                    class="filter-chip"
-                    [class.active]="selectedTypeFilter() === 'CLUSTER'"
-                    (click)="selectedTypeFilter.set('CLUSTER')"
-                  >
-                    Cluster
+                  <button mat-stroked-button class="action-btn" (click)="refreshRules()" [disabled]="aclService.loading()">
+                    <mat-icon [class.spinning]="aclService.loading()">refresh</mat-icon>
+                    <span>Refresh</span>
                   </button>
                 </div>
-              </div>
-
-              <!-- Permission filter -->
-              <div class="filter-group">
-                <span class="filter-label">Permission:</span>
-                <div class="chip-options">
-                  <button
-                    type="button"
-                    class="filter-chip"
-                    [class.active]="selectedPermFilter() === 'ALL'"
-                    (click)="selectedPermFilter.set('ALL')"
-                  >
-                    All
-                  </button>
-                  <button
-                    type="button"
-                    class="filter-chip chip-allow"
-                    [class.active]="selectedPermFilter() === 'ALLOW'"
-                    (click)="selectedPermFilter.set('ALLOW')"
-                  >
-                    Allow
-                  </button>
-                  <button
-                    type="button"
-                    class="filter-chip chip-deny"
-                    [class.active]="selectedPermFilter() === 'DENY'"
-                    (click)="selectedPermFilter.set('DENY')"
-                  >
-                    Deny
-                  </button>
-                </div>
-              </div>
+              </mat-card>
             </div>
-          </div>
-
-          <!-- Rules Table -->
-          <div class="table-responsive">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Principal</th>
-                  <th>Resource Type</th>
-                  <th>Resource Pattern</th>
-                  <th>Operation</th>
-                  <th>Permission</th>
-                  <th>Rule ID</th>
-                  <th class="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (rule of filteredRules(); track rule.id) {
-                  <tr class="table-row">
-                    <!-- Principal -->
-                    <td>
-                      <div class="principal-tag">
-                        <mat-icon class="principal-icon">account_circle</mat-icon>
-                        <span class="principal-name">{{ rule.principal }}</span>
-                      </div>
-                    </td>
-
-                    <!-- Resource Type -->
-                    <td>
-                      <span class="badge" [ngClass]="getResourceBadgeClass(rule.resource_type)">
-                        {{ rule.resource_type }}
-                      </span>
-                    </td>
-
-                    <!-- Resource Pattern -->
-                    <td>
-                      <div class="resource-pattern-box">
-                        <code class="pattern-code">{{ rule.resource_name }}</code>
-                        @if (rule.resource_name.includes('*')) {
-                          <span class="wildcard-indicator" matTooltip="Wildcard pattern match">WILDCARD</span>
-                        }
-                      </div>
-                    </td>
-
-                    <!-- Operation -->
-                    <td>
-                      <span class="operation-badge op-{{ rule.operation.toLowerCase() }}">
-                        {{ rule.operation }}
-                      </span>
-                    </td>
-
-                    <!-- Permission -->
-                    <td>
-                      @if (rule.permission === 'ALLOW') {
-                        <span class="perm-badge perm-allow">
-                          <mat-icon>check_circle</mat-icon>
-                          <span>ALLOW</span>
-                        </span>
-                      } @else {
-                        <span class="perm-badge perm-deny">
-                          <mat-icon>cancel</mat-icon>
-                          <span>DENY</span>
-                        </span>
-                      }
-                    </td>
-
-                    <!-- Rule ID -->
-                    <td>
-                      <span class="rule-id" [matTooltip]="rule.id">{{ rule.id }}</span>
-                    </td>
-
-                    <!-- Actions -->
-                    <td class="text-right">
-                      <button
-                        mat-icon-button
-                        color="warn"
-                        (click)="deleteRule(rule)"
-                        matTooltip="Delete ACL rule"
-                        class="delete-btn"
-                        aria-label="Delete ACL rule"
-                      >
-                        <mat-icon>delete_outline</mat-icon>
-                      </button>
-                    </td>
-                  </tr>
-                } @empty {
-                  <tr>
-                    <td colspan="7" class="empty-state">
-                      <mat-icon>shield_outlined</mat-icon>
-                      <p class="empty-title">No ACL Policies Matched</p>
-                      <p class="empty-subtitle">Adjust your search filters or click "Create ACL Policy" to define new rules.</p>
-                      <button mat-stroked-button color="primary" (click)="openCreateAclDialog()">
-                        <mat-icon>add_moderator</mat-icon>
-                        <span>Create ACL Policy</span>
-                      </button>
-                    </td>
-                  </tr>
+          } @else {
+            <!-- Filter Bar -->
+            <div class="filter-bar">
+              <div class="search-box">
+                <mat-icon class="search-icon">search</mat-icon>
+                <input
+                  type="text"
+                  placeholder="Search principal, resource, or operation..."
+                  [ngModel]="ruleSearch()"
+                  (ngModelChange)="ruleSearch.set($event)"
+                  class="search-input"
+                />
+                @if (ruleSearch()) {
+                  <button mat-icon-button (click)="ruleSearch.set('')" class="clear-search-btn">
+                    <mat-icon>close</mat-icon>
+                  </button>
                 }
-              </tbody>
-            </table>
-          </div>
+              </div>
+
+              <div class="filter-chips-row">
+                <!-- Resource Type filter -->
+                <div class="filter-group">
+                  <span class="filter-label">Resource:</span>
+                  <div class="chip-options">
+                    <button
+                      type="button"
+                      class="filter-chip"
+                      [class.active]="selectedTypeFilter() === 'ALL'"
+                      (click)="selectedTypeFilter.set('ALL')"
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      class="filter-chip"
+                      [class.active]="selectedTypeFilter() === 'TOPIC'"
+                      (click)="selectedTypeFilter.set('TOPIC')"
+                    >
+                      Topic
+                    </button>
+                    <button
+                      type="button"
+                      class="filter-chip"
+                      [class.active]="selectedTypeFilter() === 'GROUP'"
+                      (click)="selectedTypeFilter.set('GROUP')"
+                    >
+                      Group
+                    </button>
+                    <button
+                      type="button"
+                      class="filter-chip"
+                      [class.active]="selectedTypeFilter() === 'CLUSTER'"
+                      (click)="selectedTypeFilter.set('CLUSTER')"
+                    >
+                      Cluster
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Permission filter -->
+                <div class="filter-group">
+                  <span class="filter-label">Permission:</span>
+                  <div class="chip-options">
+                    <button
+                      type="button"
+                      class="filter-chip"
+                      [class.active]="selectedPermFilter() === 'ALL'"
+                      (click)="selectedPermFilter.set('ALL')"
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      class="filter-chip chip-allow"
+                      [class.active]="selectedPermFilter() === 'ALLOW'"
+                      (click)="selectedPermFilter.set('ALLOW')"
+                    >
+                      Allow
+                    </button>
+                    <button
+                      type="button"
+                      class="filter-chip chip-deny"
+                      [class.active]="selectedPermFilter() === 'DENY'"
+                      (click)="selectedPermFilter.set('DENY')"
+                    >
+                      Deny
+                    </button>
+                  </div>
+                </div>
+
+                <button mat-icon-button (click)="refreshRules()" [disabled]="aclService.loading()" matTooltip="Refresh ACL policies" class="refresh-icon-btn">
+                  <mat-icon [class.spinning]="aclService.loading()">refresh</mat-icon>
+                </button>
+              </div>
+            </div>
+
+            <!-- Rules Table -->
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Principal</th>
+                    <th>Resource Type</th>
+                    <th>Resource Pattern</th>
+                    <th>Operation</th>
+                    <th>Permission</th>
+                    <th>Rule ID</th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (rule of filteredRules(); track rule.id) {
+                    <tr class="table-row">
+                      <!-- Principal -->
+                      <td>
+                        <div class="principal-tag">
+                          <mat-icon class="principal-icon">account_circle</mat-icon>
+                          <span class="principal-name">{{ rule.principal }}</span>
+                        </div>
+                      </td>
+
+                      <!-- Resource Type -->
+                      <td>
+                        <span class="badge" [ngClass]="getResourceBadgeClass(rule.resource_type)">
+                          {{ rule.resource_type }}
+                        </span>
+                      </td>
+
+                      <!-- Resource Pattern -->
+                      <td>
+                        <div class="resource-pattern-box">
+                          <code class="pattern-code">{{ rule.resource_name }}</code>
+                          @if (rule.resource_name.includes('*')) {
+                            <span class="wildcard-indicator" matTooltip="Wildcard pattern match">WILDCARD</span>
+                          }
+                        </div>
+                      </td>
+
+                      <!-- Operation -->
+                      <td>
+                        <span class="operation-badge op-{{ rule.operation.toLowerCase() }}">
+                          {{ rule.operation }}
+                        </span>
+                      </td>
+
+                      <!-- Permission -->
+                      <td>
+                        @if (rule.permission === 'ALLOW') {
+                          <span class="perm-badge perm-allow">
+                            <mat-icon>check_circle</mat-icon>
+                            <span>ALLOW</span>
+                          </span>
+                        } @else {
+                          <span class="perm-badge perm-deny">
+                            <mat-icon>cancel</mat-icon>
+                            <span>DENY</span>
+                          </span>
+                        }
+                      </td>
+
+                      <!-- Rule ID -->
+                      <td>
+                        <span class="rule-id" [matTooltip]="rule.id">{{ rule.id }}</span>
+                      </td>
+
+                      <!-- Actions -->
+                      <td class="text-right">
+                        <button
+                          mat-icon-button
+                          color="warn"
+                          (click)="deleteRule(rule)"
+                          matTooltip="Delete ACL rule"
+                          class="delete-btn"
+                          aria-label="Delete ACL rule"
+                        >
+                          <mat-icon>delete_outline</mat-icon>
+                        </button>
+                      </td>
+                    </tr>
+                  } @empty {
+                    <tr>
+                      <td colspan="7" class="empty-state">
+                        <mat-icon>search_off</mat-icon>
+                        <p class="empty-title">No Matching ACL Policies</p>
+                        <p class="empty-subtitle">Adjust your search filters or click "Create ACL Policy" to define new rules.</p>
+                        <button mat-stroked-button color="primary" (click)="openCreateAclDialog()">
+                          <mat-icon>add_moderator</mat-icon>
+                          <span>Create ACL Policy</span>
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
         </div>
       </mat-tab>
 
@@ -377,6 +410,9 @@
             </div>
 
             <div class="tab-actions-right">
+              <button mat-icon-button (click)="refreshUsers()" matTooltip="Refresh Principals" class="refresh-icon-btn">
+                <mat-icon>refresh</mat-icon>
+              </button>
               <button mat-stroked-button color="primary" (click)="openCreateUserDialog()">
                 <mat-icon>person_add</mat-icon>
                 <span>Add Principal</span>
@@ -442,7 +478,7 @@
                     </td>
 
                     <td>
-                      <span class="timestamp-text">{{ user.created_at || 'Default Seed' }}</span>
+                      <span class="timestamp-text">{{ user.created_at || 'System' }}</span>
                     </td>
                   </tr>
                 } @empty {

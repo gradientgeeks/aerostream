@@ -317,6 +317,16 @@
           color: #fbbf24;
         }
       }
+
+      &.chip-stopped.active {
+        background: rgba(100, 116, 139, 0.15);
+        border-color: #64748b;
+        color: #475569;
+
+        :host-context(.dark-theme) & {
+          color: #94a3b8;
+        }
+      }
     }
   }
 }
@@ -536,6 +546,99 @@
       color: #fbbf24;
       background: rgba(245, 158, 11, 0.15);
     }
+  }
+
+  &.state-stopped {
+    background: rgba(100, 116, 139, 0.12);
+    color: #475569;
+    border: 1px solid rgba(100, 116, 139, 0.3);
+
+    .state-dot {
+      background: #64748b;
+    }
+
+    :host-context(.dark-theme) & {
+      color: #94a3b8;
+      background: rgba(100, 116, 139, 0.15);
+    }
+  }
+
+  &.state-failed {
+    background: rgba(239, 68, 68, 0.12);
+    color: #b91c1c;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+
+    .state-dot {
+      background: #ef4444;
+    }
+
+    :host-context(.dark-theme) & {
+      color: #f87171;
+      background: rgba(239, 68, 68, 0.15);
+    }
+  }
+
+  &.state-unassigned {
+    background: rgba(148, 163, 184, 0.12);
+    color: #64748b;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+
+    .state-dot {
+      background: #94a3b8;
+    }
+  }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.empty-cluster-state {
+  background: var(--app-surface, #0e1524);
+  border: 1px dashed var(--app-border, rgba(0, 229, 255, 0.25));
+  border-radius: 12px;
+
+  .empty-state-icon-circle {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--app-nested-bg, rgba(255, 255, 255, 0.05));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .empty-hero-icon {
+      font-size: 32px;
+      width: 32px;
+      height: 32px;
+      color: var(--app-primary, #0891b2);
+    }
+  }
+
+  .empty-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--app-text, #ffffff);
+    margin: 0;
+  }
+
+  .empty-subtitle {
+    color: var(--app-text-muted, #94a3b8);
+    font-size: 14px;
+  }
+
+  .deploy-empty-btn {
+    font-weight: 600;
+    border-radius: 8px;
   }
 }
 

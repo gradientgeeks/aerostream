@@ -9,6 +9,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ConnectorPlugin } from '../../models/connector.model';
 import { ConnectorService } from '../../services/connector.service';
 
@@ -36,6 +37,7 @@ interface ConfigEntry {
     MatIconModule,
     MatTooltipModule,
     MatDividerModule,
+    MatSnackBarModule,
   ],
   templateUrl: './deploy-connector-dialog.component.html',
   styleUrl: './deploy-connector-dialog.component.scss',
@@ -44,6 +46,7 @@ export class DeployConnectorDialogComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   readonly connectorService = inject(ConnectorService);
   private readonly dialogRef = inject(MatDialogRef<DeployConnectorDialogComponent>);
+  private readonly snackBar = inject(MatSnackBar);
 
   readonly plugins = this.connectorService.plugins;
   readonly isSubmitting = signal(false);
@@ -54,8 +57,18 @@ export class DeployConnectorDialogComponent implements OnInit {
   constructor(@Inject(MAT_DIALOG_DATA) public data?: DeployConnectorDialogData) {}
 
   ngOnInit(): void {
+    if (this.plugins().length === 0) {
+      this.connectorService.loadPlugins().subscribe((loadedPlugins) => {
+        if (loadedPlugins.length > 0 && !this.form?.get('class')?.value) {
+          const selected = this.data?.presetClass || loadedPlugins[0].class;
+          this.form?.patchValue({ class: selected });
+          this.loadTemplateForClass(selected);
+        }
+      });
+    }
+
     const defaultPlugin = this.plugins().find((p) => p.class === this.data?.presetClass) || this.plugins()[0];
-    const initialClass = defaultPlugin?.class || 'HttpWebhookSinkConnector';
+    const initialClass = defaultPlugin?.class || this.data?.presetClass || 'HttpWebhookSinkConnector';
 
     this.form = this.fb.group({
       name: [
@@ -146,6 +159,10 @@ export class DeployConnectorDialogComponent implements OnInit {
         },
         error: (err) => {
           this.isSubmitting.set(false);
+          const errMsg = err?.error?.error || err?.message || 'Failed to deploy connector';
+          this.snackBar.open(`Error deploying connector: ${errMsg}`, 'Dismiss', {
+            duration: 5000,
+          });
           console.error('Failed to create connector:', err);
         },
       });

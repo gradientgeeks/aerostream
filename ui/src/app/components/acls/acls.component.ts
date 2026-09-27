@@ -168,7 +168,19 @@ export class AclsComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.refresh();
+  }
+
+  refresh(): void {
     this.aclService.refreshAll();
+  }
+
+  refreshRules(): void {
+    this.aclService.loadRules();
+  }
+
+  refreshUsers(): void {
+    this.aclService.loadUsers();
   }
 
   openCreateAclDialog(): void {
@@ -215,8 +227,9 @@ export class AclsComponent implements OnInit {
             verticalPosition: 'bottom',
           });
         },
-        error: () => {
-          this.snackBar.open('Failed to delete ACL rule', 'Close', { duration: 3000 });
+        error: (err) => {
+          const msg = err?.error?.message || 'Failed to delete ACL rule';
+          this.snackBar.open(msg, 'Close', { duration: 3000 });
         },
       });
     }
@@ -236,7 +249,7 @@ export class AclsComponent implements OnInit {
     }
 
     this.aclService
-      .testAuthorization({
+      .testAcl({
         principal,
         resource_type: val.resource_type,
         resource_name: val.resource_name.trim(),
@@ -248,9 +261,10 @@ export class AclsComponent implements OnInit {
           this.lastEvaluatedAt.set(new Date().toLocaleTimeString());
           this.isEvaluating.set(false);
         },
-        error: () => {
+        error: (err) => {
           this.isEvaluating.set(false);
-          this.snackBar.open('Failed to evaluate policy on controller', 'Close', { duration: 3000 });
+          const msg = err?.error?.message || 'Failed to evaluate policy on controller';
+          this.snackBar.open(msg, 'Close', { duration: 3000 });
         },
       });
   }
