@@ -8,9 +8,9 @@ export KAFKA_IMAGE="${KAFKA_IMAGE:-apache/kafka:latest}"
 export REDPANDA_IMAGE="${REDPANDA_IMAGE:-redpandadata/redpanda:latest}"
 
 # AeroStream images are built from the code under test (see COMMANDS.md): TAG is "main" or "integration".
-export AERO_TAG="${AERO_TAG:-integration}"
-export AERO_BROKER_IMAGE="aerostream-broker:${AERO_TAG}"
-export AERO_CONTROLLER_IMAGE="${AERO_CONTROLLER_IMAGE:-aerostream-controller:${AERO_TAG}}"
+export AERO_TAG="${AERO_TAG:-quay}"
+export AERO_BROKER_IMAGE="${AERO_BROKER_IMAGE:-quay.io/gradientgeeks/aerostream:latest}"
+export AERO_CONTROLLER_IMAGE="${AERO_CONTROLLER_IMAGE:-quay.io/gradientgeeks/aerostream:latest}"
 export AERO_CLIENT="${AERO_CLIENT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/client/bin/client}"
 
 # Container names.

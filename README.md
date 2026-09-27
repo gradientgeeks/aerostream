@@ -73,7 +73,10 @@ docker run -d --name aerostream \
   quay.io/gradientgeeks/aerostream:latest
 ```
 
-> 📖 **Developer Guide**: For comprehensive multi-language code snippets (Python, .NET, Node.js, Java, REST) and Docker Compose instructions, see the **[Docker Quickstart Guide](docs/DOCKER_QUICKSTART.md)**.
+> 📖 **Deployment Quickstart Guides**:
+> * 🐳 **[Docker Quickstart Guide](docs/DOCKER_QUICKSTART.md)**: 30-second local setup with single all-in-one container (`quay.io/gradientgeeks/aerostream:latest`), port mapping, and client samples.
+> * ☸️ **[Kubernetes Quickstart Guide](docs/K8S_QUICKSTART.md)**: Production deployment using standard `kubectl` manifests, headless services, StatefulSets, and automated zero-downtime draining.
+> * ⎈ **[Helm Quickstart Guide](docs/HELM_QUICKSTART.md)**: Official Helm v3 chart installation, values customization, S3 tiered storage, and rack-aware zone placement.
 
 ### Accessing Endpoints:
 * **Web Console UI**: [http://localhost:9001/aerostream/console](http://localhost:9001/aerostream/console)

@@ -34,6 +34,9 @@ Choose your path based on your role:
 * **[Benchmark Results & Process](../benchmarks/BENCHMARK.md)**: Kafka / Redpanda / AeroStream under strict container limits (`2 vCPU, 2 GB RAM`), with scripts, methodology and caveats, highlighting the 13x throughput advantage at 50 MB payloads.
 
 ### 2. 🚀 Application Developers & Integrators
+* **[Docker Quickstart Guide](DOCKER_QUICKSTART.md)**: 30-second local setup with single all-in-one container (`quay.io/gradientgeeks/aerostream:latest`), port mapping, and client samples.
+* **[Kubernetes Quickstart Guide](K8S_QUICKSTART.md)**: Production deployment using standard `kubectl` manifests, headless services, StatefulSets, and automated zero-downtime draining.
+* **[Helm Quickstart Guide](HELM_QUICKSTART.md)**: Official Helm v3 chart installation, values customization, S3 tiered storage, and rack-aware zone placement.
 * **[REST & Wire Protocol API Reference](API_REFERENCE.md)**: Complete HTTP REST API schemas, request/response payloads, and binary Kafka Wire Protocol frame structures (`Produce`, `Fetch`, `Metadata`, `ApiVersions`, `InitProducerId`).
 * **[Python FastAPI Microservice Example](../examples/fastapi-app/README.md)**: Production-ready sample backend demonstrating asynchronous dual-protocol streaming (Kafka wire framing over TCP + HTTP REST) and background consumer workers.
 * **Schema Governance & Built-in Registry**: Confluent-compatible schema evolution for Avro, Protobuf, and JSON Schema contracts (see [API Reference](API_REFERENCE.md#5-schema-registry-api)).
@@ -41,7 +44,8 @@ Choose your path based on your role:
 
 ### 3. 🛠️ Platform Engineers & DevOps (SRE)
 * **[Operator & Deployment Guide](OPERATOR_GUIDE.md)**: Production deployment on bare-metal / VMs, systemd unit templates, kernel tuning (`sysctl`), and multi-node cluster configuration.
-* **[Kubernetes Deployment Guide](../deploy/k8s/)**: Helm-free, production-ready StatefulSet manifests with headless services, persistent volume claims, and automated `preStop` scale-down hooks.
+* **[Kubernetes StatefulSets Manifests](../deploy/k8s/)** & **[K8s Quickstart](K8S_QUICKSTART.md)**: Helm-free, production-ready StatefulSet manifests with headless services, persistent volume claims, and automated `preStop` scale-down hooks.
+* **[Helm Chart](../deploy/helm/aerostream/)** & **[Helm Quickstart](HELM_QUICKSTART.md)**: Multi-replica HA deployments with automated testing and value profiles.
 * **Cluster Lifecycle & Zero-Downtime Operations**: Step-by-step procedures for bootstrapping, graceful broker partition draining (`POST /api/brokers/{id}/drain`), and Raft consensus node removal (`/leave`) (see [Operator Guide](OPERATOR_GUIDE.md#3-cluster-lifecycle-management)).
 * **[Troubleshooting & Operational Diagnostics](OPERATOR_GUIDE.md#6-troubleshooting--operational-diagnostics)**: Common error signatures (e.g. `Invalid protocol magic bytes`), dual-listener port routing, and socket connection isolation.
 
