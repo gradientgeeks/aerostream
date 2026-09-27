@@ -18,7 +18,7 @@ for w in "${WORKLOADS[@]}"; do
     case "$SYS" in
       kafka|redpanda|aerostream-kafka)
         BOOT=$KAFKA_BOOTSTRAP; [ "$SYS" = redpanda ] && BOOT=$REDPANDA_BOOTSTRAP; [ "$SYS" = aerostream-kafka ] && BOOT=$AERO_KAFKA_BOOTSTRAP
-        docker run --rm --network host "$KAFKA_IMAGE" /opt/kafka/bin/kafka-producer-perf-test.sh \
+        docker run --rm --network host -e KAFKA_HEAP_OPTS="-Xmx2g" "$KAFKA_IMAGE" /opt/kafka/bin/kafka-producer-perf-test.sh \
           --topic "$TOPIC" --num-records "$RECORDS" --record-size "$SIZE" --throughput -1 \
           --producer-props bootstrap.servers="$BOOT" acks=1 max.request.size=$MAX_MSG $EXTRA >"$LOG" 2>&1 || true ;;
       aerostream)

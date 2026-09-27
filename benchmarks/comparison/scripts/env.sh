@@ -33,8 +33,8 @@ export MAX_MSG=67108864
 export WORKLOADS=(
   "100B 100 100000 10 10000 "
   "1KB 1024 50000 10 5000 "
-  "1MB 1048576 500 10 50 "
-  "10MB 10485760 50 10 5 buffer.memory=134217728"
-  "50MB 52428800 10 5 2 buffer.memory=268435456"
+  "1MB 1048576 500 10 50 send.buffer.bytes=4194304 receive.buffer.bytes=4194304"
+  "10MB 10485760 50 10 5 buffer.memory=268435456 send.buffer.bytes=4194304 receive.buffer.bytes=4194304"
+  "50MB 52428800 10 5 2 buffer.memory=536870912 send.buffer.bytes=8388608 receive.buffer.bytes=8388608"
 )
 export RUNS="${RUNS:-3}"

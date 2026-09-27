@@ -26,7 +26,19 @@ impl KafkaServer {
     }
 
     pub async fn run(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let listener = TcpListener::bind(self.addr).await?;
+        let std_listener = std::net::TcpListener::bind(self.addr)?;
+        std_listener.set_nonblocking(true)?;
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::io::AsRawFd;
+            let fd = std_listener.as_raw_fd();
+            unsafe {
+                let buf_size: libc::c_int = 8 * 1024 * 1024; // 8MB buffer for TCP window scale factor negotiation
+                libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+                libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+            }
+        }
+        let listener = TcpListener::from_std(std_listener)?;
         info!(
             "[AeroMQ Kafka] Kafka Wire Protocol TCP listener active on {}",
             self.addr
@@ -62,7 +74,7 @@ async fn handle_kafka_connection(
         use std::os::unix::io::AsRawFd;
         let fd = stream.as_raw_fd();
         unsafe {
-            let buf_size: libc::c_int = 4 * 1024 * 1024; // 4MB buffer for 1MB-50MB Kafka batches
+            let buf_size: libc::c_int = 8 * 1024 * 1024; // 8MB buffer for 1MB-50MB Kafka batches
             libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
             libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
             let quickack: libc::c_int = 1;
@@ -90,6 +102,7 @@ async fn handle_kafka_connection(
         }
 
         // Reuse connection buffer capacity; physical pages stay resident across frames:
+        frame_buf.clear();
         frame_buf.resize(frame_len as usize, 0);
         stream.read_exact(&mut frame_buf).await?;
 
