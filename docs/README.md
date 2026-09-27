@@ -28,6 +28,7 @@ Choose your path based on your role:
 ```
 
 ### 1. 🏛️ System Architects & Technical Evaluators
+* **[Distributed Systems Engineering & High-Efficiency Systems Programming Guide](DISTRIBUTED_SYSTEMS_DESIGN.md)**: Publication-grade engineering treatise covering dual-engine separation, mechanical sympathy (L1/L2/L3 cache lines, false sharing, page faults), Go runtime patterns (`sync.Pool`, Raft FSM snapshotting, lock-free RCU registry), Rust high-performance patterns (`hashbrown::Equivalent`, scoped locking, `write_all_at`, hardware SSE4.2 CRC32C, 2PC WAL), and 4-way container benchmark analysis.
 * **[Architecture Deep-Dive](ARCHITECTURE.md)**: Exhaustive technical analysis of the dual-engine design, HashiCorp Raft consensus, Rust zero-copy `sendfile(2)` kernel dispatch, memory-mapped (`mmap`) append-only logs, and the 3-thread deterministic execution model.
 * **[Feature Comparison & Evolution Roadmap](FEATURE_COMPARISON_AND_ROADMAP.md)**: Head-to-head comparison against **Apache Kafka** and **Redpanda**, detailing implemented capabilities (Phases 1–8) and the Next-Generation Enterprise Horizon (Phases 9–14).
 * **[Benchmark Results & Process](../benchmarks/BENCHMARK.md)**: Kafka / Redpanda / AeroStream under strict container limits (`2 vCPU, 2 GB RAM`), with scripts, methodology and caveats, highlighting the 13x throughput advantage at 50 MB payloads.

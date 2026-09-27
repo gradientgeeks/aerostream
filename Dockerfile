@@ -9,7 +9,7 @@ COPY ui/ ./
 RUN npm run build -- --base-href /aerostream/console/
 
 # --- Stage 2: Build Go Controller ---
-FROM golang:1.22-alpine AS controller-builder
+FROM golang:1.24-alpine AS controller-builder
 RUN apk add --no-cache ca-certificates git tzdata
 WORKDIR /app
 COPY go-controller/go.mod go-controller/go.sum ./go-controller/
@@ -32,7 +32,7 @@ COPY rust-broker/src/ ./rust-broker/src/
 RUN cd rust-broker && cargo build --release
 
 # --- Stage 4: Minimal Debian Runtime ---
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl procps bash && \
     rm -rf /var/lib/apt/lists/* && \

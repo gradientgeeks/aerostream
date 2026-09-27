@@ -13,6 +13,7 @@ use super::{IcebergConfig, IcebergTopicConfig};
 use crate::kafka::handlers::parse_records;
 use crate::log::LogManager;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct TopicStatus {
     pub topic: String,
@@ -85,17 +86,20 @@ impl IcebergManager {
     }
 
     /// Runtime enable (e.g. from a topic config `iceberg.enabled=true`).
+    #[allow(dead_code)]
     pub async fn enable_topic(&self, tc: IcebergTopicConfig) -> Result<(), String> {
         build_columns(&tc)?;
         self.topics.lock().await.insert(tc.name.clone(), tc);
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn disable_topic(&self, topic: &str) {
         self.topics.lock().await.remove(topic);
         self.tables.lock().await.remove(topic);
     }
 
+    #[allow(dead_code)]
     pub async fn status(&self) -> Vec<TopicStatus> {
         let topics = self.topics.lock().await.clone();
         let tables = self.tables.lock().await;

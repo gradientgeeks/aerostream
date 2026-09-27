@@ -118,6 +118,7 @@ async fn handle_kafka_connection(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn handle_kafka_frame(
     frame: &[u8],
     log_manager: &Arc<LogManager>,
