@@ -1,0 +1,646 @@
+<div class="showcase-page">
+  <!-- 1. HERO SECTION -->
+  <section class="hero-section">
+    <div class="hero-container">
+      <div class="hero-badge-row">
+        <span class="version-pill">
+          <span class="pulse-dot"></span>
+          AeroStream v2.0 Release
+        </span>
+        <span class="engine-pill go-pill">Go 1.26 Control Plane</span>
+        <span class="engine-pill rust-pill">Rust 1.98.1 Data Plane</span>
+        <span class="engine-pill kafka-pill">Kafka Port 9092</span>
+      </div>
+
+      <h1 class="hero-title">
+        The Next-Generation <br class="hidden sm:inline" />
+        <span class="text-gradient-dual">Dual-Engine</span> Distributed Streaming Platform
+      </h1>
+
+      <p class="hero-subtitle">
+        Consensus agility and governance powered by <strong>Go Raft</strong>. Ultra-low latency, hardware CRC32C,
+        and zero-copy log throughput powered by <strong>Rust</strong>. A true modern, high-efficiency drop-in replacement
+        for Apache Kafka and Redpanda.
+      </p>
+
+      <div class="hero-actions">
+        <a routerLink="/docs" class="btn-primary">
+          <mat-icon>menu_book</mat-icon>
+          Explore Interactive Docs
+        </a>
+        <a href="#benchmarks" class="btn-secondary">
+          <mat-icon>speed</mat-icon>
+          View Verified Benchmarks
+        </a>
+        <a href="#quickstart" class="btn-outline">
+          <mat-icon>terminal</mat-icon>
+          Quickstart in 30s
+        </a>
+      </div>
+
+      <!-- Quick Command Bar -->
+      <div class="quick-command-card">
+        <div class="command-prefix">
+          <mat-icon class="terminal-icon">terminal</mat-icon>
+          <span class="command-text">docker run -d -p 9092:9092 -p 9001:9001 gradientgeeks/aerostream:latest</span>
+        </div>
+        <button class="copy-btn" (click)="copyDockerCommand()" matTooltip="Copy docker command">
+          <mat-icon>{{ copiedCommand() ? 'check' : 'content_copy' }}</mat-icon>
+          <span>{{ copiedCommand() ? 'Copied!' : 'Copy' }}</span>
+        </button>
+      </div>
+
+      <!-- Key Verified Metric Cards -->
+      <div class="hero-metrics-grid">
+        <div class="metric-card">
+          <div class="metric-value text-gradient-cyan">1,064 MB/s</div>
+          <div class="metric-label">Peak Native Throughput</div>
+          <div class="metric-detail">1,064 msg/s on 1 MB payloads</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value text-gradient-dual">60 µs</div>
+          <div class="metric-label">Median Latency (p50)</div>
+          <div class="metric-detail">Sub-millisecond delivery time</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value text-secondary">1.29 MiB</div>
+          <div class="metric-label">Idle Memory Footprint</div>
+          <div class="metric-detail">70x lighter than Apache Kafka</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value text-accent">Port 9092</div>
+          <div class="metric-label">Kafka Wire Protocol</div>
+          <div class="metric-detail">Zero code change for Kafka clients</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. DUAL-ENGINE ARCHITECTURE VISUALIZER -->
+  <section class="section architecture-section" id="architecture">
+    <div class="section-header">
+      <span class="section-tag">ENGINEERING SYNERGY</span>
+      <h2 class="section-title">Why Dual-Engine? Decoupling Consensus from Log I/O</h2>
+      <p class="section-desc">
+        Traditional single-runtime message brokers force an impossible tradeoff: JVM garbage collection jitter or
+        complex C++ control plane maintenance. AeroStream assigns each subsystem to its optimal language runtime.
+      </p>
+    </div>
+
+    <div class="architecture-visualizer">
+      <!-- Left: Engine Split View -->
+      <div class="engine-split-container">
+        <!-- Go Control Plane Box -->
+        <div class="engine-box go-box">
+          <div class="engine-header">
+            <div class="engine-title-group">
+              <span class="engine-logo-badge go-badge">GO</span>
+              <div>
+                <h3 class="engine-title">Go Raft Control Plane</h3>
+                <span class="engine-subtitle">Ports 9001 (REST) & 8001 (gRPC / Raft)</span>
+              </div>
+            </div>
+            <span class="runtime-badge">Go 1.26 • Green Tea GC</span>
+          </div>
+
+          <div class="engine-components-list">
+            <button
+              class="component-btn"
+              [class.active]="selectedNodeId() === 'go-raft'"
+              (click)="selectNode('go-raft')">
+              <mat-icon>hub</mat-icon>
+              <span>HashiCorp Raft Quorum & Distributed FSM</span>
+            </button>
+            <button
+              class="component-btn"
+              [class.active]="selectedNodeId() === 'go-governance'"
+              (click)="selectNode('go-governance')">
+              <mat-icon>security</mat-icon>
+              <span>Schema Registry (Avro/JSON) & RBAC Engine</span>
+            </button>
+            <div class="component-item">
+              <mat-icon>transform</mat-icon>
+              <span>In-Broker WASM & Stream Data Transforms</span>
+            </div>
+            <div class="component-item">
+              <mat-icon>handshake</mat-icon>
+              <span>Cooperative Sticky Rebalancer (KIP-848)</span>
+            </div>
+            <div class="component-item">
+              <mat-icon>cable</mat-icon>
+              <span>Kafka Connect Compatible Connector Workers</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sync Bridge -->
+        <div class="sync-bridge">
+          <div class="bridge-line"></div>
+          <div class="bridge-badge">
+            <mat-icon>swap_horiz</mat-icon>
+            <span>Internal gRPC / Protobuf Metadata Sync</span>
+          </div>
+          <div class="bridge-line"></div>
+        </div>
+
+        <!-- Rust Data Plane Box -->
+        <div class="engine-box rust-box">
+          <div class="engine-header">
+            <div class="engine-title-group">
+              <span class="engine-logo-badge rust-badge">RUST</span>
+              <div>
+                <h3 class="engine-title">Rust Storage Data Plane</h3>
+                <span class="engine-subtitle">Ports 9091 (Native) & 9092 (Kafka Wire)</span>
+              </div>
+            </div>
+            <span class="runtime-badge">Rust 1.98.1 • Edition 2024</span>
+          </div>
+
+          <div class="engine-components-list">
+            <button
+              class="component-btn"
+              [class.active]="selectedNodeId() === 'rust-storage'"
+              (click)="selectNode('rust-storage')">
+              <mat-icon>sd_storage</mat-icon>
+              <span>Zero-Copy Commit Log & In-Memory Length Tracking</span>
+            </button>
+            <button
+              class="component-btn"
+              [class.active]="selectedNodeId() === 'rust-kafka'"
+              (click)="selectNode('rust-kafka')">
+              <mat-icon>sync_alt</mat-icon>
+              <span>Kafka Protocol Listener (In-Place Offset Patching)</span>
+            </button>
+            <button
+              class="component-btn"
+              [class.active]="selectedNodeId() === 'rust-tiered'"
+              (click)="selectNode('rust-tiered')">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>Multi-Cloud Tiered Storage (S3, MinIO, GCS, Azure)</span>
+            </button>
+            <div class="component-item">
+              <mat-icon>memory</mat-icon>
+              <span>Hardware CRC32C (SSE4.2/ARMv8 @ 10.9 GB/s)</span>
+            </div>
+            <div class="component-item">
+              <mat-icon>bolt</mat-icon>
+              <span>Linux sendfile(2) Zero-Userspace Transfers</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Node Inspector Panel -->
+      <div class="node-inspector-card" [style.border-color]="selectedNode().color">
+        <div class="inspector-header">
+          <div class="inspector-title-row">
+            <mat-icon [style.color]="selectedNode().color">{{ selectedNode().icon }}</mat-icon>
+            <div>
+              <h4 class="inspector-title">{{ selectedNode().title }}</h4>
+              <span class="inspector-engine">{{ selectedNode().engine }}</span>
+            </div>
+          </div>
+          <span class="inspector-pill">Architecture Deep Dive</span>
+        </div>
+
+        <p class="inspector-summary">{{ selectedNode().summary }}</p>
+
+        <div class="inspector-details">
+          <div class="detail-item" *ngFor="let point of selectedNode().details">
+            <mat-icon class="detail-check">check_circle</mat-icon>
+            <span>{{ point }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. VERIFIED 4-WAY BENCHMARK DASHBOARD -->
+  <section class="section benchmarks-section" id="benchmarks">
+    <div class="section-header">
+      <span class="section-tag">EMPIRICAL MEASUREMENTS</span>
+      <h2 class="section-title">4-Way Containerized Performance Benchmarks</h2>
+      <p class="section-desc">
+        All systems benchmarked under identical hardware constraints (<code>--cpus=2.0 --memory=2g</code>) on Linux x86_64
+        using official Apache Kafka performance tools (<code>kafka-producer-perf-test.sh</code>) and the native client.
+      </p>
+    </div>
+
+    <!-- Metric Tabs -->
+    <div class="benchmark-controls">
+      <div class="metric-tab-group">
+        <button
+          class="metric-tab"
+          [class.active]="selectedMetric() === 'throughput'"
+          (click)="selectMetric('throughput')">
+          <mat-icon>speed</mat-icon>
+          <span>Throughput (MB/s)</span>
+        </button>
+        <button
+          class="metric-tab"
+          [class.active]="selectedMetric() === 'latency'"
+          (click)="selectMetric('latency')">
+          <mat-icon>timer</mat-icon>
+          <span>Median Latency (p50 ms)</span>
+        </button>
+        <button
+          class="metric-tab"
+          [class.active]="selectedMetric() === 'memory'"
+          (click)="selectMetric('memory')">
+          <mat-icon>memory</mat-icon>
+          <span>Resource Footprint</span>
+        </button>
+      </div>
+
+      <!-- Workload Pills -->
+      <div class="workload-pills" *ngIf="selectedMetric() !== 'memory'">
+        <button
+          *ngFor="let w of workloads; let i = index"
+          class="workload-pill"
+          [class.active]="selectedWorkloadIndex() === i"
+          (click)="selectWorkload(i)">
+          {{ w.label }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Benchmark Card -->
+    <div class="benchmark-results-container" *ngIf="selectedMetric() !== 'memory'">
+      <div class="workload-meta-banner">
+        <span>Workload: <strong>{{ currentWorkload().label }} ({{ currentWorkload().size }})</strong></span>
+        <span>Volume: <strong>{{ currentWorkload().records }}</strong></span>
+        <span>AeroStream Native: <strong class="text-primary">{{ currentWorkload().aeroNativeThroughput }}</strong></span>
+      </div>
+
+      <div class="comparison-grid">
+        <!-- Apache Kafka -->
+        <div class="comparison-card">
+          <div class="card-brand">
+            <span class="system-badge kafka-tag">Apache Kafka</span>
+            <span class="version-tag">v3.7 KRaft (JVM)</span>
+          </div>
+          <div class="metric-display">
+            <div class="primary-num">
+              {{ selectedMetric() === 'throughput' ? currentWorkload().kafkaThroughput : currentWorkload().kafkaLatency }}
+            </div>
+            <div class="sub-label">{{ selectedMetric() === 'throughput' ? 'Wire Throughput' : 'Median Latency (p50)' }}</div>
+          </div>
+          <div class="resource-tag">Idle: 304.5 MiB • Threads: 130</div>
+        </div>
+
+        <!-- Redpanda -->
+        <div class="comparison-card">
+          <div class="card-brand">
+            <span class="system-badge redpanda-tag">Redpanda</span>
+            <span class="version-tag">v24.1 (C++ Seastar)</span>
+          </div>
+          <div class="metric-display">
+            <div class="primary-num">
+              {{ selectedMetric() === 'throughput' ? currentWorkload().redpandaThroughput : currentWorkload().redpandaLatency }}
+            </div>
+            <div class="sub-label">{{ selectedMetric() === 'throughput' ? 'Wire Throughput' : 'Median Latency (p50)' }}</div>
+          </div>
+          <div class="resource-tag">Idle: 140.9 MiB • Threads: 10</div>
+        </div>
+
+        <!-- AeroStream Kafka Port -->
+        <div class="comparison-card highlight-card">
+          <div class="card-brand">
+            <span class="system-badge aero-kafka-tag">AeroStream (Kafka Port)</span>
+            <span class="version-tag">Port 9092 (Drop-In)</span>
+          </div>
+          <div class="metric-display">
+            <div class="primary-num text-primary">
+              {{ selectedMetric() === 'throughput' ? currentWorkload().aeroKafkaThroughput : currentWorkload().aeroKafkaLatency }}
+            </div>
+            <div class="sub-label">{{ selectedMetric() === 'throughput' ? 'Wire Throughput' : 'Median Latency (p50)' }}</div>
+          </div>
+          <div class="resource-tag highlight-res">Idle: 4.38 MiB • Peak: 114.4 MiB • Threads: 3</div>
+        </div>
+
+        <!-- AeroStream Native -->
+        <div class="comparison-card native-card">
+          <div class="card-brand">
+            <span class="system-badge aero-native-tag">AeroStream (Native Port)</span>
+            <span class="version-tag">Port 9091 (Zero-Copy)</span>
+          </div>
+          <div class="metric-display">
+            <div class="primary-num text-secondary">
+              {{ selectedMetric() === 'throughput' ? currentWorkload().aeroNativeThroughput : currentWorkload().aeroNativeLatency }}
+            </div>
+            <div class="sub-label">{{ selectedMetric() === 'throughput' ? 'Max Kernel Throughput' : 'Sub-millisecond Latency' }}</div>
+          </div>
+          <div class="resource-tag highlight-res">Idle: 1.29 MiB • Peak: 324.1 MiB • Threads: 3</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Memory Footprint Tab View -->
+    <div class="benchmark-results-container" *ngIf="selectedMetric() === 'memory'">
+      <div class="footprint-table-wrapper">
+        <table class="footprint-table">
+          <thead>
+            <tr>
+              <th>System Under Test</th>
+              <th>Idle Memory</th>
+              <th>Peak Memory (500 MB Burst)</th>
+              <th>Active OS Threads (PIDs)</th>
+              <th>Efficiency vs Kafka</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Apache Kafka (KRaft)</strong></td>
+              <td>304.5 MiB</td>
+              <td>1,454.1 MiB</td>
+              <td>130 threads</td>
+              <td>1x (Baseline)</td>
+            </tr>
+            <tr>
+              <td><strong>Redpanda (C++)</strong></td>
+              <td>140.9 MiB</td>
+              <td>1,385.5 MiB</td>
+              <td>10 threads</td>
+              <td>1.05x memory efficiency</td>
+            </tr>
+            <tr class="highlight-row">
+              <td><strong>AeroStream (Kafka Port)</strong></td>
+              <td><strong class="text-primary">4.38 MiB</strong></td>
+              <td><strong class="text-primary">114.4 MiB</strong></td>
+              <td><strong class="text-primary">3 threads</strong></td>
+              <td><span class="badge-win">12.7x lower peak memory (43x fewer threads)</span></td>
+            </tr>
+            <tr class="native-row">
+              <td><strong>AeroStream (Native Port)</strong></td>
+              <td><strong class="text-secondary">1.29 MiB</strong></td>
+              <td><strong class="text-secondary">324.1 MiB</strong></td>
+              <td><strong class="text-secondary">3 threads</strong></td>
+              <td><span class="badge-win">70x lower idle memory</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. CORE CAPABILITIES (8 FEATURE PILLARS) -->
+  <section class="section features-section" id="features">
+    <div class="section-header">
+      <span class="section-tag">FULL-STACK STREAMING</span>
+      <h2 class="section-title">Built for Modern Mission-Critical Architectures</h2>
+      <p class="section-desc">
+        AeroStream combines enterprise-grade streaming governance, multi-cloud object storage, and hardware-accelerated
+        zero-copy execution into a single, cohesive binary.
+      </p>
+    </div>
+
+    <div class="features-grid">
+      <!-- 1 -->
+      <div class="feature-card">
+        <div class="feature-icon-box go-icon">
+          <mat-icon>layers</mat-icon>
+        </div>
+        <h3 class="feature-title">Dual-Engine Synergy</h3>
+        <p class="feature-desc">
+          Raft consensus state machines in Go are completely decoupled from microsecond commit log disk I/O in Rust,
+          preventing consensus latency spikes from stalling network data planes.
+        </p>
+        <span class="feature-tag">Architecture</span>
+      </div>
+
+      <!-- 2 -->
+      <div class="feature-card">
+        <div class="feature-icon-box rust-icon">
+          <mat-icon>sync_alt</mat-icon>
+        </div>
+        <h3 class="feature-title">Kafka Protocol Drop-In</h3>
+        <p class="feature-desc">
+          Direct wire protocol support on TCP port 9092. Works instantly with <code>kafka-python</code>, <code>aiokafka</code>,
+          Spring Kafka, <code>librdkafka</code>, and Confluent CLI without proxy layers.
+        </p>
+        <span class="feature-tag">Wire Protocol</span>
+      </div>
+
+      <!-- 3 -->
+      <div class="feature-card">
+        <div class="feature-icon-box cloud-icon">
+          <mat-icon>cloud_upload</mat-icon>
+        </div>
+        <h3 class="feature-title">Multi-Cloud Tiered Storage</h3>
+        <p class="feature-desc">
+          Automated rolling of closed segments to AWS S3, MinIO, Google Cloud Storage (GCS), or Azure Blob for infinite
+          retention at low cost while keeping hot logs on local NVMe.
+        </p>
+        <span class="feature-tag">Tiered Storage</span>
+      </div>
+
+      <!-- 4 -->
+      <div class="feature-card">
+        <div class="feature-icon-box purple-icon">
+          <mat-icon>schema</mat-icon>
+        </div>
+        <h3 class="feature-title">Built-In Schema Registry</h3>
+        <p class="feature-desc">
+          Confluent-compatible REST endpoints for Avro, Protobuf, and JSON schemas with BACKWARD, FORWARD, and FULL
+          compatibility validation embedded directly in the cluster controller.
+        </p>
+        <span class="feature-tag">Governance</span>
+      </div>
+
+      <!-- 5 -->
+      <div class="feature-card">
+        <div class="feature-icon-box cyan-icon">
+          <mat-icon>transform</mat-icon>
+        </div>
+        <h3 class="feature-title">In-Broker Stream Transforms</h3>
+        <p class="feature-desc">
+          Real-time stream filtering, JSON mapping, and automated PII data masking powered by sandboxed WASM runners
+          executing directly inside the broker without separate Flink clusters.
+        </p>
+        <span class="feature-tag">Processing</span>
+      </div>
+
+      <!-- 6 -->
+      <div class="feature-card">
+        <div class="feature-icon-box red-icon">
+          <mat-icon>admin_panel_settings</mat-icon>
+        </div>
+        <h3 class="feature-title">Enterprise RBAC & ACLs</h3>
+        <p class="feature-desc">
+          Granular Topic, Group, and Cluster ACL rules supporting principal roles (Super Admin, Operator, Producer, Consumer)
+          and wildcard pattern matching (e.g. <code>orders-*</code>).
+        </p>
+        <span class="feature-tag">Security</span>
+      </div>
+
+      <!-- 7 -->
+      <div class="feature-card">
+        <div class="feature-icon-box green-icon">
+          <mat-icon>handshake</mat-icon>
+        </div>
+        <h3 class="feature-title">Cooperative Sticky Rebalance</h3>
+        <p class="feature-desc">
+          Implements the KIP-848 cooperative rebalancing protocol to eliminate stop-the-world partition revocations,
+          ensuring smooth, uninterrupted consumer stream processing during pod restarts.
+        </p>
+        <span class="feature-tag">Consumers</span>
+      </div>
+
+      <!-- 8 -->
+      <div class="feature-card">
+        <div class="feature-icon-box amber-icon">
+          <mat-icon>cable</mat-icon>
+        </div>
+        <h3 class="feature-title">Connectors Ecosystem</h3>
+        <p class="feature-desc">
+          Built-in Kafka Connect REST API compatibility supporting automated S3 archival sinks, HTTP webhook dispatches,
+          Change Data Capture (CDC), and Elasticsearch indexing.
+        </p>
+        <span class="feature-tag">Integrations</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. INTERACTIVE QUICKSTART TABS -->
+  <section class="section quickstart-section" id="quickstart">
+    <div class="section-header">
+      <span class="section-tag">GET STARTED</span>
+      <h2 class="section-title">Up and Running in 30 Seconds</h2>
+      <p class="section-desc">
+        Deploy a complete multi-broker cluster with Docker Compose or connect your existing Kafka applications with
+        zero configuration changes.
+      </p>
+    </div>
+
+    <div class="quickstart-box">
+      <div class="quickstart-tabs">
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'docker'"
+          (click)="selectTab('docker')">
+          <mat-icon>layers</mat-icon> Docker Compose
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'python'"
+          (click)="selectTab('python')">
+          <mat-icon>code</mat-icon> Python (Kafka Client)
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'go'"
+          (click)="selectTab('go')">
+          <mat-icon>terminal</mat-icon> Go Native SDK
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'java'"
+          (click)="selectTab('java')">
+          <mat-icon>coffee</mat-icon> Java / Spring
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'rest'"
+          (click)="selectTab('rest')">
+          <mat-icon>http</mat-icon> cURL / REST API
+        </button>
+      </div>
+
+      <!-- Docker Compose Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'docker'">
+        <div class="code-header">
+          <span>docker-compose.yml</span>
+          <button class="snippet-copy" (click)="copySnippet(dockerSnippet, 'docker')">
+            <mat-icon>{{ copiedSnippet() === 'docker' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'docker' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="dockerSnippet"></code></pre>
+      </div>
+
+      <!-- Python Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'python'">
+        <div class="code-header">
+          <span>producer.py (Standard Kafka Python Client)</span>
+          <button class="snippet-copy" (click)="copySnippet(pythonSnippet, 'python')">
+            <mat-icon>{{ copiedSnippet() === 'python' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'python' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="pythonSnippet"></code></pre>
+      </div>
+
+      <!-- Go Native Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'go'">
+        <div class="code-header">
+          <span>main.go (AeroStream Native High-Speed Client)</span>
+          <button class="snippet-copy" (click)="copySnippet(goSnippet, 'go')">
+            <mat-icon>{{ copiedSnippet() === 'go' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'go' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="goSnippet"></code></pre>
+      </div>
+
+      <!-- Java / Spring Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'java'">
+        <div class="code-header">
+          <span>application.yml (Spring Kafka Drop-In)</span>
+          <button class="snippet-copy" (click)="copySnippet(javaSnippet, 'java')">
+            <mat-icon>{{ copiedSnippet() === 'java' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'java' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="javaSnippet"></code></pre>
+      </div>
+
+      <!-- REST API Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'rest'">
+        <div class="code-header">
+          <span>cURL (HTTP REST Ingestion & Schema Registry)</span>
+          <button class="snippet-copy" (click)="copySnippet(restSnippet, 'rest')">
+            <mat-icon>{{ copiedSnippet() === 'rest' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'rest' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="restSnippet"></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. CALL TO ACTION & FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-cta-card">
+        <div class="footer-cta-text">
+          <h3>Ready to Elevate Your Distributed Event Streams?</h3>
+          <p>Read the comprehensive technical architecture guide or explore the live cluster documentation.</p>
+        </div>
+        <div class="footer-cta-buttons">
+          <a routerLink="/docs" class="btn-primary">
+            <mat-icon>menu_book</mat-icon>
+            Read Documentation
+          </a>
+          <a href="https://github.com/gradientgeeks/AeroMQ" target="_blank" rel="noopener" class="btn-secondary">
+            <mat-icon>code</mat-icon>
+            GitHub Repository
+          </a>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div class="footer-left">
+          <app-turbine-logo [size]="28" [glow]="false"></app-turbine-logo>
+          <span class="footer-brand">AeroStream</span>
+          <span class="footer-copy">© 2026 Gradient Geeks. Published under the Apache 2.0 / MIT License.</span>
+        </div>
+        <div class="footer-links">
+          <a routerLink="/docs">Documentation</a>
+          <a href="#architecture">Architecture</a>
+          <a href="#benchmarks">Benchmarks</a>
+          <a href="https://gradientgeeks.com" target="_blank" rel="noopener">Gradient Geeks</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+</div>

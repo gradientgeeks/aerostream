@@ -1,0 +1,150 @@
+@use '@angular/material' as mat;
+@use "tailwindcss";
+
+html {
+  @include mat.theme((
+    color: (
+      theme-type: dark,
+      primary: mat.$cyan-palette,
+      tertiary: mat.$orange-palette,
+    ),
+    density: 0,
+  ));
+}
+
+html.light-theme, body.light-theme {
+  @include mat.theme((
+    color: (
+      theme-type: light,
+      primary: mat.$azure-palette,
+      tertiary: mat.$orange-palette,
+    ),
+  ));
+}
+
+/* ==========================================================================
+   Dual Engine (Go + Rust) Color Palette - Dark Theme (Default)
+   ========================================================================== */
+:root, html, html.dark-theme, body.dark-theme {
+  --app-primary: #00e5ff;          /* Electric Go Cyan */
+  --app-primary-dark: #00b4d8;
+  --app-primary-text: #00e5ff;
+  --app-on-primary: #080b11;
+  --app-primary-bg: rgba(0, 229, 255, 0.10);
+  --app-primary-border: rgba(0, 229, 255, 0.25);
+  --app-secondary: #ff5722;        /* Rust Flame */
+  --app-secondary-bg: rgba(255, 87, 34, 0.10);
+  --app-secondary-border: rgba(255, 87, 34, 0.28);
+  --app-accent: #ffb300;
+  --app-tertiary: #8b5cf6;         /* Purple for Schemas/Governance */
+  --app-success: #10b981;
+
+  --app-bg: #07090e;               /* Deep clean background */
+  --app-surface: #0d121f;          /* Elevated surface */
+  --app-surface-hover: rgba(0, 229, 255, 0.05);
+  --app-card-bg: #0f172a;
+  --app-border: rgba(255, 255, 255, 0.10);
+  --app-border-strong: rgba(0, 229, 255, 0.30);
+  --app-nested-bg: #090d16;
+
+  --app-text: #f8fafc;
+  --app-text-muted: #94a3b8;
+  --app-text-subtle: #64748b;
+
+  --app-code-bg: #050811;
+  --app-code-text: #e2e8f0;
+  --app-code-border: rgba(0, 229, 255, 0.2);
+
+  --app-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --app-font-mono: 'JetBrains Mono', monospace;
+}
+
+/* Light Theme */
+html.light-theme, body.light-theme {
+  --app-primary: #0284c7;
+  --app-primary-dark: #0369a1;
+  --app-primary-text: #0369a1;
+  --app-on-primary: #ffffff;
+  --app-primary-bg: rgba(2, 132, 199, 0.08);
+  --app-primary-border: rgba(2, 132, 199, 0.25);
+  --app-secondary: #ea580c;
+  --app-secondary-bg: rgba(234, 88, 12, 0.08);
+  --app-secondary-border: rgba(234, 88, 12, 0.25);
+  --app-accent: #d97706;
+  --app-tertiary: #7c3aed;
+  --app-success: #059669;
+
+  --app-bg: #f8fafc;
+  --app-surface: #ffffff;
+  --app-surface-hover: rgba(2, 132, 199, 0.04);
+  --app-card-bg: #ffffff;
+  --app-border: #e2e8f0;
+  --app-border-strong: rgba(2, 132, 199, 0.35);
+  --app-nested-bg: #f1f5f9;
+
+  --app-text: #0f172a;
+  --app-text-muted: #475569;
+  --app-text-subtle: #64748b;
+
+  --app-code-bg: #0f172a;
+  --app-code-text: #f8fafc;
+  --app-code-border: #cbd5e1;
+}
+
+/* Global Reset & Base */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--app-font-sans);
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+code, kbd, samp, pre {
+  font-family: var(--app-font-mono);
+}
+
+/* Scrollbar Customization */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--app-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* Utilities */
+.text-gradient-cyan {
+  background: linear-gradient(135deg, #00e5ff 0%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-dual {
+  background: linear-gradient(135deg, #00e5ff 0%, #ff5722 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.bg-glass {
+  background: rgba(13, 18, 31, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.light-theme .bg-glass {
+  background: rgba(255, 255, 255, 0.90);
+}

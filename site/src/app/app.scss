@@ -1,0 +1,295 @@
+// ==============================================================================
+// AeroStream Main App Shell SCSS
+// Dual-Engine Theme (Go Cyan #00e5ff + Rust Flame #ff5722)
+// Clean borders, zero blurry glows, 100% responsive
+// ==============================================================================
+
+:host {
+  display: block;
+  min-height: 100vh;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+}
+
+.skip-to-content {
+  position: absolute;
+  top: -40px;
+  left: 1rem;
+  background: var(--app-primary);
+  color: #ffffff;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  z-index: 1000;
+  transition: top 0.2s;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.875rem;
+
+  &:focus {
+    top: 1rem;
+  }
+}
+
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+// -----------------------------------------------------------------------------
+// Top Brand Navbar
+// -----------------------------------------------------------------------------
+.app-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  background: rgba(10, 15, 29, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--app-border);
+  transition: background-color 0.2s, border-color 0.2s;
+
+  .light-theme & {
+    background: rgba(255, 255, 255, 0.9);
+  }
+
+  .navbar-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    height: 64px;
+    padding: 0 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    @media (max-width: 640px) {
+      padding: 0 1rem;
+    }
+  }
+}
+
+// Brand Link & Logo
+.brand-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  color: var(--app-text);
+  user-select: none;
+  transition: opacity 0.15s;
+
+  &:hover {
+    opacity: 0.9;
+  }
+
+  .brand-text {
+    display: flex;
+    flex-direction: column;
+
+    .brand-title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+
+      .brand-name {
+        font-size: 1.25rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        color: var(--app-text);
+
+        .brand-stream {
+          color: var(--app-primary);
+        }
+      }
+
+      .brand-pill {
+        font-size: 0.625rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+        padding: 0.1rem 0.4rem;
+        border-radius: 9999px;
+        background: var(--app-nested-bg);
+        border: 1px solid var(--app-border);
+        color: var(--app-text-muted);
+      }
+    }
+
+    .brand-sub {
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: var(--app-text-muted);
+      letter-spacing: 0.02em;
+    }
+  }
+}
+
+// Desktop Navigation Links
+.desktop-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  @media (max-width: 768px) {
+    display: none;
+  }
+
+  .nav-link {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--app-text-muted);
+    text-decoration: none;
+    padding: 0.4rem 0.85rem;
+    border-radius: 6px;
+    transition: color 0.15s, background-color 0.15s;
+
+    &:hover {
+      color: var(--app-text);
+      background-color: var(--app-surface-hover);
+    }
+
+    &.active {
+      color: var(--app-primary);
+      background-color: var(--app-primary-bg);
+      font-weight: 600;
+    }
+  }
+}
+
+// Right Action Items
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--app-border);
+    background: var(--app-surface);
+    color: var(--app-text);
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.15s;
+
+    &:hover {
+      background: var(--app-surface-hover);
+      border-color: var(--app-primary-border);
+      color: var(--app-primary);
+    }
+
+    mat-icon {
+      font-size: 1.15rem;
+      width: 1.15rem;
+      height: 1.15rem;
+    }
+
+    .github-svg {
+      width: 1.1rem;
+      height: 1.1rem;
+    }
+  }
+
+  .console-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: #ffffff;
+    background: linear-gradient(135deg, #ff5722 0%, #e64a19 100%);
+    border: 1px solid rgba(255, 87, 34, 0.4);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: all 0.15s;
+
+    &:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+
+    mat-icon {
+      font-size: 1rem;
+      width: 1rem;
+      height: 1rem;
+    }
+  }
+
+  .mobile-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--app-border);
+    background: var(--app-surface);
+    color: var(--app-text);
+    cursor: pointer;
+
+    mat-icon {
+      font-size: 1.25rem;
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Mobile Drawer
+// -----------------------------------------------------------------------------
+.mobile-drawer {
+  display: none;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
+  padding: 1rem 1.25rem 1.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+
+  &.open {
+    display: block;
+  }
+
+  .mobile-nav-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    .mobile-link {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      color: var(--app-text);
+      text-decoration: none;
+      transition: background-color 0.15s;
+
+      &:hover {
+        background-color: var(--app-surface-hover);
+        color: var(--app-primary);
+      }
+
+      mat-icon {
+        font-size: 1.25rem;
+        width: 1.25rem;
+        height: 1.25rem;
+        color: var(--app-primary);
+      }
+    }
+  }
+}
+
+// Main Content
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
