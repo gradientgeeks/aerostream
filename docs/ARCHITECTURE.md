@@ -63,22 +63,20 @@ AeroStream resolves this dichotomy through clean physical and architectural deco
 
 ### Measured comparison
 
-Tested under strict container constraints (`--cpus=2.0 --memory=2g`), single node, median of 3 runs, host networking. AeroStream is shown on its native data-plane port (10 closed-loop producers); Kafka and Redpanda use `kafka-producer-perf-test`.
-Full methodology, per-run ranges, durability caveats and the Kafka-port results are in [`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md).
+Tested under strict container constraints (`--cpus=2.0 --memory=2g`), single node, median of 3 runs, host networking, image `quay.io/gradientgeeks/aerostream:latest`.
+Full methodology, per-run ranges and durability caveats are in [`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md).
 
-| Metric | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++20/Seastar) | AeroStream (native port) | Note |
-| :--- | ---: | ---: | ---: | :--- |
-| **50 MB messages (MB/s)** | 55.5 | 58.4 | **855.6** (runs 350-881) | large payloads avoid per-message userspace copies on the native path |
-| **10 MB messages (MB/s)** | 170.8 | 218.7 | **592.4** (347-863) | |
-| **1 MB messages (MB/s)** | 320.9 | 375.4 | 378.6 (225-1,210) | level with Redpanda; very noisy |
-| **1 KB messages (msgs/s)** | 44,366 | 60,024 | **120,283** | 10 producers vs 1 |
-| **100 B messages (msgs/s)** | 141,243 | **171,527** | 121,852 | AeroStream behind |
-| **Broker idle memory** | 303 MiB | 141 MiB | **1.4 MiB** | peak under 500 MB writes: ~250-730 MiB (page cache) vs ~1.4 GiB |
-| **OS threads under load** | 130 | 10 | 3 | |
-| **Time until usable** | 3.9-4.2 s | **0.75 s** | 1.8-3.4 s | Raft election plus broker registration |
-
-Over the **Kafka port** (what Kafka clients use) AeroStream reaches 174,520 msgs/s at 100 B and 63,776 at 1 KB, level with or ahead of Kafka and Redpanda, but is still behind at 1-50 MB;
-see [`benchmarks/KAFKA_PORT_PERFORMANCE.md`](../benchmarks/KAFKA_PORT_PERFORMANCE.md).
+| Metric | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++20/Seastar) | AeroStream (native port) | AeroStream (Kafka port) |
+| :--- | ---: | ---: | ---: | ---: |
+| **100 B messages (msgs/s)** | 146,199 | 178,253 | **186,727** | **188,324** |
+| **1 KB messages (msgs/s)** | 46,729 | 67,385 | **174,714** | 71,023 |
+| **1 MB messages (MB/s)** | **384** | 306 | 347 (277-1,233) | 333 |
+| **10 MB messages (MB/s)** | 240 | **299** | 276 (271-914) | 166 |
+| **50 MB messages (MB/s)** | 81 | 95 | **280** | 81 |
+| **Broker idle memory** | 314 MiB | 137 MiB | **1.3-5.4 MiB** | 1.3 MiB |
+| **Peak memory under load** | 1,434 MiB | 1,364 MiB | 320 MiB | 143 MiB |
+| **OS threads** | 130 | 10 | 3 | 3 |
+| **Time until usable** | 3.9-4.2 s | **0.75 s** | 1.8-3.4 s | 1.8-3.4 s |
 
 ---
 

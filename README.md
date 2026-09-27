@@ -14,23 +14,23 @@ Built with a **Dual-Engine Architecture**—pairing a resilient **Go-based Raft 
 
 ## ⚡ Key Highlights & Benchmark Comparison
 
-Single node, `--cpus=2.0 --memory=2g` per broker, median of 3 runs, produce path only, all containers on host networking.
-AeroStream is shown on its **native data-plane port** (10 concurrent closed-loop producers); Kafka and Redpanda are driven by `kafka-producer-perf-test.sh`.
+Single node, `--cpus=2.0 --memory=2g` per broker, **median of 3 runs**, produce path only, all containers on host networking, image `quay.io/gradientgeeks/aerostream:latest`.
+Kafka, Redpanda and AeroStream's Kafka port are driven by `kafka-producer-perf-test`; AeroStream's native port by its own client (10 closed-loop producers).
 
-| Benchmark scenario | Apache Kafka 4.3.1 | Redpanda 26.2 | AeroStream (native port) |
-| :--- | ---: | ---: | ---: |
-| **50 MB messages (MB/s)** | 55.5 | 58.4 | **855.6** (runs 350-881) |
-| **10 MB messages (MB/s)** | 170.8 | 218.7 | **592.4** (347-863) |
-| **1 MB messages (MB/s)** | 320.9 | 375.4 | 378.6 (225-1,210) |
-| **1 KB messages (msgs/s)** | 44,366 | 60,024 | **120,283** |
-| **100 B messages (msgs/s)** | 141,243 | **171,527** | 121,852 |
-| **Broker idle memory** | 303 MiB | 141 MiB | **1.4 MiB** |
-| **Broker peak memory under load** | 1,454 MiB | 1,386 MiB | **354 MiB** |
+| Benchmark scenario | Apache Kafka 4.3.1 | Redpanda 26.2 | AeroStream (native port) | AeroStream (Kafka port) |
+| :--- | ---: | ---: | ---: | ---: |
+| **100 B messages (msgs/s)** | 146,199 | 178,253 | **186,727** | **188,324** |
+| **1 KB messages (msgs/s)** | 46,729 | 67,385 | **174,714** | 71,023 |
+| **1 MB messages (MB/s)** | **384** | 306 | 347 | 333 |
+| **10 MB messages (MB/s)** | 240 | **299** | 276 | 166 |
+| **50 MB messages (MB/s)** | 81 | 95 | **280** | 81 |
+| **Broker idle memory** | 314 MiB | 137 MiB | **1.3-5.4 MiB** | 1.3 MiB |
+| **Broker peak memory under load** | 1,434 MiB | 1,364 MiB | 320 MiB | **143 MiB** |
+| **OS threads** | 130 | 10 | **3** | **3** |
 
-AeroStream leads on large messages (native port) and on memory footprint. On its **Kafka port** (what Kafka clients use) it now reaches 174,520 msgs/s at 100 B and 63,776 at 1 KB
-(Kafka 141,243 / 44,366; Redpanda 171,527 / 60,024; it was 18,925 / 5,116 before profiling-driven fixes), but is still behind Kafka and Redpanda at 1-50 MB (about 200 / 144 / 29 MB/s). Kafka and AeroStream acknowledge
-from the OS page cache while Redpanda flushes before acknowledging by default. Read the caveats in [BENCHMARK.md](benchmarks/BENCHMARK.md) (methodology, closed-loop native client, durability differences, run-to-run noise)
-and [KAFKA_PORT_PERFORMANCE.md](benchmarks/KAFKA_PORT_PERFORMANCE.md) before drawing conclusions.
+AeroStream leads at small messages and 50 MB on its native port and on memory footprint everywhere; its Kafka port is on par with Kafka and Redpanda except at 10 MB.
+Large-message results vary a lot between runs (see the ranges in [BENCHMARK.md](benchmarks/BENCHMARK.md)), and Redpanda flushes before acknowledging by default while Kafka and AeroStream
+acknowledge from the OS page cache. Read the caveats in [BENCHMARK.md](benchmarks/BENCHMARK.md) and [KAFKA_PORT_PERFORMANCE.md](benchmarks/KAFKA_PORT_PERFORMANCE.md) before drawing conclusions.
 
 ---
 

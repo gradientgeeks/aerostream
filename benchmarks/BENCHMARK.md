@@ -1,6 +1,6 @@
 # Benchmark: AeroStream vs. Apache Kafka vs. Redpanda
 **Limits per broker container**: `--cpus=2.0 --memory=2g` | **Host**: Intel Core i5-1235U (12 threads, laptop-class), Debian 13 / Linux 6.12, Docker 29.8.1 | **Dates**: September 26-27, 2026
-**Versions**: Apache Kafka 4.3.1 (KRaft), Redpanda v26.2.3, AeroStream `integration/feature-gaps` and, for comparison, the previous `main`.
+**Versions**: Apache Kafka 4.3.1 (KRaft), Redpanda v26.2.3, AeroStream `quay.io/gradientgeeks/aerostream:latest` (built from `main`, September 27, 2026); earlier sections cover the `integration/feature-gaps` build and the pre-merge `main`.
 
 How the benchmark is run and every command: [comparison/PROCESS.md](comparison/PROCESS.md), [comparison/COMMANDS.md](comparison/COMMANDS.md).
 The Kafka-port investigation (root causes, fixes, research sources): [KAFKA_PORT_PERFORMANCE.md](KAFKA_PORT_PERFORMANCE.md).
@@ -9,39 +9,29 @@ Raw tool output, per-run summaries and resource samples: [comparison/results/](c
 
 ---
 
-## 1. Summary
+## 1. Summary (latest: `quay.io/gradientgeeks/aerostream:latest`, September 27, 2026)
 
-**AeroStream's native data-plane port** (its own protocol; Kafka clients cannot use it), median of 3 runs, 10 concurrent closed-loop producers:
+Median of **3 runs** per workload, same containers, tools and limits as below. Results: `comparison/results/2026-09-27-quay-verify` (full table in section 3.0).
 
-| Workload | AeroStream native | Kafka | Redpanda | Result |
-| :--- | ---: | ---: | ---: | :--- |
-| 50 MB (MB/s) | 856 (350-881) | 56 | 58 | wins by ~15x |
-| 10 MB | 592 (347-863) | 171 | 219 | wins by ~3x |
-| 1 KB (msgs/s) | 120K | 44K | 60K | wins by 2-2.7x |
-| 1 MB | 379 (225-1,210) | 321 | 375 | tie |
-| 100 B (msgs/s) | 122K | 141K | 172K | loses |
-
-Caveats that matter: AeroStream drives 10 producers where the Kafka tool drives one; Redpanda flushes before acknowledging by default while Kafka and AeroStream acknowledge from the
-page cache; AeroStream's large-message runs are very noisy (ranges above); its latency is closed-loop and not comparable to the pipelined tool's (section 6).
-
-**AeroStream's Kafka port** (what Kafka clients use), driven by the same Kafka producer tool as Kafka and Redpanda, after the fixes described in
-[KAFKA_PORT_PERFORMANCE.md](KAFKA_PORT_PERFORMANCE.md):
-
-| Workload | AeroStream Kafka port | Kafka | Redpanda | Was (before any fix) |
+| Workload | Kafka | Redpanda | AeroStream native | AeroStream Kafka port |
 | :--- | ---: | ---: | ---: | ---: |
-| 100 B (msgs/s) | **174,520** | 141,243 | 171,527 | 18,925 |
-| 1 KB (msgs/s) | **63,776** | 44,366 | 60,024 | 5,116 |
-| 1 MB (MB/s) | 200 (165-209) | 321 | 375 | 201 |
-| 10 MB (MB/s) | 144 (118-164) | 171 | 219 | 152 |
-| 50 MB (MB/s) | 29 (27-47) | 56 | 58 | 51 (26-51) |
+| 100 B (msgs/s) | 146,199 | 178,253 | **186,727** | **188,324** |
+| 1 KB (msgs/s) | 46,729 | 67,385 | **174,714** | 71,023 |
+| 1 MB (MB/s) | **384** (377-395) | 306 (229-387) | 347 (277-1,233) | 333 (279-371) |
+| 10 MB (MB/s) | 240 (239-243) | **299** (277-300) | 276 (271-914) | 166 (122-244) |
+| 50 MB (MB/s) | 81 (67-83) | 95 (77-99) | **280** (277-287) | 81 (68-82) |
+| Broker idle memory | 314 MiB | 137 MiB | **1.3-5.4 MiB** | 1.3 MiB |
+| Broker peak memory (1.5 GB written) | 1,434 MiB | 1,364 MiB | 320 MiB | 143 MiB |
+| OS threads | 130 | 10 | 3 | 3 |
 
-* Small messages went from 9-12x slower than Kafka to on par or ahead: a missing `TCP_NODELAY` (one fix took 1 KB from 5.1K to 51.5K msgs/s) plus hardware CRC32C, fewer syscalls per append and no zero-filled frame buffers (to 63.8K).
-* **Large messages over the Kafka port are still behind** (1 MB 200 vs 321-375, 10 MB 144 vs 171-219, 50 MB 29 vs 56-58). These sizes did not change with the fixes; the cause is not isolated.
-* On the previous `main` the Kafka port cannot be used by current Kafka clients at all (malformed ApiVersions v3 / Metadata v2+ replies), section 5.1.
+* **Native port**: fastest at 100 B, 1 KB (2.6-3.7x) and 50 MB (~3x); level with Kafka / Redpanda at 1 MB and 10 MB (medians inside each other's ranges; AeroStream's large-message runs vary by up to 4x).
+* **Kafka port** (what Kafka clients use): level with or ahead of Kafka and Redpanda at 100 B - 1 MB and level with Kafka at 50 MB; **behind at 10 MB** (166 vs 240-299 MB/s). Before the profiling-driven fixes it did 5,116 msgs/s at 1 KB (section 4).
+* **Memory**: idle footprint is two orders of magnitude smaller; peak under load is about 4-10x lower. The AeroStream peak is mostly page cache from the data written, so it grows with the amount written.
+* Caveats that matter: the native client runs 10 closed-loop producers against the Kafka tool's one; Redpanda flushes before acknowledging by default while Kafka and AeroStream acknowledge from the page cache; latency columns of the native client (closed-loop) and the Kafka tool (pipelined) are not comparable (section 6).
 
-**Footprint and startup**
-* Idle memory of the AeroStream broker container: **1.4 MiB** (Kafka 303 MiB, Redpanda 141 MiB). Peak under 500 MB writes: 250-730 MiB depending on the session (mostly page cache) vs ~1.4 GiB for Kafka and Redpanda.
-* Time until usable (boot-time.sh, 3 runs): Redpanda **0.75 s**, AeroStream **1.8-3.4 s** (Raft election plus broker registration; bimodal), Kafka **3.9-4.2 s**.
+**Single-run results do not reproduce.** A one-run session on the same image (`results/2026-09-27-quay-vs-kafka-redpanda`) reported native 739 MB/s at 10 MB, 476 MB/s at 50 MB and a 61 MiB peak; with 3 runs the medians are 276 MB/s, 280 MB/s and 320 MiB (it wrote a third of the data). The same run also caught Kafka on low runs (29,958 msgs/s at 1 KB vs 46,729 median). Always use `RUNS=3` or more.
+
+**Startup** (boot-time.sh, earlier session): Redpanda 0.75 s, AeroStream 1.8-3.4 s (Raft election plus broker registration), Kafka 3.9-4.2 s.
 
 ---
 
@@ -55,6 +45,40 @@ numbers are sampled with `docker stats` once per second.
 ---
 
 ## 3. Session results: native port vs Kafka vs Redpanda
+
+### 3.0 Latest: `quay.io/gradientgeeks/aerostream:latest`, 3 runs, all four systems (`2026-09-27-quay-verify`)
+| Workload | System | MB/s (median) | MB/s (min-max of runs) | msgs/s | avg ms | p50 ms | p95 ms | p99 ms | max ms |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100B | kafka | 13.9 | 8-15 | 146199 | 108.54 | 136.00 | 149.00 | 150.00 | 217.00 |
+| 100B | redpanda | 17.0 | 17-19 | 178253 | 10.34 | 4.00 | 36.00 | 41.00 | 207.00 |
+| 100B | aerostream | 17.8 | 18-18 | 186727 | 0.05 | 0.05 | 0.06 | 0.07 | 0.66 |
+| 100B | aerostream-kafka | 18.0 | 17-20 | 188324 | 38.07 | 36.00 | 68.00 | 71.00 | 217.00 |
+| 1KB | kafka | 45.6 | 42-50 | 46729 | 350.73 | 403.00 | 487.00 | 499.00 | 502.00 |
+| 1KB | redpanda | 65.8 | 61-67 | 67385 | 142.70 | 139.00 | 183.00 | 185.00 | 207.00 |
+| 1KB | aerostream | 170.6 | 167-171 | 174714 | 0.06 | 0.06 | 0.06 | 0.10 | 1.60 |
+| 1KB | aerostream-kafka | 69.4 | 61-71 | 71023 | 86.24 | 99.00 | 134.00 | 138.00 | 209.00 |
+| 1MB | kafka | 384.0 | 377-395 | 384 | 25.88 | 20.00 | 54.00 | 57.00 | 211.00 |
+| 1MB | redpanda | 306.0 | 229-387 | 306 | 13.03 | 11.00 | 25.00 | 26.00 | 219.00 |
+| 1MB | aerostream | 346.9 | 277-1233 | 347 | 28.79 | 6.12 | 43.21 | 1055.46 | 1056.36 |
+| 1MB | aerostream-kafka | 333.1 | 279-371 | 333 | 30.29 | 5.00 | 166.00 | 240.00 | 243.00 |
+| 10MB | kafka | 240.3 | 239-243 | 24 | 495.00 | 573.00 | 739.00 | 757.00 | 757.00 |
+| 10MB | redpanda | 299.4 | 277-300 | 30 | 274.50 | 296.00 | 347.00 | 350.00 | 350.00 |
+| 10MB | aerostream | 275.6 | 271-914 | 28 | 353.47 | 110.42 | 1377.96 | 1378.61 | 1378.61 |
+| 10MB | aerostream-kafka | 166.1 | 122-244 | 17 | 425.46 | 561.00 | 609.00 | 1642.00 | 1642.00 |
+| 50MB | kafka | 81.0 | 67-83 | 2 | 2809.70 | 2984.00 | 4892.00 | 4892.00 | 4892.00 |
+| 50MB | redpanda | 95.1 | 77-99 | 2 | 2420.00 | 2572.00 | 4030.00 | 4030.00 | 4030.00 |
+| 50MB | aerostream | 280.4 | 277-287 | 6 | 741.97 | 421.52 | 1475.47 | 1475.47 | 1475.47 |
+| 50MB | aerostream-kafka | 80.5 | 68-82 | 2 | 2738.10 | 3136.00 | 4927.00 | 4927.00 | 4927.00 |
+
+| System | idle memory | peak memory (MiB) | peak CPU % | peak PIDs |
+| :--- | :--- | ---: | ---: | ---: |
+| kafka | 313.5MiB | 1433.6 | 182 | 130 |
+| redpanda | 136.9MiB | 1364.0 | 57 | 10 |
+| aerostream | 5.371MiB | 320.3 | 159 | 3 |
+| aerostream-kafka | 1.254MiB | 143.4 | 50 | 3 |
+
+### Earlier sessions
+The tables below are the September 26-27 sessions for the `integration/feature-gaps` build (before the Kafka-port fixes landed) and the pre-merge `main`, kept for comparison.
 
 ### 3.1 AeroStream `integration` build
 | Workload | System | MB/s (median) | MB/s (min-max of runs) | msgs/s | avg ms | p50 ms | p95 ms | p99 ms | max ms |

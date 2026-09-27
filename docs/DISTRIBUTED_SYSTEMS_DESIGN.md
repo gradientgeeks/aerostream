@@ -636,15 +636,18 @@ To eliminate benchmarking bias, tests were executed under identical container co
 
 ### 4.2 Comprehensive 4-Way Benchmark Matrix
 
-Results from the 4-way evaluation ([`benchmarks/BENCHMARK.md`](file:///home/uttam/projects/AeroMQ/benchmarks/BENCHMARK.md)):
+Latest results (image `quay.io/gradientgeeks/aerostream:latest`, median of 3 runs, per-run ranges in [`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md)):
 
-| Workload | Apache Kafka (v4.3.1 KRaft) | Redpanda (v26.2.3) | AeroStream (Kafka Port) | AeroStream (Native Port) | AeroStream Native Lead vs Kafka |
+| Workload | Apache Kafka (v4.3.1 KRaft) | Redpanda (v26.2.3) | AeroStream (Kafka Port) | AeroStream (Native Port) | Native vs best of Kafka / Redpanda |
 | :--- | ---: | ---: | ---: | ---: | :--- |
-| **100 B** (msgs/s) | 141,243 | 171,527 | **174,520** | 121,852 | **+23.5%** (over Kafka port) |
-| **1 KB** (msgs/s) | 44,366 | 60,024 | **71,942** | **137,253** | **3.1x vs Kafka**, **2.3x vs Redpanda** |
-| **1 MB** (MB/s) | 177.6 – 320.9 | 359.7 – 375.4 | 350.4 | **1,165.4** | **3.6x vs Kafka**, **3.1x vs Redpanda** |
-| **10 MB** (MB/s) | 170.8 – 185.0 | 208.0 – 218.7 | 157.3 | **592.4** | **3.2x vs Kafka**, **2.7x vs Redpanda** |
-| **50 MB** (MB/s) | 54.0 – 55.5 | 55.4 – 58.4 | 50.8 | **855.6** | **15.4x vs Kafka**, **14.6x vs Redpanda** |
+| **100 B** (msgs/s) | 146,199 | 178,253 | **188,324** | **186,727** | +5% |
+| **1 KB** (msgs/s) | 46,729 | 67,385 | 71,023 | **174,714** | 2.6x |
+| **1 MB** (MB/s) | **384** | 306 | 333 | 347 (277-1,233) | level (within run-to-run range) |
+| **10 MB** (MB/s) | 240 | **299** | 166 | 276 (271-914) | level |
+| **50 MB** (MB/s) | 81 | 95 | 81 | **280** | ~3x |
+
+The native port uses 10 closed-loop producers and AeroStream's own protocol; the other columns use one `kafka-producer-perf-test` producer. Earlier single-session figures
+(for example 855.6 MB/s at 50 MB and 592.4 MB/s at 10 MB) did not reproduce as medians of 3 runs.
 
 #### Latency Analysis (p50 / Median)
 

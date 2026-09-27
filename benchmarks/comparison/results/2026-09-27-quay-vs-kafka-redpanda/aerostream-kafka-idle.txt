@@ -1,0 +1,1 @@
+idle: 1.262MiB / 2GiB pids=3

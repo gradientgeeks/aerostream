@@ -7,6 +7,11 @@
 
 ---
 
+
+> **Note (September 27, 2026):** the figures in this document come from one earlier benchmark session. In the latest 3-run session on `quay.io/gradientgeeks/aerostream:latest`
+> the Kafka port reaches 333 MB/s at 1 MB and 81 MB/s at 50 MB (Kafka 384 / 81, Redpanda 306 / 95) and the native port 280 MB/s at 50 MB. See
+> [`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md) for current numbers and per-run ranges.
+
 ## Executive Summary & Benchmark Analysis
 
 AeroStream represents a next-generation distributed append-only streaming platform built in Rust and Go. Recent empirical benchmarks comparing AeroStream against **Apache Kafka 4.3.1 (KRaft)** and **Redpanda v26.2.3** under identical containerized hardware constraints (`--cpus=2.0 --memory=2g`, Linux kernel 6.12, host networking) demonstrate exceptional architectural efficiency in AeroStream's native protocol and memory profile.

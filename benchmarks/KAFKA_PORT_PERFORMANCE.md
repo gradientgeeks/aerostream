@@ -38,6 +38,8 @@ then a short scan). This would remove most of the per-record CPU, allow compress
 replication and Iceberg, so it needs its own design and test pass.
 
 ### 3.2 Large messages (1-50 MB) over the Kafka port
+**Update (September 27, quay image, 3 runs):** the Kafka port now measures 333 MB/s at 1 MB (Kafka 384, Redpanda 306) and 81 MB/s at 50 MB (Kafka 81, Redpanda 95); only 10 MB remains behind (166 vs 240-299). The earlier numbers below are kept for reference.
+
 1 MB 200 vs 321-375 MB/s, 10 MB 144 vs 171-219, 50 MB 29 vs 56-58. Profile at 50 MB: broker mostly idle, time in kernel page-cache copies; Kafka and Redpanda hit a ~55 MB/s wall with the same single-producer Java client, so part of it is client-bound.
 Ideas: reuse a per-connection frame buffer (avoid re-faulting fresh pages per request), `posix_fallocate` segments, one write per batch rather than per record (3.1).
 
