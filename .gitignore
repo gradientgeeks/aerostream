@@ -53,3 +53,4 @@ dist/
 obj/
 **/obj/
 benchmarks/comparison/results
+benchmarks/openmessaging-benchmark
