@@ -9,7 +9,7 @@ COPY ui/ ./
 RUN npm run build -- --base-href /aerostream/console/
 
 # --- Stage 2: Build Go Controller ---
-FROM golang:1.24-alpine AS controller-builder
+FROM golang:1.26-alpine AS controller-builder
 RUN apk add --no-cache ca-certificates git tzdata
 WORKDIR /app
 COPY go-controller/go.mod go-controller/go.sum ./go-controller/
