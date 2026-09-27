@@ -38,6 +38,8 @@ dist/
 .vscode/
 .idea/
 .claude/
+.agents/
+**/.agents/
 
 # Python
 .venv/
