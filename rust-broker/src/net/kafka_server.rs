@@ -290,7 +290,7 @@ pub(crate) async fn handle_metadata_with_snapshot(
     cursor: &mut io::Cursor<&[u8]>,
     log_manager: &Arc<LogManager>,
     cfg: &Arc<BrokerConfig>,
-    snap: crate::topology::Snapshot,
+    snap: Arc<crate::topology::Snapshot>,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     let mut requested_topics = Vec::new();
     if cursor.remaining() >= 4 {
@@ -702,31 +702,40 @@ pub(crate) async fn handle_fetch_with_topo(
             match log_manager.get_partition(&topic_name, partition_index as u32).await {
                 Ok(_) if error_code != 0 => {}
                 Ok(part_log) => {
-                    let mut guard = part_log.lock().await;
-                    // Transaction-aware visibility: read_committed is capped at the LSO and
-                    // receives the list of aborted transactions overlapping the fetch.
-                    // Followers additionally cap everything at the controller-reported high watermark.
-                    let view = crate::txn::produce::fetch_view(&guard, fetch_offset, isolation_level);
-                    high_watermark = view.high_watermark;
-                    last_stable_offset = view.last_stable_offset;
-                    let mut upper_bound = view.upper_bound;
-                    if let Some(cap) = hw_cap {
-                        high_watermark = high_watermark.min(cap);
-                        last_stable_offset = last_stable_offset.min(cap);
-                        upper_bound = upper_bound.min(cap);
-                    }
-                    aborted = view.aborted;
+                    // Scope partition lock strictly for in-memory metadata and segment index lookup.
+                    // Release the partition guard immediately so concurrent producers are never blocked on disk I/O.
+                    let (hw, lso, aborted_txns, read_spec) = {
+                        let mut guard = part_log.lock().await;
+                        let view = crate::txn::produce::fetch_view(&guard, fetch_offset, isolation_level);
+                        let mut upper_bound = view.upper_bound;
+                        let mut hw = view.high_watermark;
+                        let mut lso = view.last_stable_offset;
+                        if let Some(cap) = hw_cap {
+                            hw = hw.min(cap);
+                            lso = lso.min(cap);
+                            upper_bound = upper_bound.min(cap);
+                        }
 
-                    if preferred_replica < 0 && fetch_offset >= 0 && fetch_offset < upper_bound {
-                        let max_read = (partition_max_bytes as u32).min(32 * 1024 * 1024);
-                        if let Ok(Some((mut file, position, bytes_to_read))) =
-                            guard.read_from_offset(fetch_offset as u64, max_read)
-                        {
-                            if let Ok(_) = file.seek(SeekFrom::Start(position)) {
-                                let mut raw_buf = vec![0u8; bytes_to_read as usize];
-                                if let Ok(_) = file.read_exact(&mut raw_buf) {
-                                    record_set = ensure_kafka_record_set(fetch_offset, &raw_buf);
-                                }
+                        let spec = if preferred_replica < 0 && fetch_offset >= 0 && fetch_offset < upper_bound {
+                            let max_read = (partition_max_bytes as u32).min(32 * 1024 * 1024);
+                            guard.read_from_offset(fetch_offset as u64, max_read).ok().flatten()
+                        } else {
+                            None
+                        };
+
+                        (hw, lso, view.aborted, spec)
+                    }; // <-- Partition lock is released here!
+
+                    high_watermark = hw;
+                    last_stable_offset = lso;
+                    aborted = aborted_txns;
+
+                    if let Some((mut file, position, bytes_to_read)) = read_spec {
+                        // File seek and read execute completely OUTSIDE the partition lock.
+                        if let Ok(_) = file.seek(SeekFrom::Start(position)) {
+                            let mut raw_buf = vec![0u8; bytes_to_read as usize];
+                            if let Ok(_) = file.read_exact(&mut raw_buf) {
+                                record_set = ensure_kafka_record_set(fetch_offset, &raw_buf);
                             }
                         }
                     }
@@ -1488,7 +1497,7 @@ mod topology_tests {
         req.put_i32(1);
         put_kafka_string(&mut req, Some("rt"));
         let mut cur = io::Cursor::new(req.as_ref());
-        let resp = handle_metadata_with_snapshot(1, 5, &mut cur, &log_mgr, &cfg, cluster_snapshot()).await.unwrap();
+        let resp = handle_metadata_with_snapshot(1, 5, &mut cur, &log_mgr, &cfg, Arc::new(cluster_snapshot())).await.unwrap();
 
         let mut c = io::Cursor::new(resp.as_slice());
         assert_eq!(c.get_i32(), 1);
@@ -1534,7 +1543,7 @@ mod topology_tests {
         req.put_i32(1);
         put_kafka_string(&mut req, Some("adhoc"));
         let mut cur = io::Cursor::new(req.as_ref());
-        let resp = handle_metadata_with_snapshot(1, 1, &mut cur, &log_mgr, &cfg, Snapshot::default()).await.unwrap();
+        let resp = handle_metadata_with_snapshot(1, 1, &mut cur, &log_mgr, &cfg, Arc::new(Snapshot::default())).await.unwrap();
         let mut c = io::Cursor::new(resp.as_slice());
         c.get_i32();
         c.get_i32();

@@ -1,10 +1,38 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tracing::info;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PartitionKey {
+    pub topic: String,
+    pub partition: u32,
+}
+
+impl PartitionKey {
+    pub fn new(topic: impl Into<String>, partition: u32) -> Self {
+        Self {
+            topic: topic.into(),
+            partition,
+        }
+    }
+}
+
+impl std::hash::Hash for PartitionKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.topic.hash(state);
+        self.partition.hash(state);
+    }
+}
+
+impl hashbrown::Equivalent<PartitionKey> for (&str, u32) {
+    fn equivalent(&self, key: &PartitionKey) -> bool {
+        self.0 == key.topic.as_str() && self.1 == key.partition
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct LogSegment {
@@ -180,7 +208,7 @@ impl PartitionLog {
             storage_base_dir,
             max_retention_size,
             max_retention_age,
-            compaction_enabled: true,
+            compaction_enabled: false,
             dirty_ratio_threshold: 0.5,
             tombstone_retention: std::time::Duration::from_secs(86400),
             offload_tx: None,
@@ -672,7 +700,7 @@ pub struct LogManager {
     pub offload_tx: Option<tokio::sync::mpsc::Sender<crate::storage::offloader::OffloadTask>>,
     pub tiered_provider: Option<Arc<dyn crate::storage::TieredStorageProvider>>,
 
-    partitions: Mutex<HashMap<(String, u32), Arc<Mutex<PartitionLog>>>>,
+    partitions: RwLock<HashMap<PartitionKey, Arc<Mutex<PartitionLog>>>>,
 
     /// Lazily-created transaction coordinator (see `crate::txn`).
     pub txn_coord: std::sync::OnceLock<Arc<crate::txn::TxnCoordinator>>,
@@ -688,12 +716,12 @@ impl LogManager {
             max_segment_size: 210, // 210 bytes default for testing/prototype segment rolling
             max_retention_size: Some(256 * 1024), // 256KB default
             max_retention_age: Some(std::time::Duration::from_secs(3600)), // 1 hour default
-            compaction_enabled: true,
+            compaction_enabled: false,
             dirty_ratio_threshold: 0.5,
             tombstone_retention: std::time::Duration::from_secs(86400),
             offload_tx: None,
             tiered_provider: None,
-            partitions: Mutex::new(HashMap::new()),
+            partitions: RwLock::new(HashMap::new()),
             txn_coord: std::sync::OnceLock::new(),
             share_coord: std::sync::OnceLock::new(),
         }
@@ -738,11 +766,20 @@ impl LogManager {
     }
 
     pub async fn get_all_offsets(&self) -> Vec<(String, u32, i64)> {
-        let parts = self.partitions.lock().await;
-        let mut offsets = Vec::new();
-        for ((topic, partition), part_log_arc) in parts.iter() {
+        // Snapshot Arc references under shared read lock, then drop the map lock
+        // to prevent lock convoy / inversion with partition locks.
+        let snapshot: Vec<(String, u32, Arc<Mutex<PartitionLog>>)> = {
+            let parts = self.partitions.read().await;
+            parts
+                .iter()
+                .map(|(k, v)| (k.topic.clone(), k.partition, Arc::clone(v)))
+                .collect()
+        }; // <-- Read lock dropped here!
+
+        let mut offsets = Vec::with_capacity(snapshot.len());
+        for (topic, partition, part_log_arc) in snapshot {
             let part_log = part_log_arc.lock().await;
-            offsets.push((topic.clone(), *partition, part_log.next_offset as i64));
+            offsets.push((topic, partition, part_log.next_offset as i64));
         }
         offsets
     }
@@ -764,9 +801,15 @@ impl LogManager {
     }
 
     pub async fn compact_eligible_partitions(&self) -> io::Result<usize> {
-        let parts = self.partitions.lock().await;
+        // Snapshot Arcs under shared read lock, then drop map lock so compaction
+        // disk I/O does not block incoming partition requests.
+        let eligible: Vec<Arc<Mutex<PartitionLog>>> = {
+            let parts = self.partitions.read().await;
+            parts.values().cloned().collect()
+        }; // <-- Read lock dropped here!
+
         let mut compacted = 0;
-        for part_arc in parts.values() {
+        for part_arc in eligible {
             let mut part = part_arc.lock().await;
             if !part.compaction_enabled {
                 continue;
@@ -795,25 +838,48 @@ impl LogManager {
     /// Drop all local partitions of `topic` and remove their on-disk directories (used by DeleteTopics).
     /// Returns the number of partitions removed.
     pub async fn delete_topic(&self, topic: &str) -> io::Result<usize> {
-        let mut parts = self.partitions.lock().await;
-        let keys: Vec<(String, u32)> = parts.keys().filter(|(t, _)| t == topic).cloned().collect();
-        let mut removed = 0;
-        for k in keys {
-            if let Some(log) = parts.remove(&k) {
-                let dir = log.lock().await.partition_dir.clone();
-                if dir.exists() {
-                    std::fs::remove_dir_all(&dir)?;
+        // Extract matching partitions under exclusive write lock, then release map lock
+        // before executing disk deletion and awaiting partition locks.
+        let removed_partitions: Vec<Arc<Mutex<PartitionLog>>> = {
+            let mut parts = self.partitions.write().await;
+            let keys_to_remove: Vec<PartitionKey> = parts
+                .keys()
+                .filter(|k| k.topic == topic)
+                .cloned()
+                .collect();
+            let mut logs = Vec::with_capacity(keys_to_remove.len());
+            for k in keys_to_remove {
+                if let Some(log) = parts.remove(&k) {
+                    logs.push(log);
                 }
-                removed += 1;
             }
+            logs
+        }; // <-- Write lock dropped here!
+
+        let mut removed = 0;
+        for log in removed_partitions {
+            let dir = log.lock().await.partition_dir.clone();
+            if dir.exists() {
+                std::fs::remove_dir_all(&dir)?;
+            }
+            removed += 1;
         }
         Ok(removed)
     }
 
     pub async fn get_partition(&self, topic: &str, partition: u32) -> io::Result<Arc<Mutex<PartitionLog>>> {
-        let mut parts = self.partitions.lock().await;
-        let key = (topic.to_string(), partition);
-        if let Some(log) = parts.get(&key) {
+        // Fast path: shared read lock with zero-allocation lookup
+        {
+            let parts = self.partitions.read().await;
+            if let Some(log) = parts.get(&(topic, partition)) {
+                return Ok(log.clone());
+            }
+        }
+
+        // Slow path: acquire exclusive write lock to instantiate and insert new partition
+        let mut parts = self.partitions.write().await;
+        // Double-check under write lock
+        if let Some(log) = parts.get(&(topic, partition)) {
             return Ok(log.clone());
         }
 
@@ -833,7 +899,7 @@ impl LogManager {
         log.tiered_provider = self.tiered_provider.clone();
 
         let shared = Arc::new(Mutex::new(log));
-        parts.insert(key, shared.clone());
+        parts.insert(PartitionKey::new(topic, partition), shared.clone());
         Ok(shared)
     }
 }

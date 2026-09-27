@@ -159,12 +159,12 @@ fn fnv1a(key: &str) -> u64 {
 }
 
 pub struct TopologyCache {
-    inner: RwLock<(Snapshot, Option<Instant>)>,
+    inner: RwLock<(Arc<Snapshot>, Option<Instant>)>,
 }
 
 impl Default for TopologyCache {
     fn default() -> Self {
-        Self { inner: RwLock::new((Snapshot::default(), None)) }
+        Self { inner: RwLock::new((Arc::new(Snapshot::default()), None)) }
     }
 }
 
@@ -176,10 +176,10 @@ impl TopologyCache {
     }
 
     pub fn update(&self, s: Snapshot) {
-        *self.inner.write().unwrap() = (s, Some(Instant::now()));
+        *self.inner.write().unwrap() = (Arc::new(s), Some(Instant::now()));
     }
 
-    pub fn snapshot(&self) -> Snapshot {
+    pub fn snapshot(&self) -> Arc<Snapshot> {
         self.inner.read().unwrap().0.clone()
     }
 

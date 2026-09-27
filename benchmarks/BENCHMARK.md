@@ -122,6 +122,35 @@ Interleaved A/B, native port, 3 rounds x 3 runs, median MB/s per round (`results
 
 After beats before in every round (+36-47%), including the rounds where the machine was in its fast mode.
 
+### 3.4 3-Way Benchmark with Concurrency Fixes (`2026-09-27-concurrency-fixes`)
+Following the resolution of the 5 concurrency hazards:
+1. Replaced `self.partitions: Mutex<HashMap<(String, u32), ...>>` with `tokio::sync::RwLock<HashMap<PartitionKey, ...>>` and zero-allocation stack lookup via `hashbrown::Equivalent`.
+2. Partition lists are snapshotted under read lock and released immediately in `get_all_offsets` (heartbeat) and `compact_eligible_partitions`, preventing partition lock convoys.
+3. Compaction disabled by default (`compaction_enabled = false`), eliminating 30s background closed-segment read stalls on normal topics.
+4. Fetch handlers release the partition lock before buffer allocation and filesystem read, completely unblocking concurrent producers.
+5. Cluster metadata snapshots in `topology.snapshot()` cached as `Arc<Snapshot>`, eliminating deep metadata cloning on every request.
+
+**Results under identical limits (`--cpus=2.0 --memory=2g`, host network, fresh containers)**:
+
+| Workload | Apache Kafka | Redpanda | AeroStream | AeroStream Lead |
+| :--- | ---: | ---: | ---: | :--- |
+| **1 KB** (MB/s) | 23.7 MB/s (24,272 msg/s) | 60.8 MB/s (62,267 msg/s) | **134.0 MB/s (137,253 msg/s)** | **2.2x vs Redpanda, 5.6x vs Kafka** |
+| **1 MB** (MB/s) | 177.6 MB/s | 359.7 MB/s | **1,165.4 MB/s** | **3.2x vs Redpanda, 6.5x vs Kafka** |
+| **10 MB** (MB/s) | 185.0 MB/s | 208.0 MB/s | **223.0 MB/s** | **1.07x vs Redpanda, 1.2x vs Kafka** |
+| **50 MB** (MB/s) | 54.0 MB/s | 55.4 MB/s | **817.0 MB/s** | **14.7x vs Redpanda, 15.1x vs Kafka** |
+
+**Latency (p50 / Median)**:
+- **1 KB**: AeroStream **0.06 ms** vs Redpanda 183 ms vs Kafka 887 ms
+- **1 MB**: AeroStream **5.82 ms** vs Redpanda 39.0 ms vs Kafka 93.0 ms
+- **50 MB**: AeroStream **305.7 ms** vs Redpanda 4,943 ms vs Kafka 4,889 ms
+
+**Resource Footprint**:
+| System | Idle Memory | Peak Memory (500MB burst) | Peak CPU % | Threads / PIDs |
+| :--- | ---: | ---: | ---: | ---: |
+| Apache Kafka | 304.5 MiB | 963.3 MiB | 201% | 130 |
+| Redpanda | 283.1 MiB | 1,382.4 MiB | 72% | 5 |
+| **AeroStream** | **1.46 MiB** | **132.7 MiB** | 107% | **3** |
+
 ---
 
 ## 4. Kafka port measurements

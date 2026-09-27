@@ -119,8 +119,8 @@ impl Default for StorageConfig {
             max_retention_size: Some(1024 * 1024 * 1024),
             // 7 days.
             max_retention_age_secs: Some(7 * 24 * 3600),
-            // Log compaction enabled by default
-            compaction_enabled: true,
+            // Log compaction opt-in per topic (default false, enabled for cleanup.policy=compact)
+            compaction_enabled: false,
             dirty_ratio_threshold: 0.5,
             tombstone_retention_secs: 86400,
         }

@@ -1438,10 +1438,17 @@ pub async fn handle_fetch(
                     continue;
                 }
             };
-
-            let mut guard = part_log.lock().await;
-            let hw = guard.high_watermark as i64;
-            let next_off = guard.next_offset as i64;
+            let (hw, next_off, read_opt) = {
+                let mut guard = part_log.lock().await;
+                let hw = guard.high_watermark as i64;
+                let next_off = guard.next_offset as i64;
+                let opt = if fetch_offset <= next_off && fetch_offset < hw {
+                    guard.read_from_offset(fetch_offset as u64, max_bytes)?
+                } else {
+                    None
+                };
+                (hw, next_off, opt)
+            }; // <-- Partition lock released!
 
             // Offset validation
             if fetch_offset > next_off {
@@ -1470,7 +1477,7 @@ pub async fn handle_fetch(
             }
 
             // Read segment from log
-            match guard.read_from_offset(fetch_offset as u64, max_bytes)? {
+            match read_opt {
                 Some((mut file, position, bytes_to_read)) => {
                     // Check if segment is already a valid RecordBatch (magic = 2 at byte 16)
                     let is_valid_batch = if bytes_to_read >= 61 {
