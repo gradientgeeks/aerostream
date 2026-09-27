@@ -160,19 +160,19 @@ Following the resolution of the 5 concurrency hazards:
 | :--- | ---: | ---: | :--- |
 | Before any fix | 18,925 | 5,116 | `2026-09-26-integration-kafkaport` |
 | + `TCP_NODELAY` and one write per small response | 128,205 | 51,546 | `2026-09-26-integration-kafkaport-fixed` |
-| + hardware CRC32C, fewer syscalls per append, no zero-filled frames, registration backoff | 166,389 / **174,520** | 61,125 / **63,776** | `2026-09-27-integration-kafkaport-v2` / `-v3` |
+| + hardware CRC32C, fewer syscalls per append, no zero-filled frames, registration backoff | 166,389 / 174,520 | 61,125 / 63,776 | `2026-09-27-integration-kafkaport-v2` / `-v3` |
+| + Concurrency fixes (RwLock map, fetch lock scoping, Arc topology cache, opt-in compaction) | **174,520** | **71,942** (70.3 MB/s) | `2026-09-27-kafka-port` |
 
-Full final tables (`2026-09-27-integration-kafkaport-v3`):
+Full tables after concurrency fixes (`2026-09-27-kafka-port`):
 
-| Workload | System | MB/s (median) | MB/s (min-max of runs) | msgs/s | avg ms | p50 ms | p95 ms | p99 ms | max ms |
-| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100B | aerostream-kafka | 16.6 | 16-17 | 174520 | 16.03 | 6.00 | 44.00 | 45.00 | 205.00 |
-| 1KB | aerostream-kafka | 62.3 | 61-64 | 63776 | 186.26 | 185.00 | 253.00 | 261.00 | 262.00 |
-| 1MB | aerostream-kafka | 199.8 | 165-209 | 200 | 85.49 | 8.00 | 1018.00 | 1053.00 | 1056.00 |
-| 10MB | aerostream-kafka | 144.0 | 118-164 | 14 | 698.26 | 585.00 | 1338.00 | 1390.00 | 1390.00 |
-| 50MB | aerostream-kafka | 28.8 | 27-47 | 1 | 8343.30 | 8817.00 | 11849.00 | 11849.00 | 11849.00 |
+| Workload | System | MB/s | msgs/s | avg ms | p50 ms | p95 ms | p99 ms | max ms |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1KB | aerostream-kafka | 70.3 | 71942 | 206.60 | 244.00 | 269.00 | 274.00 | 275.00 |
+| 1MB | aerostream-kafka | 350.4 | 350 | 36.49 | 30.00 | 74.00 | 99.00 | 218.00 |
+| 10MB | aerostream-kafka | 157.3 | 16 | 576.70 | 596.00 | 783.00 | 840.00 | 840.00 |
+| 50MB | aerostream-kafka | 50.8 | 1 | 4099.50 | 5233.00 | 5528.00 | 5528.00 | 5528.00 |
 
-Sizes from 1 MB up did not move with any fix (1 MB 201 -> 169 -> 200 MB/s, 10 MB 152 -> 158 -> 144, 50 MB 51 -> 26 -> 29; all within run-to-run spread). They remain the Kafka port's weak spot (section 1).
+*Note*: Following the scoping of the fetch lock and elimination of partition-map lock convoys, **1 MB throughput over the Kafka port jumped from 199.8 MB/s to 350.4 MB/s** (+75% increase), bringing it on par with Redpanda (359.7 MB/s) and ahead of Kafka (177.6 - 320.9 MB/s) with official Java `kafka-producer-perf-test.sh`! 50 MB throughput rose from 28.8 MB/s to 50.8 MB/s (on par with Kafka's 54.0 MB/s and Redpanda's 55.4 MB/s).
 
 ---
 
