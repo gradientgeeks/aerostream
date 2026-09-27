@@ -454,20 +454,21 @@ async fn handle_produce(
             let mut error_code = 0i16;
 
             if records_size > 0 && cursor.remaining() >= records_size as usize {
-                let mut records_data = vec![0u8; records_size as usize];
-                cursor.copy_to_slice(&mut records_data);
-                produced_bytes += records_data.len() as u64;
+                let pos = cursor.position() as usize;
+                let raw_records_slice = &cursor.get_ref()[pos..pos + records_size as usize];
+                cursor.set_position((pos + records_size as usize) as u64);
+                produced_bytes += raw_records_slice.len() as u64;
 
                 // Compression: validate codec/body, and re-encode when the topic forces a codec.
                 let ctype = crate::kafka::compression::registry().for_topic(&topic_name);
-                match crate::kafka::compression::normalize_produce_payload(&records_data, ctype) {
-                    Ok(v) => records_data = v,
+                let records_data = match crate::kafka::compression::normalize_produce_payload(raw_records_slice, ctype) {
+                    Ok(v) => v,
                     Err(e) => {
                         warn!("[AeroMQ Kafka] Rejecting produce for {}-{}: {}", topic_name, partition_index, e);
                         part_results.push((partition_index, e.error_code(), -1));
                         continue;
                     }
-                }
+                };
 
                 // Modern RecordBatch payloads (idempotent / transactional aware, one record per offset).
                 let mut handled = false;

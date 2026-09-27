@@ -262,7 +262,63 @@ pub fn recompress_batch(batch: &[u8], target: Codec) -> Result<Vec<u8>, Compress
 /// `ctype` forces a codec, re-encodes batches to it. Legacy magic 0/1 data and any
 /// trailing partial batch are passed through untouched. Control batches are never
 /// re-compressed.
-pub fn normalize_produce_payload(data: &[u8], ctype: CompressionType) -> Result<Vec<u8>, CompressionError> {
+pub fn normalize_produce_payload<'a>(data: &'a [u8], ctype: CompressionType) -> Result<std::borrow::Cow<'a, [u8]>, CompressionError> {
+    let needs_recompression = match ctype {
+        CompressionType::Codec(target) => {
+            let mut pos = 0usize;
+            let mut needs = false;
+            while pos < data.len() {
+                let rest = &data[pos..];
+                if rest.len() < 17 || rest[16] != 2 {
+                    break;
+                }
+                let batch_len = i32::from_be_bytes(rest[8..12].try_into().unwrap_or([0; 4]));
+                let total = 12usize.saturating_add(batch_len.max(0) as usize);
+                if batch_len < 49 || total > rest.len() {
+                    break;
+                }
+                let batch = &rest[..total];
+                let codec = batch_codec(batch)?;
+                let attrs = i16::from_be_bytes([batch[21], batch[22]]);
+                let is_control = attrs & 0x20 != 0;
+                if !is_control && target != codec {
+                    needs = true;
+                    break;
+                }
+                if codec != Codec::None {
+                    decompress_batch_records(batch)?;
+                }
+                pos += total;
+            }
+            needs
+        }
+        _ => {
+            let mut pos = 0usize;
+            while pos < data.len() {
+                let rest = &data[pos..];
+                if rest.len() < 17 || rest[16] != 2 {
+                    break;
+                }
+                let batch_len = i32::from_be_bytes(rest[8..12].try_into().unwrap_or([0; 4]));
+                let total = 12usize.saturating_add(batch_len.max(0) as usize);
+                if batch_len < 49 || total > rest.len() {
+                    break;
+                }
+                let batch = &rest[..total];
+                let codec = batch_codec(batch)?;
+                if codec != Codec::None {
+                    decompress_batch_records(batch)?;
+                }
+                pos += total;
+            }
+            false
+        }
+    };
+
+    if !needs_recompression {
+        return Ok(std::borrow::Cow::Borrowed(data));
+    }
+
     let mut out = Vec::with_capacity(data.len());
     let mut pos = 0usize;
     while pos < data.len() {
@@ -286,16 +342,12 @@ pub fn normalize_produce_payload(data: &[u8], ctype: CompressionType) -> Result<
                 out.extend_from_slice(&recompress_batch(batch, target)?);
             }
             _ => {
-                if codec != Codec::None {
-                    // Validate decodability so corrupt payloads are rejected at produce time.
-                    decompress_batch_records(batch)?;
-                }
                 out.extend_from_slice(batch);
             }
         }
         pos += total;
     }
-    Ok(out)
+    Ok(std::borrow::Cow::Owned(out))
 }
 
 // ---------------------------------------------------------------------------

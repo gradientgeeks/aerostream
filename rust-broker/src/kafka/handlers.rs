@@ -1364,7 +1364,7 @@ pub async fn handle_produce(
                 };
                 let encoded_batch = match crate::kafka::compression::normalize_produce_payload(&encoded_batch, topic_ctype) {
                     Ok(b) => b,
-                    Err(_) => encoded_batch,
+                    Err(_) => encoded_batch.into(),
                 };
                 let assigned_offset = guard.append(&encoded_batch)?;
                 if first_assigned.is_none() {
