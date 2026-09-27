@@ -7,7 +7,9 @@
 set -euo pipefail; source "$(dirname "$0")/env.sh"
 SYS="$1"; OUT="$2"; mkdir -p "$OUT"
 D="$(dirname "$0")"
-for w in "${WORKLOADS[@]}"; do
+ORDERED=("${WORKLOADS[@]}")
+if [ "${REVERSE:-0}" = 1 ]; then ORDERED=(); for ((i=${#WORKLOADS[@]}-1; i>=0; i--)); do ORDERED+=("${WORKLOADS[$i]}"); done; fi   # REVERSE=1: largest first
+for w in "${ORDERED[@]}"; do
   read -r LABEL SIZE RECORDS PRODUCERS MSGS EXTRA <<<"$w"
   [[ -z "${ONLY:-}" || " $ONLY " == *" $LABEL "* ]] || continue     # ONLY="1KB 50MB" limits the workloads
   for run in $(seq 1 "$RUNS"); do
@@ -15,6 +17,7 @@ for w in "${WORKLOADS[@]}"; do
     LOG="$OUT/${SYS}-${LABEL}-run${run}.log"
     "$D/create-topic.sh" "$SYS" "$TOPIC" >/dev/null 2>&1 || { echo "topic create failed for $TOPIC" | tee "$LOG"; continue; }
     echo "[$SYS] $LABEL run $run" >&2
+    T0=$(date +%s.%N)
     case "$SYS" in
       kafka|redpanda|aerostream-kafka)
         BOOT=$KAFKA_BOOTSTRAP; [ "$SYS" = redpanda ] && BOOT=$REDPANDA_BOOTSTRAP; [ "$SYS" = aerostream-kafka ] && BOOT=$AERO_KAFKA_BOOTSTRAP
@@ -25,5 +28,6 @@ for w in "${WORKLOADS[@]}"; do
         "$AERO_CLIENT" -controller "$AERO_CONTROLLER_GRPC" bench \
           -topic "$TOPIC" -partition 0 -size "$SIZE" -producers "$PRODUCERS" -messages "$MSGS" >"$LOG" 2>&1 || true ;;
     esac
+    printf '%s\trun%s\t%s\t%s\n' "$LABEL" "$run" "$T0" "$(date +%s.%N)" >>"$OUT/${SYS}-timeline.tsv"   # per-run wall-clock window
   done
 done

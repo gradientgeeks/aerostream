@@ -30,7 +30,7 @@ Kafka, Redpanda and AeroStream's Kafka port are driven by `kafka-producer-perf-t
 
 From 10 KB to 500 KB AeroStream's native port sustains 0.7-1.0 GB/s (3-5x Kafka and Redpanda); its Kafka port leads Kafka up to 250 KB and is behind at 1 MB and 10 MB.
 Kafka and AeroStream acknowledge from the OS page cache while Redpanda flushes before acknowledging by default. The broker container idles at about 1.3 MiB (Kafka ~377 MiB, Redpanda ~271 MiB).
-Methodology, caveats and the write-path fix behind these numbers: [BENCHMARK.md](benchmarks/BENCHMARK.md).
+Methodology, caveats and the write-path fix behind these numbers: [BENCHMARK.md](benchmarks/BENCHMARK.md). For official Linux Foundation OpenMessaging Benchmark (OMB) methodology and results, see [OpenMessaging Benchmark Guide](docs/OPENMESSAGING_BENCHMARK_GUIDE.md).
 
 ---
 

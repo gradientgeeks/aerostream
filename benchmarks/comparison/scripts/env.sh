@@ -32,9 +32,11 @@ export AERO_KAFKA_BOOTSTRAP=localhost:9096        # AeroStream Kafka-protocol po
 export MAX_MSG=67108864
 
 # Workloads: label size_bytes kafka_records aero_producers aero_messages_per_producer kafka_extra_props
-# Typical production sizes (1 KB .. 1 MB, Kafka's default max message size) plus 10 MB. 10 KB and up move 500 MB per run; 1 KB moves 50 MB.
+# Typical production sizes (100 B .. 1 MB, Kafka's default max message size) plus 10 MB. 10 KB and up move 500 MB per run;
+# 1 KB moves 50 MB, 100 B moves 10 MB (100,000 messages).
 # Large-message tests move 500 MB in total; small-message tests match the earlier benchmark (100k x 100 B, 50k x 1 KB).
 export WORKLOADS=(
+  "100B 100 100000 10 10000 "
   "1KB 1024 50000 10 5000 "
   "10KB 10240 50000 10 5000 "
   "50KB 51200 10000 10 1000 "

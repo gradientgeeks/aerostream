@@ -18,8 +18,10 @@ for SYS in "${SYSTEMS[@]}"; do
   sleep 10                                                    # let start-up work settle
   docker stats --no-stream --format '{{.MemUsage}} pids={{.PIDs}}' "$CONTAINER" | sed 's/^/idle: /' | tee "$OUT/$SYS-idle.txt"
   "$D/stats.sh" "$CONTAINER" "$OUT/$SYS-stats.csv" & STATS=$!
+  DISKP=""; if [ -n "${DISK:-}" ]; then "$D/diskstats.sh" "$DISK" "$OUT/$SYS-disk.csv" & DISKP=$!; fi   # DISK=nvme0n1 samples the host disk
   "$D/run-workloads.sh" "$SYS" "$OUT"
   touch "$OUT/$SYS-stats.csv.stop"; wait "$STATS" || true
+  if [ -n "$DISKP" ]; then touch "$OUT/$SYS-disk.csv.stop"; wait "$DISKP" || true; rm -f "$OUT/$SYS-disk.csv.stop"; "$D/disk-report.sh" "$OUT" "$SYS" > "$OUT/$SYS-disk-per-run.tsv"; fi
   "$D/peaks.sh" "$OUT/$SYS-stats.csv" | tee "$OUT/$SYS-peaks.txt"
   "$D/summarize.sh" "$OUT" "$SYS" >/dev/null
 done

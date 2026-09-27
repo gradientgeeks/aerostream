@@ -1,4 +1,4 @@
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use bytes::{Buf, BufMut, BytesMut};
@@ -666,11 +666,12 @@ pub(crate) async fn handle_fetch_with_topo(
     }
 
     let replica_id = cursor.get_i32();
-    let _max_wait_ms = cursor.get_i32();
-    let _min_bytes = cursor.get_i32();
+    let max_wait_ms = cursor.get_i32();
+    let min_bytes = cursor.get_i32();
 
+    let mut max_bytes = i32::MAX;
     if api_version >= 3 && cursor.remaining() >= 4 {
-        let _max_bytes = cursor.get_i32();
+        max_bytes = cursor.get_i32();
     }
     let mut isolation_level = 0i8;
     if api_version >= 4 && cursor.remaining() >= 1 {
@@ -682,7 +683,6 @@ pub(crate) async fn handle_fetch_with_topo(
     }
 
     let topics_count = cursor.get_i32();
-    let mut topic_results = Vec::new();
     // Requested partitions are parsed first; rack_id (v11) trails the topics/forgotten-topics arrays.
     let mut requested: Vec<(String, Vec<(i32, i64, i32)>)> = Vec::new();
 
@@ -725,88 +725,119 @@ pub(crate) async fn handle_fetch_with_topo(
     let my_id = cfg.id as i32;
     let selector = crate::topology::ReplicaSelector::parse(&cfg.replica_selector);
 
-    for (topic_name, parts) in requested {
-        let mut part_results = Vec::new();
+    // Long polling (like Kafka's purgatory): if fewer than `min_bytes` are available, wait up to `max_wait_ms` for an
+    // append on any partition, then read again. Answering empty fetches immediately made caught-up consumers spin.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(max_wait_ms.max(0) as u64);
+    let notify = log_manager.append_notify.clone();
+    let topic_results = loop {
+        // Registered before reading, so an append that lands while we read is not missed.
+        let notified = notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
 
-        for (partition_index, fetch_offset, partition_max_bytes) in parts {
-            let mut high_watermark = 0i64;
-            let mut last_stable_offset = 0i64;
-            let mut aborted: Option<Vec<(i64, i64)>> = None;
-            let mut record_set = Vec::new();
-            let mut error_code = 0i16;
-            let mut preferred_replica = -1i32;
-            let mut hw_cap: Option<i64> = None;
+        let mut topic_results = Vec::new();
+        let mut total_bytes: usize = 0;
+        let mut must_answer = false; // errors / replica redirects are returned without waiting
+        let mut remaining = max_bytes.max(0) as u64;
 
-            // KIP-392 routing (consumers only: replica_id == -1) using the controller-fed topology.
-            if replica_id < 0 {
-                if let Some(info) = topo.partition(&topic_name, partition_index) {
-                    if info.leader == my_id {
-                        let snap = topo.snapshot();
-                        let choice = crate::topology::select_replica(selector, client_rack.as_deref(), &info, &snap.brokers, fetch_offset);
-                        if choice != my_id && choice > 0 {
-                            // Tell the client to read from the closer replica; no records from the leader.
-                            preferred_replica = choice;
+        for (topic_name, parts) in &requested {
+            let mut part_results = Vec::new();
+
+            for &(partition_index, fetch_offset, partition_max_bytes) in parts {
+                let mut high_watermark = 0i64;
+                let mut last_stable_offset = 0i64;
+                let mut aborted: Option<Vec<(i64, i64)>> = None;
+                let mut record_set = Vec::new();
+                let mut error_code = 0i16;
+                let mut preferred_replica = -1i32;
+                let mut hw_cap: Option<i64> = None;
+
+                // KIP-392 routing (consumers only: replica_id == -1) using the controller-fed topology.
+                if replica_id < 0 {
+                    if let Some(info) = topo.partition(topic_name, partition_index) {
+                        if info.leader == my_id {
+                            let snap = topo.snapshot();
+                            let choice = crate::topology::select_replica(selector, client_rack.as_deref(), &info, &snap.brokers, fetch_offset);
+                            if choice != my_id && choice > 0 {
+                                // Tell the client to read from the closer replica; no records from the leader.
+                                preferred_replica = choice;
+                            }
+                        } else if info.replicas.contains(&my_id) {
+                            // Follower read: only expose data known to be committed (<= partition high watermark).
+                            hw_cap = Some(info.high_watermark);
+                        } else if info.leader != 0 {
+                            error_code = 6; // NOT_LEADER_OR_FOLLOWER
                         }
-                    } else if info.replicas.contains(&my_id) {
-                        // Follower read: only expose data known to be committed (<= partition high watermark).
-                        hw_cap = Some(info.high_watermark);
-                    } else if info.leader != 0 {
-                        error_code = 6; // NOT_LEADER_OR_FOLLOWER
                     }
                 }
-            }
 
-            match log_manager.get_partition(&topic_name, partition_index as u32).await {
-                Ok(_) if error_code != 0 => {}
-                Ok(part_log) => {
-                    // Scope partition lock strictly for in-memory metadata and segment index lookup.
-                    // Release the partition guard immediately so concurrent producers are never blocked on disk I/O.
-                    let (hw, lso, aborted_txns, read_spec) = {
-                        let mut guard = part_log.lock().await;
-                        let view = crate::txn::produce::fetch_view(&guard, fetch_offset, isolation_level);
-                        let mut upper_bound = view.upper_bound;
-                        let mut hw = view.high_watermark;
-                        let mut lso = view.last_stable_offset;
-                        if let Some(cap) = hw_cap {
-                            hw = hw.min(cap);
-                            lso = lso.min(cap);
-                            upper_bound = upper_bound.min(cap);
-                        }
+                match log_manager.get_partition(topic_name, partition_index as u32).await {
+                    Ok(_) if error_code != 0 => {}
+                    Ok(part_log) => {
+                        // The partition lock covers only in-memory state and the index lookup; file reads happen after.
+                        let (hw, lso, aborted_txns, read_spec) = {
+                            let mut guard = part_log.lock().await;
+                            let view = crate::txn::produce::fetch_view(&guard, fetch_offset, isolation_level);
+                            let mut upper_bound = view.upper_bound;
+                            let mut hw = view.high_watermark;
+                            let mut lso = view.last_stable_offset;
+                            if let Some(cap) = hw_cap {
+                                hw = hw.min(cap);
+                                lso = lso.min(cap);
+                                upper_bound = upper_bound.min(cap);
+                            }
 
-                        let spec = if preferred_replica < 0 && fetch_offset >= 0 && fetch_offset < upper_bound {
-                            let max_read = (partition_max_bytes as u32).min(32 * 1024 * 1024);
-                            guard.read_from_offset(fetch_offset as u64, max_read).ok().flatten()
-                        } else {
-                            None
+                            // The first partition with data always returns at least one entry (KIP-74).
+                            let budget = if total_bytes == 0 { partition_max_bytes.max(1) as u64 } else { remaining.min(partition_max_bytes.max(0) as u64) };
+                            let spec = if preferred_replica < 0 && fetch_offset >= 0 && fetch_offset < upper_bound && budget > 0 {
+                                let max_read = budget.min(32 * 1024 * 1024) as u32;
+                                guard.read_range(fetch_offset as u64, upper_bound as u64, max_read).ok().flatten()
+                            } else {
+                                None
+                            };
+
+                            (hw, lso, view.aborted, spec)
                         };
 
-                        (hw, lso, view.aborted, spec)
-                    }; // <-- Partition lock is released here!
+                        high_watermark = hw;
+                        last_stable_offset = lso;
+                        aborted = aborted_txns;
 
-                    high_watermark = hw;
-                    last_stable_offset = lso;
-                    aborted = aborted_txns;
-
-                    if let Some((mut file, position, bytes_to_read)) = read_spec {
-                        // File seek and read execute completely OUTSIDE the partition lock.
-                        if let Ok(_) = file.seek(SeekFrom::Start(position)) {
-                            let mut raw_buf = vec![0u8; bytes_to_read as usize];
-                            if let Ok(_) = file.read_exact(&mut raw_buf) {
-                                record_set = ensure_kafka_record_set(fetch_offset, &raw_buf);
+                        if let Some((file, position, len, first_len)) = read_spec {
+                            use std::os::unix::fs::FileExt;
+                            let mut raw = vec![0u8; len as usize];
+                            if file.read_exact_at(&mut raw, position).is_ok() {
+                                // A run of record batches is returned as is (their base offsets were patched on append);
+                                // anything else (legacy message sets, raw native-protocol payloads) is wrapped entry by entry,
+                                // so only the first entry is returned.
+                                record_set = if crate::txn::batch::split_batches(&raw).is_some() {
+                                    raw
+                                } else {
+                                    ensure_kafka_record_set(fetch_offset, &raw[..first_len.min(len) as usize])
+                                };
                             }
                         }
                     }
+                    Err(_) => {
+                        error_code = 3; // UNKNOWN_TOPIC_OR_PARTITION
+                    }
                 }
-                Err(_) => {
-                    error_code = 3; // UNKNOWN_TOPIC_OR_PARTITION
-                }
+
+                total_bytes += record_set.len();
+                remaining = remaining.saturating_sub(record_set.len() as u64);
+                must_answer |= error_code != 0 || preferred_replica >= 0;
+                part_results.push((partition_index, error_code, high_watermark, last_stable_offset, aborted, record_set, preferred_replica));
             }
 
-            part_results.push((partition_index, error_code, high_watermark, last_stable_offset, aborted, record_set, preferred_replica));
+            topic_results.push((topic_name.clone(), part_results));
         }
 
-        topic_results.push((topic_name, part_results));
-    }
+        let now = std::time::Instant::now();
+        if must_answer || min_bytes <= 0 || total_bytes >= min_bytes as usize || now >= deadline {
+            break topic_results;
+        }
+        let _ = tokio::time::timeout(deadline - now, notified).await;
+    };
 
     // Consumer byte-rate quota (KIP-13): record served bytes and compute throttle.
     let mut throttle_ms = ctx.base_throttle_ms;
@@ -1190,6 +1221,80 @@ mod tests {
         let mut v = vec![0u8; n];
         c.copy_to_slice(&mut v);
         v
+    }
+
+    /// Fetch v4 frame with explicit max_wait_ms / min_bytes / partition max bytes.
+    fn fetch_frame_v4_opts(topic: &str, offset: i64, max_wait_ms: i32, min_bytes: i32, part_max: i32) -> BytesMut {
+        let mut f = BytesMut::new();
+        f.put_i16(1);
+        f.put_i16(4);
+        f.put_i32(9);
+        put_kafka_string(&mut f, Some("c"));
+        f.put_i32(-1);
+        f.put_i32(max_wait_ms);
+        f.put_i32(min_bytes);
+        f.put_i32(64 << 20);
+        f.put_i8(0);
+        f.put_i32(1);
+        put_kafka_string(&mut f, Some(topic));
+        f.put_i32(1);
+        f.put_i32(0);
+        f.put_i64(offset);
+        f.put_i32(part_max);
+        f
+    }
+
+    #[tokio::test]
+    async fn fetch_returns_many_records_per_partition_not_one() {
+        use crate::kafka::handlers::{encode_records_batch, parse_records, KafkaRecord};
+        let dir = tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1).with_limits(128 << 20, None, None));
+        let cfg = Arc::new(BrokerConfig::default());
+        for i in 0..50u8 {
+            let b = encode_records_batch(0, &[KafkaRecord::new(None, Some(vec![i; 1000]))]);
+            let resp = handle_kafka_frame(&produce_frame_v3("c", "many", &b, 3), &log_mgr, &cfg).await.unwrap().unwrap();
+            assert_eq!(produce_error_code(&resp), 0);
+        }
+        let fr = handle_kafka_frame(&fetch_frame_v4_opts("many", 0, 0, 1, 1 << 20), &log_mgr, &cfg).await.unwrap().unwrap();
+        let recs = parse_records(&fetch_records_v4(&fr)).unwrap();
+        assert_eq!(recs.len(), 50, "one Fetch must return every record up to the byte limit");
+        assert_eq!(recs[49].value.as_deref(), Some(&[49u8; 1000][..]));
+
+        // Byte limit: ~5 KB returns a handful of records, and at least one when the limit is smaller than one record.
+        let fr = handle_kafka_frame(&fetch_frame_v4_opts("many", 10, 0, 1, 5000), &log_mgr, &cfg).await.unwrap().unwrap();
+        let n = parse_records(&fetch_records_v4(&fr)).unwrap().len();
+        assert!((1..=5).contains(&n), "got {}", n);
+        let fr = handle_kafka_frame(&fetch_frame_v4_opts("many", 10, 0, 1, 10), &log_mgr, &cfg).await.unwrap().unwrap();
+        assert_eq!(parse_records(&fetch_records_v4(&fr)).unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn fetch_long_polls_until_data_or_max_wait() {
+        use crate::kafka::handlers::{encode_records_batch, parse_records, KafkaRecord};
+        let dir = tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1).with_limits(128 << 20, None, None));
+        let cfg = Arc::new(BrokerConfig::default());
+        let b = encode_records_batch(0, &[KafkaRecord::new(None, Some(b"x".to_vec()))]);
+        handle_kafka_frame(&produce_frame_v3("c", "lp", &b, 3), &log_mgr, &cfg).await.unwrap().unwrap();
+
+        // Caught up (offset 1 == high watermark): waits max_wait, then answers empty.
+        let t = std::time::Instant::now();
+        let fr = handle_kafka_frame(&fetch_frame_v4_opts("lp", 1, 300, 1, 1 << 20), &log_mgr, &cfg).await.unwrap().unwrap();
+        assert!(fetch_records_v4(&fr).is_empty());
+        assert!(t.elapsed() >= std::time::Duration::from_millis(250), "returned after {:?}", t.elapsed());
+
+        // An append while waiting wakes the fetch early.
+        let (lm, c2) = (log_mgr.clone(), cfg.clone());
+        let producer = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let b = encode_records_batch(0, &[KafkaRecord::new(None, Some(b"late".to_vec()))]);
+            handle_kafka_frame(&produce_frame_v3("c", "lp", &b, 3), &lm, &c2).await.unwrap();
+        });
+        let t = std::time::Instant::now();
+        let fr = handle_kafka_frame(&fetch_frame_v4_opts("lp", 1, 5000, 1, 1 << 20), &log_mgr, &cfg).await.unwrap().unwrap();
+        producer.await.unwrap();
+        assert!(t.elapsed() < std::time::Duration::from_millis(2000), "not woken by append: {:?}", t.elapsed());
+        assert_eq!(parse_records(&fetch_records_v4(&fr)).unwrap()[0].value.as_deref(), Some(&b"late"[..]));
     }
 
     fn fetch_frame_v4(client: &str, topic: &str, offset: i64) -> BytesMut {

@@ -39,3 +39,6 @@ docs/images/
 .gemini/
 .idea/
 .vscode/
+
+# Benchmark tooling and results (not part of the image)
+benchmarks/
