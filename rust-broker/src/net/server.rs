@@ -29,7 +29,19 @@ impl DataServer {
     }
 
     pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let listener = TcpListener::bind(self.addr).await?;
+        let std_listener = std::net::TcpListener::bind(self.addr)?;
+        std_listener.set_nonblocking(true)?;
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::io::AsRawFd;
+            let fd = std_listener.as_raw_fd();
+            unsafe {
+                let buf_size: libc::c_int = 8 * 1024 * 1024;
+                libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+                libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+            }
+        }
+        let listener = TcpListener::from_std(std_listener)?;
 
         // Build a TLS acceptor up front if data-plane TLS is enabled.
         let acceptor = if self.cfg.tls.enabled {
@@ -45,6 +57,19 @@ impl DataServer {
 
         loop {
             let (stream, peer_addr) = listener.accept().await?;
+            let _ = stream.set_nodelay(true);
+            #[cfg(target_os = "linux")]
+            {
+                use std::os::unix::io::AsRawFd;
+                let fd = stream.as_raw_fd();
+                unsafe {
+                    let buf_size: libc::c_int = 8 * 1024 * 1024;
+                    libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+                    libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+                    let quickack: libc::c_int = 1;
+                    libc::setsockopt(fd, libc::IPPROTO_TCP, libc::TCP_QUICKACK, &quickack as *const _ as *const libc::c_void, std::mem::size_of_val(&quickack) as libc::socklen_t);
+                }
+            }
             let cpu_core = unsafe { libc::sched_getcpu() };
             info!("[AeroMQ Broker] Accepted connection from {} on CPU core {}", peer_addr, cpu_core);
             let log_manager = self.log_manager.clone();
@@ -217,6 +242,12 @@ async fn handle_connection(
     // Connections start authenticated only when no token is configured.
     let mut authenticated = auth_token.is_none();
 
+    // Reusable connection buffer to eliminate heap malloc/free per request on the connection
+    let mut body = Vec::with_capacity(64 * 1024);
+
+    // Fast-path partition cache for repeated writes to the same topic-partition
+    let mut cached_partition: Option<((String, u32), Arc<tokio::sync::Mutex<crate::log::manager::PartitionLog>>)> = None;
+
     loop {
         // Read Request Header: [magic (2 bytes)] [cmd (1 byte)] [body_len (4 bytes)]
         match stream.read_exact(&mut header).await {
@@ -235,7 +266,8 @@ async fn handle_connection(
         let cmd = header[2];
         let body_len = u32::from_be_bytes(header[3..7].try_into().unwrap()) as usize;
 
-        let mut body = vec![0u8; body_len];
+        body.clear();
+        body.resize(body_len, 0);
         stream.read_exact(&mut body).await?;
 
         // Command 0: AUTH handshake. Body is the raw bearer token.
@@ -268,8 +300,17 @@ async fn handle_connection(
                 // Command 1: Produce/Write
                 let req = parse_produce_body(&body)?;
 
-                // Append to partition log
-                let part_log = log_manager.get_partition(&req.topic, req.partition).await?;
+                // Fast partition resolution: check connection cache before acquiring manager read lock
+                let part_log = match &cached_partition {
+                    Some(((top, part), log)) if top.as_str() == req.topic && *part == req.partition => {
+                        log.clone()
+                    }
+                    _ => {
+                        let log = log_manager.get_partition(req.topic, req.partition).await?;
+                        cached_partition = Some(((req.topic.to_string(), req.partition), log.clone()));
+                        log
+                    }
+                };
                 let mut log_guard = part_log.lock().await;
 
                 // When producer_id >= 0 and base_sequence >= 0, check ProducerStateTracker
@@ -310,7 +351,16 @@ async fn handle_connection(
                 let req = parse_fetch_body(&body)?;
 
                 // Read from partition log with High-Watermark blocking
-                let part_log = log_manager.get_partition(&req.topic, req.partition).await?;
+                let part_log = match &cached_partition {
+                    Some(((top, part), log)) if top.as_str() == req.topic && *part == req.partition => {
+                        log.clone()
+                    }
+                    _ => {
+                        let log = log_manager.get_partition(req.topic, req.partition).await?;
+                        cached_partition = Some(((req.topic.to_string(), req.partition), log.clone()));
+                        log
+                    }
+                };
 
                 let mut attempts = 0;
                 let data_opt = loop {
@@ -347,7 +397,16 @@ async fn handle_connection(
                 let req = parse_replica_fetch_body(&body)?;
 
                 // Read from partition log (replicate/sync has no HW limit)
-                let part_log = log_manager.get_partition(&req.topic, req.partition).await?;
+                let part_log = match &cached_partition {
+                    Some(((top, part), log)) if top.as_str() == req.topic && *part == req.partition => {
+                        log.clone()
+                    }
+                    _ => {
+                        let log = log_manager.get_partition(req.topic, req.partition).await?;
+                        cached_partition = Some(((req.topic.to_string(), req.partition), log.clone()));
+                        log
+                    }
+                };
                 let mut log_guard = part_log.lock().await;
 
                 // Record replica progress
@@ -377,7 +436,7 @@ async fn handle_connection(
 /// `[topic_len(2)][topic][partition(4)][payload_len(4)][payload]`
 #[derive(Debug)]
 struct ProduceRequest<'a> {
-    topic: String,
+    topic: &'a str,
     partition: u32,
     payload: &'a [u8],
 }
@@ -390,7 +449,7 @@ fn parse_produce_body(body: &[u8]) -> Result<ProduceRequest<'_>, Box<dyn std::er
     if body.len() < 10 + topic_len {
         return Err("Produce topic length exceeds body size".into());
     }
-    let topic = String::from_utf8(body[2..2 + topic_len].to_vec())?;
+    let topic = std::str::from_utf8(&body[2..2 + topic_len])?;
     let partition = u32::from_be_bytes(body[2 + topic_len..6 + topic_len].try_into().unwrap());
     let payload_len = u32::from_be_bytes(body[6 + topic_len..10 + topic_len].try_into().unwrap()) as usize;
 
@@ -405,14 +464,14 @@ fn parse_produce_body(body: &[u8]) -> Result<ProduceRequest<'_>, Box<dyn std::er
 /// Parsed fields of a Fetch (cmd=2) request body:
 /// `[topic_len(2)][topic][partition(4)][start_offset(8)][max_bytes(4)]`
 #[derive(Debug)]
-struct FetchRequest {
-    topic: String,
+struct FetchRequest<'a> {
+    topic: &'a str,
     partition: u32,
     start_offset: u64,
     max_bytes: u32,
 }
 
-fn parse_fetch_body(body: &[u8]) -> Result<FetchRequest, Box<dyn std::error::Error>> {
+fn parse_fetch_body(body: &[u8]) -> Result<FetchRequest<'_>, Box<dyn std::error::Error>> {
     if body.len() < 18 {
         return Err("Fetch body too short".into());
     }
@@ -420,7 +479,7 @@ fn parse_fetch_body(body: &[u8]) -> Result<FetchRequest, Box<dyn std::error::Err
     if body.len() < 18 + topic_len {
         return Err("Fetch topic length exceeds body size".into());
     }
-    let topic = String::from_utf8(body[2..2 + topic_len].to_vec())?;
+    let topic = std::str::from_utf8(&body[2..2 + topic_len])?;
     let partition = u32::from_be_bytes(body[2 + topic_len..6 + topic_len].try_into().unwrap());
     let start_offset = u64::from_be_bytes(body[6 + topic_len..14 + topic_len].try_into().unwrap());
     let max_bytes = u32::from_be_bytes(body[14 + topic_len..18 + topic_len].try_into().unwrap());
@@ -431,15 +490,15 @@ fn parse_fetch_body(body: &[u8]) -> Result<FetchRequest, Box<dyn std::error::Err
 /// Parsed fields of a Replica Fetch (cmd=3) request body:
 /// `[replica_id(4)][topic_len(2)][topic][partition(4)][start_offset(8)][max_bytes(4)]`
 #[derive(Debug)]
-struct ReplicaFetchRequest {
+struct ReplicaFetchRequest<'a> {
     replica_id: u32,
-    topic: String,
+    topic: &'a str,
     partition: u32,
     start_offset: u64,
     max_bytes: u32,
 }
 
-fn parse_replica_fetch_body(body: &[u8]) -> Result<ReplicaFetchRequest, Box<dyn std::error::Error>> {
+fn parse_replica_fetch_body(body: &[u8]) -> Result<ReplicaFetchRequest<'_>, Box<dyn std::error::Error>> {
     if body.len() < 22 {
         return Err("Replica Fetch body too short".into());
     }
@@ -448,7 +507,7 @@ fn parse_replica_fetch_body(body: &[u8]) -> Result<ReplicaFetchRequest, Box<dyn 
     if body.len() < 22 + topic_len {
         return Err("Replica Fetch topic length exceeds body size".into());
     }
-    let topic = String::from_utf8(body[6..6 + topic_len].to_vec())?;
+    let topic = std::str::from_utf8(&body[6..6 + topic_len])?;
     let partition = u32::from_be_bytes(body[6 + topic_len..10 + topic_len].try_into().unwrap());
     let start_offset = u64::from_be_bytes(body[10 + topic_len..18 + topic_len].try_into().unwrap());
     let max_bytes = u32::from_be_bytes(body[18 + topic_len..22 + topic_len].try_into().unwrap());
@@ -457,21 +516,23 @@ fn parse_replica_fetch_body(body: &[u8]) -> Result<ReplicaFetchRequest, Box<dyn 
 }
 
 /// Encode a successful Produce response: `[magic(2)][status=0][offset(8)]`.
-fn encode_produce_ack(offset: u64) -> Vec<u8> {
-    let mut resp = Vec::with_capacity(11);
-    resp.extend_from_slice(&[0xAE, 0x01]);
-    resp.push(0); // success
-    resp.extend_from_slice(&offset.to_be_bytes());
+fn encode_produce_ack(offset: u64) -> [u8; 11] {
+    let mut resp = [0u8; 11];
+    resp[0] = 0xAE;
+    resp[1] = 0x01;
+    resp[2] = 0x00; // success
+    resp[3..11].copy_from_slice(&offset.to_be_bytes());
     resp
 }
 
 /// Encode a "data follows" Fetch/ReplicaFetch response header:
 /// `[magic(2)][status=2][bytes_to_read(4)]`.
-fn encode_data_header(bytes_to_read: u32) -> Vec<u8> {
-    let mut resp = Vec::with_capacity(7);
-    resp.extend_from_slice(&[0xAE, 0x01]);
-    resp.push(2); // Success with Data
-    resp.extend_from_slice(&bytes_to_read.to_be_bytes());
+fn encode_data_header(bytes_to_read: u32) -> [u8; 7] {
+    let mut resp = [0u8; 7];
+    resp[0] = 0xAE;
+    resp[1] = 0x01;
+    resp[2] = 0x02; // Success with Data
+    resp[3..7].copy_from_slice(&bytes_to_read.to_be_bytes());
     resp
 }
 

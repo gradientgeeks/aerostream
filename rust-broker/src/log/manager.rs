@@ -241,17 +241,19 @@ impl PartitionLog {
     }
 
     pub fn recompute_high_watermark(&mut self) {
-        let other_replicas: Vec<u32> = self.replica_ids.iter().copied().filter(|&id| id != self.broker_id).collect();
-        if other_replicas.is_empty() {
+        let has_other_replicas = self.replica_ids.iter().any(|&id| id != self.broker_id);
+        if !has_other_replicas {
             self.high_watermark = self.next_offset;
             return;
         }
 
         let mut min_offset = self.next_offset;
-        for rep_id in other_replicas {
-            let rep_offset = self.replica_offsets.get(&rep_id).copied().unwrap_or(0);
-            if rep_offset < min_offset {
-                min_offset = rep_offset;
+        for &rep_id in &self.replica_ids {
+            if rep_id != self.broker_id {
+                let rep_offset = self.replica_offsets.get(&rep_id).copied().unwrap_or(0);
+                if rep_offset < min_offset {
+                    min_offset = rep_offset;
+                }
             }
         }
         self.high_watermark = min_offset;

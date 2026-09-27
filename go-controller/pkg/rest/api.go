@@ -129,11 +129,13 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/connectors/", s.handleConnectors)
 	mux.HandleFunc("/api/connectors-detail", s.handleConnectorsDetail)
 	mux.HandleFunc("/api/connector-plugins", s.handleConnectorPlugins)
+	mux.HandleFunc("/api/connector-plugins/", s.handleConnectorPlugins)
 
 	// Kafka Connect compatibility aliases
 	mux.HandleFunc("/connectors", s.handleConnectors)
 	mux.HandleFunc("/connectors/", s.handleConnectors)
 	mux.HandleFunc("/connector-plugins", s.handleConnectorPlugins)
+	mux.HandleFunc("/connector-plugins/", s.handleConnectorPlugins)
 
 	// Schema Registry endpoints (Confluent-compatible)
 	mux.HandleFunc("/subjects", s.handleSubjects)
@@ -1426,6 +1428,144 @@ func (s *Server) handleTransformTest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func buildConnectorInfo(c *connect.Connector) map[string]interface{} {
+	tasks := make([]map[string]interface{}, 0, len(c.Tasks))
+	for _, t := range c.Tasks {
+		tasks = append(tasks, map[string]interface{}{
+			"connector": c.Name,
+			"task":      t.ID,
+		})
+	}
+	if len(tasks) == 0 {
+		count := c.TasksCount
+		if count <= 0 {
+			count = 1
+		}
+		for i := 0; i < count; i++ {
+			tasks = append(tasks, map[string]interface{}{
+				"connector": c.Name,
+				"task":      i,
+			})
+		}
+	}
+
+	cfg := make(map[string]string)
+	for k, v := range c.Config {
+		cfg[k] = v
+	}
+	if cfg["connector.class"] == "" && c.Class != "" {
+		cfg["connector.class"] = c.Class
+	}
+	if cfg["name"] == "" && c.Name != "" {
+		cfg["name"] = c.Name
+	}
+	if cfg["topics"] == "" && len(c.Topics) > 0 {
+		cfg["topics"] = strings.Join(c.Topics, ",")
+	}
+
+	return map[string]interface{}{
+		"name":   c.Name,
+		"config": cfg,
+		"tasks":  tasks,
+		"type":   strings.ToLower(string(c.Type)),
+	}
+}
+
+func buildConnectorStatus(c *connect.Connector) map[string]interface{} {
+	workerID := c.WorkerID
+	if workerID == "" {
+		workerID = "aerostream-worker-1"
+	}
+
+	tasks := make([]map[string]interface{}, 0, len(c.Tasks))
+	for _, t := range c.Tasks {
+		tWorker := t.WorkerID
+		if tWorker == "" {
+			tWorker = workerID
+		}
+		taskObj := map[string]interface{}{
+			"id":        t.ID,
+			"state":     string(t.State),
+			"worker_id": tWorker,
+		}
+		if t.Trace != "" {
+			taskObj["trace"] = t.Trace
+		}
+		tasks = append(tasks, taskObj)
+	}
+	if len(tasks) == 0 {
+		count := c.TasksCount
+		if count <= 0 {
+			count = 1
+		}
+		for i := 0; i < count; i++ {
+			tasks = append(tasks, map[string]interface{}{
+				"id":        i,
+				"state":     string(c.State),
+				"worker_id": workerID,
+			})
+		}
+	}
+
+	connectorObj := map[string]interface{}{
+		"state":     string(c.State),
+		"worker_id": workerID,
+	}
+	if c.LastError != "" {
+		connectorObj["trace"] = c.LastError
+	}
+
+	return map[string]interface{}{
+		"name":              c.Name,
+		"connector":         connectorObj,
+		"tasks":             tasks,
+		"type":              strings.ToLower(string(c.Type)),
+		"state":             string(c.State),
+		"records_processed": c.RecordsProcessed,
+		"bytes_transferred": c.BytesTransferred,
+	}
+}
+
+func buildConnectorTasks(c *connect.Connector) []map[string]interface{} {
+	result := make([]map[string]interface{}, 0, len(c.Tasks))
+	if len(c.Tasks) > 0 {
+		for _, t := range c.Tasks {
+			taskCfg := make(map[string]string)
+			for k, v := range c.Config {
+				taskCfg[k] = v
+			}
+			taskCfg["task.id"] = strconv.Itoa(t.ID)
+			result = append(result, map[string]interface{}{
+				"id": map[string]interface{}{
+					"connector": c.Name,
+					"task":      t.ID,
+				},
+				"config": taskCfg,
+			})
+		}
+	} else {
+		count := c.TasksCount
+		if count <= 0 {
+			count = 1
+		}
+		for i := 0; i < count; i++ {
+			taskCfg := make(map[string]string)
+			for k, v := range c.Config {
+				taskCfg[k] = v
+			}
+			taskCfg["task.id"] = strconv.Itoa(i)
+			result = append(result, map[string]interface{}{
+				"id": map[string]interface{}{
+					"connector": c.Name,
+					"task":      i,
+				},
+				"config": taskCfg,
+			})
+		}
+	}
+	return result
+}
+
 func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
 	if s.enableCORS(w, r) {
 		return
@@ -1437,11 +1577,42 @@ func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			connectors := s.connectorManager.ListConnectors()
-			names := make([]string, 0, len(connectors))
-			for _, c := range connectors {
-				names = append(names, c.Name)
+
+			expands := r.URL.Query()["expand"]
+			hasStatus := false
+			hasInfo := false
+			for _, exp := range expands {
+				for _, token := range strings.Split(exp, ",") {
+					token = strings.TrimSpace(token)
+					if token == "status" {
+						hasStatus = true
+					} else if token == "info" {
+						hasInfo = true
+					}
+				}
 			}
-			json.NewEncoder(w).Encode(names)
+
+			if !hasStatus && !hasInfo {
+				names := make([]string, 0, len(connectors))
+				for _, c := range connectors {
+					names = append(names, c.Name)
+				}
+				json.NewEncoder(w).Encode(names)
+				return
+			}
+
+			expanded := make(map[string]map[string]interface{})
+			for _, c := range connectors {
+				entry := make(map[string]interface{})
+				if hasStatus {
+					entry["status"] = buildConnectorStatus(c)
+				}
+				if hasInfo {
+					entry["info"] = buildConnectorInfo(c)
+				}
+				expanded[c.Name] = entry
+			}
+			json.NewEncoder(w).Encode(expanded)
 			return
 
 		case http.MethodPost:
@@ -1507,7 +1678,7 @@ func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
 
 			created, _ := s.connectorManager.GetConnector(req.Name)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(created)
+			json.NewEncoder(w).Encode(buildConnectorInfo(created))
 			return
 
 		default:
@@ -1542,7 +1713,7 @@ func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
 				return
 			}
-			json.NewEncoder(w).Encode(c)
+			json.NewEncoder(w).Encode(buildConnectorInfo(c))
 			return
 
 		case http.MethodDelete:
@@ -1550,6 +1721,11 @@ func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
 				return
 			}
+			if strings.HasPrefix(path, "connectors/") {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"deleted": true,
 				"name":    name,
@@ -1575,28 +1751,48 @@ func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
 				return
 			}
-			workerID := "aeromq-controller-0"
-			tasks := make([]map[string]interface{}, 0, c.TasksCount)
-			for i := 0; i < c.TasksCount; i++ {
-				tasks = append(tasks, map[string]interface{}{
-					"id":        i,
-					"state":     string(c.State),
-					"worker_id": workerID,
-				})
+			json.NewEncoder(w).Encode(buildConnectorStatus(c))
+			return
+
+		case "config":
+			if r.Method == http.MethodGet {
+				c, err := s.connectorManager.GetConnector(name)
+				if err != nil {
+					writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
+					return
+				}
+				json.NewEncoder(w).Encode(c.Config)
+				return
 			}
-			resp := map[string]interface{}{
-				"name": name,
-				"connector": map[string]interface{}{
-					"state":     string(c.State),
-					"worker_id": workerID,
-				},
-				"tasks":             tasks,
-				"type":              strings.ToLower(string(c.Type)),
-				"state":             string(c.State),
-				"records_processed": c.RecordsProcessed,
-				"bytes_transferred": c.BytesTransferred,
+			if r.Method == http.MethodPut {
+				var cfg map[string]string
+				if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+					writeError(w, http.StatusBadRequest, 400, "invalid JSON configuration")
+					return
+				}
+				updated, err := s.connectorManager.UpdateConnectorConfig(name, cfg)
+				if err != nil {
+					writeError(w, http.StatusNotFound, 404, err.Error())
+					return
+				}
+				json.NewEncoder(w).Encode(buildConnectorInfo(updated))
+				return
 			}
-			json.NewEncoder(w).Encode(resp)
+			writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+			return
+
+		case "restart":
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+				return
+			}
+			includeTasks := r.URL.Query().Get("includeTasks") == "true"
+			onlyFailed := r.URL.Query().Get("onlyFailed") == "true"
+			if err := s.connectorManager.RestartConnector(name, includeTasks, onlyFailed); err != nil {
+				writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
 			return
 
 		case "pause":
@@ -1631,13 +1827,103 @@ func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 
-		case "config":
-			c, err := s.connectorManager.GetConnector(name)
-			if err != nil {
+		case "stop":
+			if r.Method != http.MethodPost && r.Method != http.MethodPut {
+				writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+				return
+			}
+			if err := s.connectorManager.StopConnector(name); err != nil {
 				writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
 				return
 			}
-			json.NewEncoder(w).Encode(c.Config)
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"name":  name,
+				"state": string(connect.StateStopped),
+			})
+			return
+
+		case "topics":
+			if len(parts) == 2 {
+				if r.Method != http.MethodGet {
+					writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+					return
+				}
+				topics, err := s.connectorManager.GetConnectorTopics(name)
+				if err != nil {
+					writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
+					return
+				}
+				if topics == nil {
+					topics = []string{}
+				}
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					name: map[string]interface{}{
+						"topics": topics,
+					},
+				})
+				return
+			}
+			if len(parts) == 3 && parts[2] == "reset" {
+				if r.Method != http.MethodPut && r.Method != http.MethodPost {
+					writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+					return
+				}
+				if err := s.connectorManager.ResetConnectorTopics(name); err != nil {
+					writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			writeError(w, http.StatusNotFound, 404, "Not found")
+			return
+
+		case "tasks":
+			if len(parts) == 2 {
+				if r.Method != http.MethodGet {
+					writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+					return
+				}
+				c, err := s.connectorManager.GetConnector(name)
+				if err != nil {
+					writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Connector %s not found", name))
+					return
+				}
+				json.NewEncoder(w).Encode(buildConnectorTasks(c))
+				return
+			}
+			taskID, err := strconv.Atoi(parts[2])
+			if err != nil {
+				writeError(w, http.StatusBadRequest, 400, "invalid task ID")
+				return
+			}
+			if len(parts) == 4 && parts[3] == "status" {
+				if r.Method != http.MethodGet {
+					writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+					return
+				}
+				taskStatus, err := s.connectorManager.GetTaskStatus(name, taskID)
+				if err != nil {
+					writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Task %d not found for connector %s: %v", taskID, name, err))
+					return
+				}
+				json.NewEncoder(w).Encode(taskStatus)
+				return
+			}
+			if len(parts) == 4 && parts[3] == "restart" {
+				if r.Method != http.MethodPost {
+					writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+					return
+				}
+				if err := s.connectorManager.RestartTask(name, taskID); err != nil {
+					writeError(w, http.StatusNotFound, 404, fmt.Sprintf("Task %d not found for connector %s: %v", taskID, name, err))
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			writeError(w, http.StatusNotFound, 404, "Not found")
 			return
 
 		default:
@@ -1667,10 +1953,81 @@ func (s *Server) handleConnectorPlugins(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+
+	path := strings.Trim(r.URL.Path, "/")
+	if path == "api/connector-plugins" || path == "connector-plugins" {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+			return
+		}
+		plugins := s.connectorManager.ListPlugins()
+		resp := make([]map[string]interface{}, 0, len(plugins))
+		for _, p := range plugins {
+			resp = append(resp, map[string]interface{}{
+				"class":       p.Class,
+				"type":        strings.ToLower(string(p.Type)),
+				"version":     p.Version,
+				"description": p.Description,
+			})
+		}
+		json.NewEncoder(w).Encode(resp)
 		return
 	}
-	plugins := s.connectorManager.ListPlugins()
-	json.NewEncoder(w).Encode(plugins)
+
+	sub := ""
+	if strings.HasPrefix(path, "api/connector-plugins/") {
+		sub = strings.TrimPrefix(path, "api/connector-plugins/")
+	} else if strings.HasPrefix(path, "connector-plugins/") {
+		sub = strings.TrimPrefix(path, "connector-plugins/")
+	} else {
+		writeError(w, http.StatusNotFound, 404, "Not found")
+		return
+	}
+
+	parts := strings.Split(strings.Trim(sub, "/"), "/")
+	if len(parts) >= 3 && parts[1] == "config" && parts[2] == "validate" {
+		if r.Method != http.MethodPut && r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, 405, "Method not allowed")
+			return
+		}
+		pluginName, err := url.PathUnescape(parts[0])
+		if err != nil || pluginName == "" {
+			writeError(w, http.StatusBadRequest, 400, "invalid plugin name")
+			return
+		}
+
+		var raw map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			writeError(w, http.StatusBadRequest, 400, "invalid JSON request body")
+			return
+		}
+
+		cfg := make(map[string]string)
+		if nested, ok := raw["config"].(map[string]interface{}); ok {
+			for k, v := range nested {
+				cfg[k] = fmt.Sprintf("%v", v)
+			}
+		}
+		for k, v := range raw {
+			if k != "config" {
+				cfg[k] = fmt.Sprintf("%v", v)
+			}
+		}
+
+		result, err := s.connectorManager.ValidatePluginConfig(pluginName, cfg)
+		if err != nil {
+			if errors.Is(err, connect.ErrPluginNotFound) {
+				writeError(w, http.StatusNotFound, 404, err.Error())
+				return
+			}
+			writeError(w, http.StatusBadRequest, 400, err.Error())
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(result)
+		return
+	}
+
+	writeError(w, http.StatusNotFound, 404, "Not found")
 }
