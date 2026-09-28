@@ -10,17 +10,40 @@ use crate::config::BrokerConfig;
 use crate::kafka::quota::{self, RequestCtx};
 use crate::log::LogManager;
 
+/// Per-connection cache of resolved partitions, avoiding a `LogManager::get_partition` (async RwLock + hashmap
+/// lookup) on every Produce/Fetch request for a topic-partition this connection has already touched. A `Vec` is
+/// used rather than a `HashMap` since a connection touches at most a handful of distinct partitions in practice,
+/// making a linear scan cheaper than hashing and avoiding the allocation a `HashMap` key lookup would otherwise
+/// need for a borrowed `(&str, i32)` search key.
+pub(crate) type PartitionCache = Vec<((String, i32), Arc<tokio::sync::Mutex<crate::log::manager::PartitionLog>>)>;
+
+async fn resolve_partition(
+    cache: &mut PartitionCache,
+    log_manager: &Arc<LogManager>,
+    topic: &str,
+    partition: i32,
+) -> io::Result<Arc<tokio::sync::Mutex<crate::log::manager::PartitionLog>>> {
+    if let Some((_, p)) = cache.iter().find(|((t, p), _)| t == topic && *p == partition) {
+        return Ok(p.clone());
+    }
+    let p = log_manager.get_partition(topic, partition as u32).await?;
+    cache.push(((topic.to_string(), partition), p.clone()));
+    Ok(p)
+}
+
 pub struct KafkaServer {
     addr: SocketAddr,
     log_manager: Arc<LogManager>,
+    shard_handle: Arc<crate::shard::sharded_log_manager::ShardedLogManager>,
     cfg: Arc<BrokerConfig>,
 }
 
 impl KafkaServer {
-    pub fn new(addr: SocketAddr, log_manager: Arc<LogManager>, cfg: Arc<BrokerConfig>) -> Self {
+    pub fn new(addr: SocketAddr, log_manager: Arc<LogManager>, shard_handle: Arc<crate::shard::sharded_log_manager::ShardedLogManager>, cfg: Arc<BrokerConfig>) -> Self {
         Self {
             addr,
             log_manager,
+            shard_handle,
             cfg,
         }
     }
@@ -86,6 +109,7 @@ async fn handle_kafka_connection(
     // Reusable connection-level frame buffer to eliminate memory reallocation and page-faults:
     let mut frame_buf: Vec<u8> = Vec::with_capacity(256 * 1024);
     let mut conn_sasl = crate::kafka::sasl::SaslState::default();
+    let mut partition_cache: PartitionCache = Vec::new();
 
     loop {
         match stream.read_exact(&mut len_buf).await {
@@ -109,7 +133,7 @@ async fn handle_kafka_connection(
 
         let mut ctx = RequestCtx::new(None, conn_sasl.authenticated_user());
         ctx.sasl_state = conn_sasl.clone();
-        let resp = handle_kafka_frame_ctx(&frame_buf, &log_manager, &cfg, &mut ctx).await?;
+        let resp = handle_kafka_frame_ctx(&frame_buf, &log_manager, &cfg, &mut ctx, &mut partition_cache).await?;
         conn_sasl = ctx.sasl_state;
         let (api_key, api_version) = if frame_buf.len() >= 4 {
             (i16::from_be_bytes([frame_buf[0], frame_buf[1]]), i16::from_be_bytes([frame_buf[2], frame_buf[3]]))
@@ -152,7 +176,10 @@ pub async fn handle_kafka_frame(
     cfg: &Arc<BrokerConfig>,
 ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
     let mut ctx = RequestCtx::default();
-    handle_kafka_frame_ctx(frame, log_manager, cfg, &mut ctx).await
+    // Callers of this ctx-less entry point don't keep a connection alive across calls (tests, one-shot use), so a
+    // fresh cache per call is correct — there's nothing to reuse it for.
+    let mut partition_cache = PartitionCache::new();
+    handle_kafka_frame_ctx(frame, log_manager, cfg, &mut ctx, &mut partition_cache).await
 }
 
 /// Like `handle_kafka_frame`, but exposes quota state: `ctx.throttle_ms` is filled with the
@@ -162,11 +189,12 @@ pub async fn handle_kafka_frame_ctx(
     log_manager: &Arc<LogManager>,
     cfg: &Arc<BrokerConfig>,
     ctx: &mut RequestCtx,
+    partition_cache: &mut PartitionCache,
 ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
     let started = std::time::Instant::now();
     let qm = quota::manager();
     let quotas_active = !qm.is_empty();
-    let result = handle_kafka_frame_inner(frame, log_manager, cfg, ctx).await;
+    let result = handle_kafka_frame_inner(frame, log_manager, cfg, ctx, partition_cache).await;
     if quotas_active {
         let t = qm.record_request_time(&ctx.user, &ctx.client_id, started.elapsed().as_nanos() as u64);
         ctx.throttle_ms = ctx.throttle_ms.max(t);
@@ -179,6 +207,7 @@ async fn handle_kafka_frame_inner(
     log_manager: &Arc<LogManager>,
     cfg: &Arc<BrokerConfig>,
     ctx: &mut RequestCtx,
+    partition_cache: &mut PartitionCache,
 ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
     let mut cursor = io::Cursor::new(frame);
     if cursor.remaining() < 8 {
@@ -227,12 +256,12 @@ async fn handle_kafka_frame_inner(
         }
         0 => {
             // Produce
-            let resp_opt = handle_produce(correlation_id, api_version, &mut cursor, log_manager, ctx, cfg).await?;
+            let resp_opt = handle_produce(correlation_id, api_version, &mut cursor, log_manager, ctx, cfg, partition_cache).await?;
             Ok(resp_opt)
         }
         1 => {
             // Fetch
-            let resp = handle_fetch(correlation_id, api_version, &mut cursor, log_manager, ctx, cfg).await?;
+            let resp = handle_fetch(correlation_id, api_version, &mut cursor, log_manager, ctx, cfg, partition_cache).await?;
             Ok(Some(resp))
         }
         22 | 24 | 25 | 26 | 28 => {
@@ -259,7 +288,7 @@ async fn handle_kafka_frame_inner(
             let mut resp = BytesMut::new();
             resp.put_i32(correlation_id);
             resp.put_i16(35); // UNSUPPORTED_VERSION error code
-            Ok(Some(resp.to_vec()))
+            Ok(Some(resp.into()))
         }
     }
 }
@@ -299,7 +328,7 @@ fn handle_api_versions(
         buf.put_i16(18);
         buf.put_i16(0);
         buf.put_i16(3);
-        return Ok(buf.to_vec());
+        return Ok(buf.into());
     }
 
     let flex = api_version >= 3;
@@ -314,7 +343,7 @@ fn handle_api_versions(
     }
     w.tagged();
     buf.put_slice(&w.finish());
-    Ok(buf.to_vec())
+    Ok(buf.into())
 }
 
 /// Handler for Metadata (API Key 3)
@@ -468,7 +497,7 @@ pub(crate) async fn handle_metadata_with_snapshot(
         }
     }
 
-    Ok(buf.to_vec())
+    Ok(buf.into())
 }
 
 /// Handler for Produce (API Key 0)
@@ -479,6 +508,7 @@ async fn handle_produce(
     log_manager: &Arc<LogManager>,
     ctx: &mut RequestCtx,
     cfg: &Arc<BrokerConfig>,
+    partition_cache: &mut PartitionCache,
 ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
     let mut produced_bytes: u64 = 0;
     let transactional_id = if api_version >= 3 {
@@ -529,7 +559,7 @@ async fn handle_produce(
                 // Modern RecordBatch payloads (idempotent / transactional aware, one record per offset).
                 let mut handled = false;
                 if crate::txn::batch::is_magic2(&records_data) {
-                    match log_manager.get_partition(&topic_name, partition_index as u32).await {
+                    match resolve_partition(partition_cache, log_manager, &topic_name, partition_index).await {
                         Ok(part_log) => {
                             let coord = crate::txn::coordinator_for(log_manager, cfg);
                             let mut guard = part_log.lock().await;
@@ -558,7 +588,7 @@ async fn handle_produce(
                 let (producer_id, base_sequence, records_count) = (-1i64, -1i32, 1i32);
 
                 if !handled {
-                match log_manager.get_partition(&topic_name, partition_index as u32).await {
+                match resolve_partition(partition_cache, log_manager, &topic_name, partition_index).await {
                     Ok(part_log) => {
                         let mut guard = part_log.lock().await;
                         match guard.validate_idempotent_produce(producer_id, base_sequence) {
@@ -635,7 +665,7 @@ async fn handle_produce(
         buf.put_i32(throttle_ms as i32); // ThrottleTimeMs
     }
 
-    Ok(Some(buf.to_vec()))
+    Ok(Some(buf.into()))
 }
 
 /// Handler for Fetch (API Key 1), using the process-wide topology cache for KIP-392 routing.
@@ -646,9 +676,10 @@ async fn handle_fetch(
     log_manager: &Arc<LogManager>,
     ctx: &mut RequestCtx,
     cfg: &Arc<BrokerConfig>,
+    partition_cache: &mut PartitionCache,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     let topo = crate::topology::TopologyCache::global();
-    handle_fetch_with_topo(correlation_id, api_version, cursor, log_manager, ctx, cfg, &topo).await
+    handle_fetch_with_topo(correlation_id, api_version, cursor, log_manager, ctx, cfg, &topo, partition_cache).await
 }
 
 /// Fetch implementation. Supports v0-v11; v11 carries `rack_id` and returns `preferred_read_replica` (KIP-392).
@@ -660,6 +691,7 @@ pub(crate) async fn handle_fetch_with_topo(
     ctx: &mut RequestCtx,
     cfg: &Arc<BrokerConfig>,
     topo: &crate::topology::TopologyCache,
+    partition_cache: &mut PartitionCache,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     if cursor.remaining() < 12 {
         return Err("Fetch request truncated".into());
@@ -725,25 +757,36 @@ pub(crate) async fn handle_fetch_with_topo(
     let my_id = cfg.id as i32;
     let selector = crate::topology::ReplicaSelector::parse(&cfg.replica_selector);
 
-    // Long polling (like Kafka's purgatory): if fewer than `min_bytes` are available, wait up to `max_wait_ms` for an
-    // append on any partition, then read again. Answering empty fetches immediately made caught-up consumers spin.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(max_wait_ms.max(0) as u64);
-    let notify = log_manager.append_notify.clone();
-    let topic_results = loop {
-        // Registered before reading, so an append that lands while we read is not missed.
-        let notified = notify.notified();
-        tokio::pin!(notified);
-        notified.as_mut().enable();
+    // Resolve every requested partition once, up front, instead of once per long-poll retry (get_partition is an
+    // async RwLock+hashmap lookup). Each partition's own Notify is fetched lazily, only if a wait actually turns
+    // out to be needed (see below) — most Fetches under load are satisfied on the first pass and never need it.
+    let mut resolved: Vec<(String, Vec<(i32, i64, i32, Option<Arc<tokio::sync::Mutex<crate::log::manager::PartitionLog>>>)>)> =
+        Vec::with_capacity(requested.len());
+    for (topic_name, parts) in &requested {
+        let mut rparts = Vec::with_capacity(parts.len());
+        for &(partition_index, fetch_offset, partition_max_bytes) in parts {
+            let log = resolve_partition(partition_cache, log_manager, topic_name, partition_index).await.ok();
+            rparts.push((partition_index, fetch_offset, partition_max_bytes, log));
+        }
+        resolved.push((topic_name.clone(), rparts));
+    }
 
+    // Long polling (like Kafka's purgatory): if fewer than `min_bytes` are available, wait up to `max_wait_ms` for an
+    // append on any requested partition, then read again. Answering empty fetches immediately made caught-up
+    // consumers spin.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(max_wait_ms.max(0) as u64);
+    let topic_results = loop {
         let mut topic_results = Vec::new();
         let mut total_bytes: usize = 0;
         let mut must_answer = false; // errors / replica redirects are returned without waiting
         let mut remaining = max_bytes.max(0) as u64;
 
-        for (topic_name, parts) in &requested {
+        for (topic_name, parts) in &resolved {
             let mut part_results = Vec::new();
 
-            for &(partition_index, fetch_offset, partition_max_bytes) in parts {
+            for (partition_index, fetch_offset, partition_max_bytes, log_opt) in parts {
+                let (partition_index, fetch_offset, partition_max_bytes) =
+                    (*partition_index, *fetch_offset, *partition_max_bytes);
                 let mut high_watermark = 0i64;
                 let mut last_stable_offset = 0i64;
                 let mut aborted: Option<Vec<(i64, i64)>> = None;
@@ -771,9 +814,9 @@ pub(crate) async fn handle_fetch_with_topo(
                     }
                 }
 
-                match log_manager.get_partition(topic_name, partition_index as u32).await {
-                    Ok(_) if error_code != 0 => {}
-                    Ok(part_log) => {
+                match (log_opt, error_code) {
+                    (_, e) if e != 0 => {}
+                    (Some(part_log), _) => {
                         // The partition lock covers only in-memory state and the index lookup; file reads happen after.
                         let (hw, lso, aborted_txns, read_spec) = {
                             let mut guard = part_log.lock().await;
@@ -818,7 +861,7 @@ pub(crate) async fn handle_fetch_with_topo(
                             }
                         }
                     }
-                    Err(_) => {
+                    (None, _) => {
                         error_code = 3; // UNKNOWN_TOPIC_OR_PARTITION
                     }
                 }
@@ -836,7 +879,32 @@ pub(crate) async fn handle_fetch_with_topo(
         if must_answer || min_bytes <= 0 || total_bytes >= min_bytes as usize || now >= deadline {
             break topic_results;
         }
-        let _ = tokio::time::timeout(deadline - now, notified).await;
+
+        // Not enough data yet: only now pay for registering interest (one lock per requested partition to read its
+        // Notify, one Box::pin per partition to wait on it). Most Fetches under load are satisfied above and never
+        // reach this branch, so it would be wasted work on every request if done eagerly at the top of the loop.
+        let mut notifies = Vec::new();
+        for (_, parts) in &resolved {
+            for (_, _, _, log_opt) in parts {
+                if let Some(log) = log_opt {
+                    notifies.push(log.lock().await.append_notify.clone());
+                }
+            }
+        }
+        let notifies: Vec<Arc<tokio::sync::Notify>> = notifies.into_iter().flatten().collect();
+        if notifies.is_empty() {
+            tokio::time::sleep(deadline - now).await;
+        } else {
+            let waits: Vec<_> = notifies
+                .iter()
+                .map(|n| {
+                    let mut f = Box::pin(n.notified());
+                    f.as_mut().enable();
+                    f
+                })
+                .collect();
+            let _ = tokio::time::timeout(deadline - now, futures_util::future::select_all(waits)).await;
+        }
     };
 
     // Consumer byte-rate quota (KIP-13): record served bytes and compute throttle.
@@ -899,7 +967,7 @@ pub(crate) async fn handle_fetch_with_topo(
         }
     }
 
-    Ok(buf.to_vec())
+    Ok(buf.into())
 }
 
 // ============================================================================
@@ -1268,6 +1336,45 @@ mod tests {
         assert_eq!(parse_records(&fetch_records_v4(&fr)).unwrap().len(), 1);
     }
 
+    /// Regression test for the per-connection partition cache added to `handle_produce`: a connection producing to
+    /// several distinct topic-partitions must resolve each one only once (not thrash a single-slot cache) and keep
+    /// serving the correct, same `PartitionLog` for each on every later request.
+    #[tokio::test]
+    async fn kafka_connection_partition_cache_handles_multiple_partitions() {
+        use crate::kafka::handlers::{encode_records_batch, parse_records, KafkaRecord};
+        let dir = tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1).with_limits(128 << 20, None, None));
+        let cfg = Arc::new(BrokerConfig::default());
+        let mut ctx = RequestCtx::default();
+        let mut cache = PartitionCache::new();
+
+        let topics = ["cache-a", "cache-b", "cache-c"];
+        // Interleave 2 produces per topic through the same connection-level cache, simulating one connection
+        // round-robining across partitions the way a real Kafka producer does.
+        for round in 0..2u8 {
+            for t in topics {
+                let val = format!("{t}-{round}").into_bytes();
+                let b = encode_records_batch(0, &[KafkaRecord::new(None, Some(val))]);
+                let resp = handle_kafka_frame_ctx(&produce_frame_v3("c", t, &b, 3), &log_mgr, &cfg, &mut ctx, &mut cache)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(produce_error_code(&resp), 0);
+            }
+        }
+        assert_eq!(cache.len(), 3, "one cache entry per distinct topic-partition, not per request");
+
+        // Each topic has both its records at the expected offsets, proving the cached PartitionLog (not a
+        // freshly-resolved one masking a bug) served every request.
+        for t in topics {
+            let fr = handle_kafka_frame(&fetch_frame_v4_opts(t, 0, 0, 1, 1 << 20), &log_mgr, &cfg).await.unwrap().unwrap();
+            let recs = parse_records(&fetch_records_v4(&fr)).unwrap();
+            assert_eq!(recs.len(), 2, "topic {t} should have both records");
+            assert_eq!(recs[0].value.as_deref(), Some(format!("{t}-0").as_bytes()));
+            assert_eq!(recs[1].value.as_deref(), Some(format!("{t}-1").as_bytes()));
+        }
+    }
+
     #[tokio::test]
     async fn fetch_long_polls_until_data_or_max_wait() {
         use crate::kafka::handlers::{encode_records_batch, parse_records, KafkaRecord};
@@ -1295,6 +1402,50 @@ mod tests {
         producer.await.unwrap();
         assert!(t.elapsed() < std::time::Duration::from_millis(2000), "not woken by append: {:?}", t.elapsed());
         assert_eq!(parse_records(&fetch_records_v4(&fr)).unwrap()[0].value.as_deref(), Some(&b"late"[..]));
+    }
+
+    /// Regression test for a single shared `Notify` across all partitions: a long-poll Fetch on one partition must
+    /// not be woken by an append to a completely different partition.
+    #[tokio::test]
+    async fn fetch_on_one_partition_not_woken_by_append_to_another() {
+        use crate::kafka::handlers::{encode_records_batch, parse_records, KafkaRecord};
+        let dir = tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1).with_limits(128 << 20, None, None));
+        let cfg = Arc::new(BrokerConfig::default());
+        let b = encode_records_batch(0, &[KafkaRecord::new(None, Some(b"a0".to_vec()))]);
+        handle_kafka_frame(&produce_frame_v3("c", "lp-a", &b, 3), &log_mgr, &cfg).await.unwrap().unwrap();
+        let b = encode_records_batch(0, &[KafkaRecord::new(None, Some(b"b0".to_vec()))]);
+        handle_kafka_frame(&produce_frame_v3("c", "lp-b", &b, 3), &log_mgr, &cfg).await.unwrap().unwrap();
+
+        // While a long-poll fetch waits on lp-a (caught up), append only to lp-b.
+        let (lm, c2) = (log_mgr.clone(), cfg.clone());
+        let producer = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let b = encode_records_batch(0, &[KafkaRecord::new(None, Some(b"b1".to_vec()))]);
+            handle_kafka_frame(&produce_frame_v3("c", "lp-b", &b, 3), &lm, &c2).await.unwrap();
+        });
+        let t = std::time::Instant::now();
+        let fr = handle_kafka_frame(&fetch_frame_v4_opts("lp-a", 1, 400, 1, 1 << 20), &log_mgr, &cfg).await.unwrap().unwrap();
+        producer.await.unwrap();
+        assert!(fetch_records_v4(&fr).is_empty());
+        assert!(
+            t.elapsed() >= std::time::Duration::from_millis(350),
+            "woken early by an unrelated partition's append: {:?}",
+            t.elapsed()
+        );
+
+        // A fresh fetch on lp-a itself still wakes promptly on its own append (the fix isn't just "never wakes").
+        let (lm, c2) = (log_mgr.clone(), cfg.clone());
+        let producer = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let b = encode_records_batch(0, &[KafkaRecord::new(None, Some(b"a1".to_vec()))]);
+            handle_kafka_frame(&produce_frame_v3("c", "lp-a", &b, 3), &lm, &c2).await.unwrap();
+        });
+        let t = std::time::Instant::now();
+        let fr = handle_kafka_frame(&fetch_frame_v4_opts("lp-a", 1, 5000, 1, 1 << 20), &log_mgr, &cfg).await.unwrap().unwrap();
+        producer.await.unwrap();
+        assert!(t.elapsed() < std::time::Duration::from_millis(2000), "not woken by its own partition's append: {:?}", t.elapsed());
+        assert_eq!(parse_records(&fetch_records_v4(&fr)).unwrap()[0].value.as_deref(), Some(&b"a1"[..]));
     }
 
     fn fetch_frame_v4(client: &str, topic: &str, offset: i64) -> BytesMut {
@@ -1407,14 +1558,14 @@ mod tests {
         let big = encode_records_batch(0, &[KafkaRecord::new(None, Some(vec![7u8; 50_000]))]);
         let frame = produce_frame_v3("quota-test-client", "quota-topic", &big, 3);
         let mut ctx = RequestCtx::default();
-        let resp = handle_kafka_frame_ctx(&frame, &log_mgr, &cfg, &mut ctx).await.unwrap().unwrap();
+        let resp = handle_kafka_frame_ctx(&frame, &log_mgr, &cfg, &mut ctx, &mut PartitionCache::new()).await.unwrap().unwrap();
         let throttle = i32::from_be_bytes(resp[resp.len() - 4..].try_into().unwrap());
         assert!(throttle > 0, "expected throttle_time_ms > 0");
         assert_eq!(ctx.throttle_ms as i32, throttle);
         // unrelated client is not throttled
         let frame2 = produce_frame_v3("someone-else", "quota-topic", &big, 3);
         let mut ctx2 = RequestCtx::default();
-        let resp2 = handle_kafka_frame_ctx(&frame2, &log_mgr, &cfg, &mut ctx2).await.unwrap().unwrap();
+        let resp2 = handle_kafka_frame_ctx(&frame2, &log_mgr, &cfg, &mut ctx2, &mut PartitionCache::new()).await.unwrap().unwrap();
         assert_eq!(i32::from_be_bytes(resp2[resp2.len() - 4..].try_into().unwrap()), 0);
         manager().set_entries(vec![]);
     }
@@ -1765,7 +1916,7 @@ mod topology_tests {
     async fn do_fetch(id: u32, topo: &TopologyCache, log_mgr: &Arc<LogManager>, body: &[u8]) -> Vec<u8> {
         let cfg = cfg_for(id);
         let mut cur = io::Cursor::new(body);
-        handle_fetch_with_topo(55, 11, &mut cur, log_mgr, &mut RequestCtx::default(), &cfg, topo).await.unwrap()
+        handle_fetch_with_topo(55, 11, &mut cur, log_mgr, &mut RequestCtx::default(), &cfg, topo, &mut PartitionCache::new()).await.unwrap()
     }
 
     #[tokio::test]
@@ -1859,7 +2010,7 @@ mod topology_tests {
         b.put_i32(0); // forgotten
         let topo = TopologyCache::default();
         let mut cur = io::Cursor::new(b.as_ref());
-        let resp = handle_fetch_with_topo(3, 7, &mut cur, &log_mgr, &mut RequestCtx::default(), &cfg, &topo).await.unwrap();
+        let resp = handle_fetch_with_topo(3, 7, &mut cur, &log_mgr, &mut RequestCtx::default(), &cfg, &topo, &mut PartitionCache::new()).await.unwrap();
         let mut c = io::Cursor::new(resp.as_slice());
         c.advance(4 + 4 + 2 + 4 + 4);
         read_kafka_string(&mut c).unwrap();

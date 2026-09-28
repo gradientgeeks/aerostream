@@ -22,6 +22,9 @@ pub struct BrokerConfig {
     pub controller: String,
     /// Path to store physical partition log files (defaults to ./data/broker_{id}).
     pub storage_dir: Option<PathBuf>,
+    /// Number of shard threads for thread-per-core mode.
+    /// 0 = auto-detect (one per CPU core). Set to 1 to disable sharding.
+    pub shard_threads: usize,
     /// `broker.rack`: rack / availability-zone label reported to the controller and in Metadata.
     pub rack: Option<String>,
     /// KIP-392 replica selector: "rack_aware" (default) or "leader".
@@ -100,6 +103,7 @@ impl Default for BrokerConfig {
             kafka_port: 9093,
             controller: "http://127.0.0.1:8001".to_string(),
             storage_dir: None,
+            shard_threads: 0,
             rack: None,
             replica_selector: "rack_aware".to_string(),
             group_initial_rebalance_delay_ms: 3000,

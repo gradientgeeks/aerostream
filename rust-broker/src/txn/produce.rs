@@ -66,8 +66,12 @@ pub fn append_payload(
             }
         }
         let first = log.next_offset;
+        // NOTE: collapsing a non-idempotent multi-record batch into one append_batch_slice entry (skipping the
+        // per-record `to_entries` explosion below) was tried here and reverted — it breaks share groups (KIP-932),
+        // whose acquire/ack/release tracking needs one offset per record, with no static way at produce time to
+        // know a topic will later be read by a share group. See the flagged discussion before reintroducing this.
         if count <= 1 {
-            match log.append_batch_slice(first as i64, b) {
+            match log.append_batch_slice(first as i64, b, count.max(1) as u64) {
                 Ok(off) => {
                     if transactional {
                         log.txn_index.note_data(pid, epoch, off);

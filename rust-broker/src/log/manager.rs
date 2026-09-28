@@ -387,7 +387,14 @@ impl PartitionLog {
 
     /// Appends a raw record batch slice with in-place base-offset patching directly on disk.
     /// This bypasses heap cloning of large multi-megabyte record batches.
-    pub fn append_batch_slice(&mut self, base_offset: i64, batch: &[u8]) -> io::Result<u64> {
+    ///
+    /// `record_count` is the number of Kafka records the batch actually contains (its offsets span
+    /// `[base_offset, base_offset + record_count)`), even though it is stored as a single log entry. Pass `1` for
+    /// a single-record batch; a caller storing a whole multi-record batch as one entry (skipping per-record
+    /// `append()`, safe only when nothing needs a distinct offset per record — see `txn::produce::append_payload`)
+    /// must pass the real count so `next_offset` advances correctly and `range_bounds` can find offsets inside the
+    /// batch, not just its base offset.
+    pub fn append_batch_slice(&mut self, base_offset: i64, batch: &[u8], record_count: u64) -> io::Result<u64> {
         use std::os::unix::fs::FileExt;
 
         let mut rolled = false;
@@ -413,7 +420,7 @@ impl PartitionLog {
         self.active_idx_file.write_all_at(&entry, self.active_idx_len)?;
         self.active_idx_len += 16;
 
-        self.next_offset += 1;
+        self.next_offset += record_count.max(1);
 
         if rolled || self.last_retention_check.elapsed() >= std::time::Duration::from_secs(1) {
             self.clean_retention()?;
@@ -843,8 +850,52 @@ impl PartitionLog {
         end_offset: u64,
         max_bytes: u32,
     ) -> io::Result<Option<(File, u64, u32, u32)>> {
+        let r = match self.range_bounds(start_offset, end_offset, max_bytes)? {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+        let first_len = r.end_pos_of(r.first + 1)? - r.pos;
+        Ok(Some((r.log, r.pos, (r.end - r.pos) as u32, first_len as u32)))
+    }
+
+    /// Like `read_range`, but also returns `(offset, length)` of every entry in the region, read from the index
+    /// with one positioned read. The native multi-entry Fetch sends this table ahead of the (sendfile) data.
+    pub fn read_range_entries(
+        &mut self,
+        start_offset: u64,
+        end_offset: u64,
+        max_bytes: u32,
+    ) -> io::Result<Option<(File, u64, u32, Vec<(u64, u32)>)>> {
         use std::os::unix::fs::FileExt;
-        if start_offset >= end_offset {
+        let r = match self.range_bounds(start_offset, end_offset, max_bytes)? {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+        let mut raw = vec![0u8; ((r.k - r.first) * 16) as usize];
+        r.idx.read_exact_at(&mut raw, r.first * 16)?;
+        let mut entries = Vec::with_capacity(raw.len() / 16);
+        for (i, e) in raw.chunks_exact(16).enumerate() {
+            let off = u64::from_be_bytes(e[0..8].try_into().unwrap());
+            let pos = u64::from_be_bytes(e[8..16].try_into().unwrap());
+            let next = if i + 1 < raw.len() / 16 {
+                u64::from_be_bytes(raw[(i + 1) * 16 + 8..(i + 2) * 16].try_into().unwrap())
+            } else {
+                r.end
+            };
+            entries.push((off, (next - pos) as u32));
+        }
+        Ok(Some((r.log, r.pos, (r.end - r.pos) as u32, entries)))
+    }
+
+    /// Locates the contiguous index entries `[first, k)` of one segment for `read_range`: offsets in
+    /// `[start_offset, end_offset)`, total size within `max_bytes` (at least one entry).
+    fn range_bounds(&mut self, start_offset: u64, end_offset: u64, max_bytes: u32) -> io::Result<Option<RangeBounds>> {
+        use std::os::unix::fs::FileExt;
+        // start_offset >= next_offset means nothing has been written there yet: with the "last entry <= start_offset"
+        // search below, that would otherwise wrongly match the log's last real entry (its offset is < next_offset
+        // <= start_offset) and return stale data instead of "no data available". The old ">= start_offset" search
+        // caught this case implicitly (no entry qualifies), so this keeps that behavior explicit under the new search.
+        if start_offset >= end_offset || start_offset >= self.next_offset {
             return Ok(None);
         }
         let seg = match self.segment_for_offset(start_offset)? {
@@ -861,25 +912,36 @@ impl PartitionLog {
             idx.read_exact_at(&mut b, i * 16)?;
             Ok((u64::from_be_bytes(b[0..8].try_into().unwrap()), u64::from_be_bytes(b[8..16].try_into().unwrap())))
         };
-        // first index entry with offset >= start_offset
+        // The last index entry with offset <= start_offset: the entry whose batch *contains* start_offset, whether
+        // or not it has its own exact entry. Every offset has an exact entry when 1 record == 1 entry (native
+        // protocol; idempotent/transactional or compacted-topic Kafka batches), where this picks the same entry a
+        // ">= start_offset" search would have — it only matters once a batch stores multiple records as one entry
+        // (see `append_batch_slice`'s `record_count`), where a ">= start_offset" search would skip past the
+        // containing entry to the next one and silently miss data for any offset that isn't the batch's base.
         let (mut lo, mut hi) = (0u64, n);
         while lo < hi {
             let mid = lo + (hi - lo) / 2;
-            if entry(mid)?.0 >= start_offset { hi = mid; } else { lo = mid + 1; }
+            if entry(mid)?.0 > start_offset { hi = mid; } else { lo = mid + 1; }
         }
-        let first = lo;
+        if lo == 0 {
+            // start_offset is before the earliest entry in this segment: nothing to clamp to, fall back to the
+            // first entry (matches the previous behavior for an out-of-range-low start_offset).
+            lo = 1;
+        }
+        let first = lo - 1;
         if first >= n {
             return Ok(None);
         }
-        let (first_off, pos) = entry(first)?;
-        if first_off >= end_offset {
-            return Ok(None);
-        }
+        let (_, pos) = entry(first)?;
         let log = File::open(&seg.log_path)?;
         let log_len = log.metadata()?.len();
         let end_pos_of = |k: u64| -> io::Result<u64> { if k < n { Ok(entry(k)?.1) } else { Ok(log_len) } };
 
-        // entries [first, k_off) have offset < end_offset
+        // entries [first, k_off) have offset < end_offset. Unlike `first`'s search above, this one can stay a
+        // ">= end_offset" search: `end_offset` is always an exact entry boundary, never mid-batch. With no other
+        // replicas, high_watermark == next_offset exactly (see recompute_high_watermark); with replicas, a
+        // follower's reported offset is always one it computed from whole entries read_range/read_range_entries
+        // handed it (they never return a partial entry), so it always lands on an entry boundary too.
         let (mut lo, mut hi) = (first + 1, n);
         while lo < hi {
             let mid = lo + (hi - lo) / 2;
@@ -895,11 +957,35 @@ impl PartitionLog {
         }
         let k = lo;
         let end = end_pos_of(k)?;
-        let first_len = end_pos_of(first + 1)? - pos;
         if end <= pos {
             return Ok(None);
         }
-        Ok(Some((log, pos, (end - pos) as u32, first_len as u32)))
+        Ok(Some(RangeBounds { idx, log, log_len, n, first, k, pos, end }))
+    }
+}
+
+/// Result of `PartitionLog::range_bounds`: index entries `[first, k)` of one segment, data bytes `[pos, end)`.
+struct RangeBounds {
+    idx: File,
+    log: File,
+    log_len: u64,
+    n: u64,
+    first: u64,
+    k: u64,
+    pos: u64,
+    end: u64,
+}
+
+impl RangeBounds {
+    /// Start position of index entry `i`, or the log length past the last entry.
+    fn end_pos_of(&self, i: u64) -> io::Result<u64> {
+        use std::os::unix::fs::FileExt;
+        if i >= self.n {
+            return Ok(self.log_len);
+        }
+        let mut b = [0u8; 8];
+        self.idx.read_exact_at(&mut b, i * 16 + 8)?;
+        Ok(u64::from_be_bytes(b))
     }
 }
 
@@ -1133,13 +1219,45 @@ impl LogManager {
         log.tiered_provider = self.tiered_provider.clone();
         log.writeback_bytes = self.writeback_bytes;
         log.drop_cache_after_writeback = self.drop_cache_after_writeback;
-        log.append_notify = Some(self.append_notify.clone());
+        // Each partition gets its own Notify. A single shared Notify would mean every append to any
+        // partition on the broker wakes every long-polling Fetch on every other partition too (an
+        // O(total waiters) wakeup storm per append).
+        log.append_notify = Some(Arc::new(tokio::sync::Notify::new()));
 
         let shared = Arc::new(Mutex::new(log));
         parts.insert(PartitionKey::new(topic, partition), shared.clone());
         Ok(shared)
     }
 }
+
+#[async_trait::async_trait]
+pub trait PartitionStore: Send + Sync {
+    async fn get_all_offsets(&self) -> Vec<(String, u32, i64)>;
+    async fn partitions_for_topic(&self, topic: &str) -> Vec<u32>;
+    async fn delete_topic(&self, topic: &str) -> std::io::Result<usize>;
+    fn base_dir(&self) -> &std::path::Path;
+    fn broker_id(&self) -> u32;
+}
+
+#[async_trait::async_trait]
+impl PartitionStore for LogManager {
+    async fn get_all_offsets(&self) -> Vec<(String, u32, i64)> {
+        self.get_all_offsets().await
+    }
+    async fn partitions_for_topic(&self, topic: &str) -> Vec<u32> {
+        self.partitions_for_topic(topic).await
+    }
+    async fn delete_topic(&self, topic: &str) -> std::io::Result<usize> {
+        self.delete_topic(topic).await
+    }
+    fn base_dir(&self) -> &std::path::Path {
+        self.base_dir()
+    }
+    fn broker_id(&self) -> u32 {
+        self.broker_id
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -1279,5 +1397,29 @@ mod tests {
         // at / past the end bound: nothing
         assert!(log.read_range(12, 12, 1 << 20).unwrap().is_none());
         assert!(log.read_range(20, 25, 1 << 20).unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn read_range_entries_reports_each_entry() {
+        use std::os::unix::fs::FileExt;
+        let dir = tempfile::tempdir().unwrap();
+        let manager = LogManager::new(dir.path(), 9).with_limits(1 << 20, None, None);
+        let part = manager.get_partition("rre", 0).await.unwrap();
+        let mut log = part.lock().await;
+        for i in 0..10u8 {
+            log.append(&vec![i; 10 + i as usize]).unwrap(); // entry i is 10 + i bytes
+        }
+        let (f, pos, len, entries) = log.read_range_entries(3, 7, 1 << 20).unwrap().unwrap();
+        assert_eq!(entries, vec![(3, 13), (4, 14), (5, 15), (6, 16)]);
+        assert_eq!(len, 13 + 14 + 15 + 16);
+        let mut b = vec![0u8; len as usize];
+        f.read_exact_at(&mut b, pos).unwrap();
+        assert_eq!((b[0], b[12], b[13], b[len as usize - 1]), (3, 3, 4, 6));
+        // up to the end of the log, byte limit cuts at whole entries
+        let (_, _, len, entries) = log.read_range_entries(8, 10, 1 << 20).unwrap().unwrap();
+        assert_eq!((len, entries), (18 + 19, vec![(8, 18), (9, 19)]));
+        let (_, _, _, entries) = log.read_range_entries(3, 10, 30).unwrap().unwrap();
+        assert_eq!(entries, vec![(3, 13), (4, 14)]);
+        assert!(log.read_range_entries(10, 10, 1 << 20).unwrap().is_none());
     }
 }

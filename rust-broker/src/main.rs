@@ -4,6 +4,11 @@ use std::sync::Arc;
 use clap::Parser;
 use tracing::info;
 
+// The produce/fetch hot paths allocate many small, short-lived buffers per message (record keys/values, response
+// frames); mimalloc measurably outperforms the system allocator for that pattern under concurrency.
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod config;
 mod log;
 mod net;
@@ -14,6 +19,7 @@ mod share;
 pub mod topology;
 pub mod kafka;
 pub mod storage;
+pub mod shard;
 
 use config::BrokerConfig;
 
@@ -48,6 +54,10 @@ struct Args {
     /// Path to store physical partition log files
     #[arg(long)]
     storage_dir: Option<PathBuf>,
+
+    /// Number of shard threads for thread-per-core mode.
+    #[arg(long)]
+    shard_threads: Option<usize>,
 
     /// Rack / availability zone of this broker (broker.rack)
     #[arg(long)]
@@ -104,6 +114,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.storage_dir.is_some() {
         cfg.storage_dir = args.storage_dir;
+    }
+    if let Some(t) = args.shard_threads {
+        cfg.shard_threads = t;
     }
     if let Some(ref p) = args.tiered_storage_provider {
         if let Ok(ptype) = p.parse::<storage::ProviderType>() {
@@ -209,6 +222,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let log_manager = Arc::new(log_manager_builder);
 
+        // Thread-per-core shared-nothing shard engine:
+        // Spawn N shard threads (one per available CPU core), each owning its own
+        // set of PartitionLog instances without any Mutex or cross-thread sharing.
+        let num_shards = if cfg.shard_threads > 0 {
+            cfg.shard_threads
+        } else {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(2)
+        };
+        let sharded = crate::shard::sharded_log_manager::create_sharded(log_manager.clone(), num_shards);
+        let shard_handle = Arc::new(sharded);
+        info!(
+            "[AeroStream] Thread-per-core shard engine started: {} shards on {} CPU cores",
+            num_shards, num_shards
+        );
+
         // Spawn background log compaction cleaner loop (runs every 30 seconds)
         if cfg.storage.compaction_enabled {
             log_manager.clone().spawn_cleaner_loop(std::time::Duration::from_secs(30));
@@ -261,7 +291,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|_| format!("0.0.0.0:{}", cfg.kafka_port).parse().unwrap());
         // Kafka admin/group-coordinator state + controller topology refresh loop.
         kafka::admin::init(&cfg, &log_manager);
-        let kafka_server = net::KafkaServer::new(kafka_bind_addr, log_manager.clone(), cfg.clone());
+        let kafka_server = net::KafkaServer::new(kafka_bind_addr, log_manager.clone(), shard_handle.clone(), cfg.clone());
         tokio::spawn(async move {
             if let Err(e) = kafka_server.run().await {
                 tracing::error!("[AeroMQ Broker] Kafka server error: {:?}", e);
@@ -272,9 +302,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let bind_addr: SocketAddr = format!("{}:{}", cfg.host, cfg.data_port)
             .parse()
             .unwrap_or_else(|_| format!("0.0.0.0:{}", cfg.data_port).parse().unwrap());
-        let server = net::DataServer::new(bind_addr, log_manager, cfg.clone());
+        let server = net::DataServer::new(bind_addr, log_manager, shard_handle.clone(), cfg.clone());
 
         server.run().await?;
+
+        shard_handle.handle.shutdown();
 
         Ok::<(), Box<dyn std::error::Error>>(())
     })?;
