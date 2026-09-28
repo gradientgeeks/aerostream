@@ -141,6 +141,18 @@ func TestSchemaRegistryRESTEndpoints(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &getSubjResp); err != nil || getSubjResp["compatibility"] != "NONE" {
 		t.Fatalf("expected NONE, got %s", w.Body.String())
 	}
+
+	// 9. DELETE /subjects/{subject}
+	req = httptest.NewRequest(http.MethodDelete, "/subjects/payments-value", nil)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 from DELETE /subjects/payments-value, got %d: %s", w.Code, w.Body.String())
+	}
+	var deletedVersions []int
+	if err := json.Unmarshal(w.Body.Bytes(), &deletedVersions); err != nil || len(deletedVersions) != 1 || deletedVersions[0] != 1 {
+		t.Fatalf("expected deleted versions [1], got %v", deletedVersions)
+	}
 }
 
 func TestPhase5SchemaRegistryOrdersValueEndToEnd(t *testing.T) {
@@ -246,6 +258,7 @@ func TestPhase5SchemaRegistryOrdersValueEndToEnd(t *testing.T) {
 
 func TestAclRESTEndpoints(t *testing.T) {
 	server := rest.NewServer(nil, "127.0.0.1:0")
+	server.AclManager().SeedDefaults()
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
 
@@ -345,6 +358,7 @@ func TestAclRESTEndpoints(t *testing.T) {
 
 func TestTransformsRESTEndpoints(t *testing.T) {
 	server := rest.NewServer(nil, "127.0.0.1:0")
+	server.TransformEngine().SeedDefaultTransforms()
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
 
@@ -434,7 +448,7 @@ func TestTransformsRESTEndpoints(t *testing.T) {
 	// 6. POST /api/transforms/test -> test Filter transform with dropping payload
 	testFilterBody, _ := json.Marshal(map[string]interface{}{
 		"transform_name": "telemetry-filter-critical",
-		"payload": `{"device_id": "d-99", "level": "DEBUG"}`,
+		"payload":        `{"device_id": "d-99", "level": "DEBUG"}`,
 	})
 	req = httptest.NewRequest(http.MethodPost, "/api/transforms/test", bytes.NewReader(testFilterBody))
 	w = httptest.NewRecorder()
@@ -467,6 +481,7 @@ func TestTransformsRESTEndpoints(t *testing.T) {
 
 func TestConnectorsRESTEndpoints(t *testing.T) {
 	server := rest.NewServer(nil, "127.0.0.1:0")
+	server.ConnectorManager().SeedDefaultConnectors()
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
 
@@ -777,5 +792,3 @@ func TestDrainBrokerRESTEndpoint(t *testing.T) {
 		t.Errorf("expected broker 1 to be marked inactive after drain")
 	}
 }
-
-

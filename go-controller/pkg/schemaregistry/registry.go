@@ -277,6 +277,27 @@ func (r *Registry) HasSubject(subject string) bool {
 	return exists && len(schemas) > 0
 }
 
+// DeleteSubject deletes a subject and all its versions, returning the list of deleted versions.
+func (r *Registry) DeleteSubject(subject string) ([]int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	schemas, exists := r.state.SubjectVersions[subject]
+	if !exists || len(schemas) == 0 {
+		return nil, fmt.Errorf("%w: subject %q", ErrSubjectNotFound, subject)
+	}
+
+	versions := make([]int, len(schemas))
+	for i, s := range schemas {
+		versions[i] = s.Version
+	}
+
+	delete(r.state.SubjectVersions, subject)
+	delete(r.state.SubjectCompat, subject)
+
+	return versions, nil
+}
+
 // SetCompatibility sets compatibility level for a subject or globally if subject is empty.
 func (r *Registry) SetCompatibility(subject string, level CompatibilityLevel) error {
 	normLevel := CompatibilityLevel(strings.ToUpper(strings.TrimSpace(string(level))))

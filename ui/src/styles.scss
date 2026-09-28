@@ -904,6 +904,79 @@ mat-dialog-actions,
 }
 
 /* ==========================================================================
+   Modern Web Guidance: Button Interactivity, Focus Rings & Touch Targets
+   (Baseline Widely Available CSS Architecture & WCAG 2.5.8 AA)
+   ========================================================================== */
+button,
+a[mat-button],
+a[mat-flat-button],
+a[mat-raised-button],
+a[mat-stroked-button],
+.mat-mdc-button-base {
+  /* Visible focus management: Always pair focus outlines with outline-offset */
+  &:focus-visible {
+    outline: 2px solid var(--app-primary, #00e5ff) !important;
+    outline-offset: 2px !important;
+    box-shadow: none !important;
+  }
+
+  /* Tactile feedback on press without visual bloom */
+  &:active:not([disabled]):not(.mat-mdc-button-disabled) {
+    transform: scale(0.98);
+  }
+}
+
+/* Coarse pointer minimum touch target sizing (WCAG 2.5.8 AA) */
+@media (pointer: coarse) {
+  button,
+  .mat-mdc-button-base,
+  a[mat-button],
+  a[mat-flat-button],
+  a[mat-raised-button],
+  a[mat-stroked-button],
+  .action-btn,
+  .copy-btn,
+  .mat-mdc-icon-button {
+    min-block-size: 44px !important;
+    min-inline-size: 44px !important;
+  }
+}
+
+/* Forced Colors Mode (High Contrast on Windows) System Color Keywords */
+@media (forced-colors: active) {
+  button,
+  .mat-mdc-button-base,
+  a[mat-button],
+  a[mat-flat-button],
+  a[mat-raised-button],
+  a[mat-stroked-button] {
+    outline: 1px solid ButtonText !important;
+
+    &:focus-visible {
+      outline: 2px solid Highlight !important;
+      outline-offset: 2px !important;
+    }
+
+    &:hover:not([disabled]) {
+      outline: 2px solid Highlight !important;
+    }
+  }
+}
+
+/* Respect prefers-reduced-motion: reduce */
+@media (prefers-reduced-motion: reduce) {
+  button,
+  .mat-mdc-button-base,
+  a[mat-button],
+  a[mat-flat-button],
+  a[mat-raised-button],
+  a[mat-stroked-button] {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* ==========================================================================
    Dual Engine Theme Utilities (Glow & Badges)
    ========================================================================== */
 .text-go-cyan { color: #00e5ff !important; }

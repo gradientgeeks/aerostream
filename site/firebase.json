@@ -1,0 +1,17 @@
+{
+  "hosting": {
+    "site": "aerostream-gg",
+    "public": "dist/site/browser",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

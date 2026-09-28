@@ -1,0 +1,80 @@
+# ==============================================================================
+# AeroStream CI/CD: Firebase Hosting Build & Deploy Workflow
+# Version: v0.1.0 (SemVer 2.0.0: MAJOR=0, MINOR=1, PATCH=0)
+# Complies with Firebase Hosting On-Demand Site Provisioning (October 2026)
+# ==============================================================================
+
+name: Build and Deploy AeroStream v0.1.0 to Firebase Hosting
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AEROSTREAM_VERSION: v0.1.0
+  SEMVER_MAJOR: 0
+  SEMVER_MINOR: 1
+  SEMVER_PATCH: 0
+
+jobs:
+  build_and_deploy:
+    name: Build & Deploy Site v0.1.0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: site/package-lock.json
+
+      - name: Verify Semantic Versioning (SemVer 2.0.0)
+        run: |
+          echo "================================================================"
+          echo "🚀 AeroStream Version: $AEROSTREAM_VERSION"
+          echo "📋 SemVer Specification: Major=$SEMVER_MAJOR, Minor=$SEMVER_MINOR, Patch=$SEMVER_PATCH"
+          echo "================================================================"
+          node -e "
+            const pkg = require('./site/package.json');
+            console.log('Checking site package version:', pkg.version);
+            if (pkg.version !== '0.1.0') {
+              console.error('Mismatch: Expected 0.1.0, found ' + pkg.version);
+              process.exit(1);
+            }
+            console.log('✓ SemVer v0.1.0 check passed!');
+          "
+
+      - name: Install Site Dependencies
+        run: cd site && npm ci
+
+      - name: Build Angular Documentation & Showcase Site
+        run: cd site && npm run build
+
+      - name: Ensure Firebase Hosting Site Exists (On-Demand Provisioning)
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AEROSTREAM_GG }}
+        run: |
+          if [ -n "$FIREBASE_SA" ]; then
+            echo "Ensuring Firebase Hosting site 'aerostream-gg' exists for project 'aerostream-gg'..."
+            SA_FILE=$(mktemp)
+            echo "$FIREBASE_SA" > "$SA_FILE"
+            export GOOGLE_APPLICATION_CREDENTIALS="$SA_FILE"
+            npx --yes firebase-tools hosting:sites:create aerostream-gg --project=aerostream-gg || echo "✓ Site 'aerostream-gg' already provisioned or created."
+            rm -f "$SA_FILE"
+          else
+            echo "No service account provided, skipping pre-provisioning check."
+          fi
+
+      - name: Deploy to Firebase Hosting (Live Channel)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AEROSTREAM_GG }}
+          channelId: live
+          projectId: aerostream-gg
+          target: aerostream-gg
+          entryPoint: site

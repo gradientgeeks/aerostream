@@ -1,0 +1,6 @@
+[09:11:46] quay.io/gradientgeeks/aerostream:latest ready; driver driver-kafka/aerostream.yaml; workload workloads/aerostream-16p-1kb.yaml
+result aerostream-16p-1kb-AeroStream-Kafka-2026-09-28-09-13-57.json
+publish avg 217,100 msg/s (212.0 MB/s)  peak 243,460  consume avg 217,143 msg/s  errors 0
+publish latency ms  p50 5.3  p99 460.2  p99.9 504.9  max 591.4
+end-to-end latency ms  p50 14.0  p99 492.0
+broker container peak memory 513 MiB, peak CPU 203% (limit 200%)

@@ -1,0 +1,231 @@
+# AeroStream Helm chart values.
+#
+# Topology: a Raft quorum of Go controllers (StatefulSet) + Rust brokers (StatefulSet).
+# Both run from the single all-in-one image (it contains the `controller` and `rust-broker`
+# binaries and the web console), so no second image is needed.
+
+nameOverride: ""
+fullnameOverride: ""
+clusterDomain: cluster.local
+
+image:
+  repository: quay.io/gradientgeeks/aerostream
+  # Defaults to the chart appVersion. Pin to an immutable tag (e.g. a commit SHA) in production.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Shared bearer token required on controller gRPC calls (brokers are configured with it too).
+# Empty disables authentication. It is stored in the <release>-aerostream-config Secret.
+auth:
+  token: ""
+
+podSecurityContext: {}
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+
+# ---------------------------------------------------------------------------
+# Controllers (Raft quorum, REST API, gRPC control plane, web console)
+# ---------------------------------------------------------------------------
+controller:
+  # Use an odd number: 1 (dev) or 3 / 5 (production).
+  replicas: 3
+
+  ports:
+    raft: 7001
+    grpc: 8001
+    http: 9001
+
+  raft:
+    heartbeatTimeoutMs: 1000
+    electionTimeoutMs: 1000
+    leaderLeaseTimeoutMs: 500
+    commitTimeoutMs: 50
+
+  cluster:
+    failureDetectionIntervalMs: 3000
+    brokerInactiveTimeoutMs: 8000
+    replicaLagTolerance: 10
+
+  # Ask the leader to remove a controller from the Raft configuration when its pod stops.
+  # Leave false: the Raft configuration is kept across restarts/rollouts. Only enable this
+  # when you scale the controller StatefulSet down for good.
+  leaveOnShutdown: false
+
+  # Service exposing the REST API + console (http) and gRPC inside/outside the cluster.
+  service:
+    type: ClusterIP
+    annotations: {}
+    # nodePort: 30901   (type NodePort / LoadBalancer only)
+    # loadBalancerIP: ""
+
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: aerostream.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+    accessModes: ["ReadWriteOnce"]
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+  # "soft" prefers different nodes, "hard" requires it, "" disables.
+  podAntiAffinityPreset: soft
+  affinity: {}
+  nodeSelector: {}
+  tolerations: []
+  topologySpreadConstraints: []
+  priorityClassName: ""
+  podAnnotations: {}
+  podLabels: {}
+  extraEnv: []
+  terminationGracePeriodSeconds: 30
+
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+# ---------------------------------------------------------------------------
+# Brokers (Rust storage engine: native data plane + Kafka wire protocol)
+# ---------------------------------------------------------------------------
+broker:
+  replicas: 3
+
+  ports:
+    data: 9091     # native zero-copy (sendfile) data plane
+    kafka: 9092    # Kafka wire protocol
+
+  # Brokers advertise their POD IP to clients (there is no separate advertised.listeners),
+  # so Kafka clients must run inside the cluster / pod network. IPv4 only.
+
+  # Rack / availability zone (broker.rack) for rack-aware replica placement and
+  # fetch-from-closest-replica (KIP-392).
+  rack:
+    # When enabled, an init container reads the node label `topologyKey` through the
+    # Kubernetes API (needs the ClusterRole created by this chart) and passes it as --rack.
+    enabled: false
+    topologyKey: topology.kubernetes.io/zone
+    # Static rack for every broker (skips the node lookup). Rarely useful; mostly for testing.
+    value: ""
+
+  # Fetch routing for KIP-392: rack_aware | leader
+  replicaSelector: rack_aware
+  # Default topic compression.type: producer | uncompressed | gzip | snappy | lz4 | zstd
+  compressionType: producer
+  groupInitialRebalanceDelayMs: 3000
+
+  storage:
+    maxSegmentSize: 134217728          # 128 MiB
+    maxRetentionSize: 1073741824       # 1 GiB per partition
+    maxRetentionAgeSecs: 604800        # 7 days
+    compactionEnabled: true
+    dirtyRatioThreshold: 0.5
+    tombstoneRetentionSecs: 86400
+    writebackBytes: 8388608            # start page-cache writeback every 8 MiB (0 disables)
+    dropCacheAfterWriteback: false     # true caps page cache but paces writes to the disk
+
+  # Transactions (KIP-98) - the coordinator runs inside the broker.
+  txn:
+    maxTimeoutMs: 900000
+    transactionalIdExpirationMs: 604800000
+    sweepIntervalMs: 10000
+
+  # Share groups (KIP-932).
+  share:
+    heartbeatIntervalMs: 5000
+    sessionTimeoutMs: 45000
+    lockTimeoutMs: 30000
+    maxDeliveryAttempts: 5
+    maxInFlight: 2000
+    autoOffsetReset: latest            # latest | earliest
+    isolationLevel: read_uncommitted   # read_uncommitted | read_committed
+    defaultMaxRecords: 500
+    sweepIntervalMs: 1000
+
+  # Raw TOML appended to broker.toml (after the tables above). Use it for anything not modelled
+  # here: client quotas, tiered storage, Iceberg topics. Must contain only [tables] - top-level
+  # keys are already emitted. Example:
+  #
+  # extraConfig: |
+  #   [[quotas]]
+  #   client_id = "noisy-app"
+  #   producer_byte_rate = 1048576
+  #
+  #   [tiered_storage]
+  #   enabled = true
+  #   provider = "s3"
+  #   [tiered_storage.s3]
+  #   bucket = "aerostream-cold"
+  #   region = "us-east-1"
+  #
+  #   [iceberg]
+  #   enabled = true
+  #   warehouse = "file:///data/warehouse"
+  #   [[iceberg.topics]]
+  #   name = "orders"
+  extraConfig: ""
+
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+    accessModes: ["ReadWriteOnce"]
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      memory: 4Gi
+
+  # Client-facing bootstrap Service (Kafka + native data plane).
+  service:
+    type: ClusterIP
+    annotations: {}
+
+  podAntiAffinityPreset: soft
+  affinity: {}
+  nodeSelector: {}
+  tolerations: []
+  # Spread brokers across zones/nodes. Left empty by default.
+  topologySpreadConstraints: []
+  priorityClassName: ""
+  podAnnotations: {}
+  podLabels: {}
+  # Extra env, e.g. AWS credentials for S3 tiered storage:
+  # extraEnv:
+  #   - name: AWS_ACCESS_KEY_ID
+  #     valueFrom: {secretKeyRef: {name: aws-creds, key: access-key}}
+  extraEnv: []
+  extraEnvFrom: []
+  terminationGracePeriodSeconds: 60
+
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+# Optional smoke test: `helm test <release>`.
+tests:
+  enabled: true

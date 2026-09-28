@@ -66,6 +66,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'streams',
+    loadComponent: () =>
+      import('./components/streams/streams.component').then(
+        (m) => m.StreamsComponent
+      ),
+  },
+  {
     path: 'aerostream/console/transforms',
     redirectTo: 'transforms',
   },

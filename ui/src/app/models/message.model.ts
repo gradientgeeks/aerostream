@@ -2,6 +2,9 @@ export interface MessageRecord {
   offset: number;
   payload: string;
   length: number;
+  key?: string;
+  timestamp?: number;
+  headers?: Record<string, string>;
 }
 
 export interface FetchMessagesResponse {

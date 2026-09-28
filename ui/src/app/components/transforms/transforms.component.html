@@ -83,10 +83,24 @@
       <div class="metric-content">
         <span class="metric-label">Avg Inline Latency</span>
         <div class="metric-value-row">
-          <span class="metric-number">{{ transformService.metrics().avgLatencyMs }}</span>
-          <span class="metric-unit">ms</span>
+          @if (transformService.metrics().avgLatencyMs > 0) {
+            <span class="metric-number">
+              {{ transformService.metrics().avgLatencyMs < 1
+                ? (transformService.metrics().avgLatencyMs * 1000 | number: '1.0-1')
+                : (transformService.metrics().avgLatencyMs | number: '1.2-2')
+              }}
+            </span>
+            <span class="metric-unit">
+              {{ transformService.metrics().avgLatencyMs < 1 ? 'µs' : 'ms' }}
+            </span>
+          } @else {
+            <span class="metric-number">--</span>
+            <span class="metric-unit">ms</span>
+          }
         </div>
-        <span class="metric-subtext">Sub-millisecond overhead</span>
+        <span class="metric-subtext">
+          {{ transformService.metrics().avgLatencyMs > 0 ? 'Measured inline execution' : 'Awaiting dry-run tests' }}
+        </span>
       </div>
     </mat-card>
   </div>
@@ -276,12 +290,26 @@
       </mat-card>
     } @empty {
       <div class="empty-state">
-        <mat-icon class="empty-icon">filter_drama</mat-icon>
-        <h3>No Stream Transforms Found</h3>
-        <p>There are no active or configured transforms matching the current search criteria.</p>
-        <button mat-flat-button color="primary" (click)="openDeployDialog()">
-          Deploy First Stream Transform
-        </button>
+        <mat-icon class="empty-icon">{{ transformService.transforms().length === 0 ? 'auto_fix_high' : 'filter_alt_off' }}</mat-icon>
+        @if (transformService.transforms().length === 0) {
+          <h3 class="empty-title">No Stream Transforms Deployed</h3>
+          <p class="empty-desc">
+            No active or configured inline transforms found in broker memory. Deploy your first transform to enable zero-copy PII masking, stream filtering, or WebAssembly routines.
+          </p>
+          <button mat-flat-button color="primary" class="deploy-first-btn" (click)="openDeployDialog()">
+            <mat-icon>add_circle</mat-icon>
+            <span>Deploy First Transform</span>
+          </button>
+        } @else {
+          <h3 class="empty-title">No Matching Transforms</h3>
+          <p class="empty-desc">
+            No transforms match the search query "{{ searchQuery() }}" or type filter "{{ typeFilter() }}".
+          </p>
+          <button mat-stroked-button (click)="searchQuery.set(''); typeFilter.set('ALL')">
+            <mat-icon>clear_all</mat-icon>
+            <span>Clear Filters</span>
+          </button>
+        }
       </div>
     }
   </div>
@@ -296,19 +324,9 @@
         <div>
           <h2 class="playground-title">Live Transform Playground & Dry-Run Tester</h2>
           <p class="playground-subtitle">
-            Simulate inline stream execution against any active transform or rule. Verify PII masking diffs and filter decisions in real-time.
+            Simulate inline stream execution against any active transform or rule. Verify PII masking diffs, WebAssembly routines, and filter decisions in real-time.
           </p>
         </div>
-      </div>
-
-      <!-- Preset buttons -->
-      <div class="presets-row">
-        <span class="preset-label">Quick Test Presets:</span>
-        @for (p of presets; track p.name) {
-          <button mat-stroked-button class="preset-pill-btn" (click)="applyPreset(p)">
-            {{ p.name }}
-          </button>
-        }
       </div>
     </div>
 
@@ -322,11 +340,29 @@
             class="transform-select"
             [value]="selectedTestTransform()"
             (change)="selectedTestTransform.set($any($event.target).value)"
+            [disabled]="transformService.transforms().length === 0"
           >
+            @if (transformService.transforms().length === 0) {
+              <option value="" disabled selected>No deployed transforms available</option>
+            }
             @for (t of transformService.transforms(); track t.name) {
               <option [value]="t.name">
                 {{ t.name }} ({{ t.type }} ➔ {{ t.target_topic }})
               </option>
+            }
+          </select>
+        </div>
+
+        <div class="template-picker">
+          <label class="control-label">Payload Template:</label>
+          <select
+            class="transform-select template-select"
+            [value]="selectedTemplateName()"
+            (change)="applyTemplateByName($any($event.target).value)"
+          >
+            <option value="" disabled selected>Select Sample Template...</option>
+            @for (p of presets; track p.name) {
+              <option [value]="p.name">{{ p.name }}</option>
             }
           </select>
         </div>
@@ -342,7 +378,7 @@
             color="primary"
             class="run-test-btn"
             (click)="runTest()"
-            [disabled]="isTesting()"
+            [disabled]="isTesting() || !selectedTestTransform() || transformService.transforms().length === 0"
           >
             @if (isTesting()) {
               <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
@@ -353,6 +389,13 @@
           </button>
         </div>
       </div>
+
+      @if (transformService.transforms().length === 0) {
+        <div class="playground-empty-callout">
+          <mat-icon>info</mat-icon>
+          <span>No transforms are currently deployed. <a (click)="openDeployDialog()" class="deploy-link">Deploy a transform</a> to test payload execution in the playground.</span>
+        </div>
+      }
 
       @if (testError()) {
         <div class="test-error-banner">
@@ -386,10 +429,17 @@
             <span class="panel-tag tag-output">OUTPUT EVENT (AFTER)</span>
             @if (testResult(); as res) {
               <div class="execution-meta">
-                <span class="latency-badge">
-                  <mat-icon>timer</mat-icon>
-                  {{ res.latency_ms | number: '1.2-2' }} ms
+                <span class="latency-badge backend-latency" [matTooltip]="'Backend broker transform execution: ' + (res.latency_ms * 1000 | number: '1.0-1') + ' µs'">
+                  <mat-icon>bolt</mat-icon>
+                  <span>Broker: {{ formatBackendLatency(res.latency_ms) }}</span>
                 </span>
+
+                @if (roundTripLatencyMs(); as rt) {
+                  <span class="latency-badge roundtrip-latency" matTooltip="HTTP network round-trip time">
+                    <mat-icon>timer</mat-icon>
+                    <span>Round-trip: {{ rt | number: '1.1-2' }} ms</span>
+                  </span>
+                }
 
                 @if (res.drop) {
                   <span class="decision-badge drop-badge">

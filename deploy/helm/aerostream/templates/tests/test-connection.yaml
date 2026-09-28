@@ -1,0 +1,35 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "aerostream.fullname" . }}-test
+  labels:
+    {{- include "aerostream.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: check
+      image: {{ include "aerostream.image" . }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          set -eo pipefail
+          API="http://{{ include "aerostream.controller.service" . }}:{{ .Values.controller.ports.http }}"
+          echo "controller status:"; curl -sf "${API}/status"; echo
+          want={{ .Values.broker.replicas }}
+          for i in $(seq 1 60); do
+            got=$(curl -sf "${API}/api/brokers" | grep -o '"active":true' | wc -l || true)
+            echo "active brokers: ${got}/${want}"
+            [ "${got}" -ge "${want}" ] && exit 0
+            sleep 3
+          done
+          echo "expected ${want} active brokers"; exit 1
+{{- end }}

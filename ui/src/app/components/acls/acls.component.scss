@@ -995,3 +995,115 @@
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* Tab Loading State */
+.tab-loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  gap: 16px;
+
+  mat-spinner {
+    ::ng-deep circle {
+      stroke: var(--app-primary, #00e5ff);
+    }
+  }
+
+  .loading-text {
+    font-size: 0.95rem;
+    color: var(--app-text-muted, #94a3b8);
+    margin: 0;
+  }
+}
+
+/* Empty Policies Card Container */
+.empty-policies-container {
+  padding: 48px 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.empty-policies-card {
+  max-width: 580px;
+  width: 100%;
+  padding: 40px 32px;
+  text-align: center;
+  background: var(--app-bg, #080b11);
+  border: 1px solid var(--app-border, rgba(0, 229, 255, 0.15));
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+
+  .empty-card-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    background: rgba(0, 229, 255, 0.08);
+    border: 1px solid var(--app-primary-border, rgba(0, 229, 255, 0.25));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--app-primary, #00e5ff);
+    margin-bottom: 8px;
+
+    mat-icon {
+      font-size: 32px;
+      width: 32px;
+      height: 32px;
+    }
+  }
+
+  .empty-card-title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--app-text, #ffffff);
+    letter-spacing: -0.01em;
+  }
+
+  .empty-card-description {
+    margin: 0 0 12px 0;
+    font-size: 0.95rem;
+    color: var(--app-text-muted, #94a3b8);
+    line-height: 1.5;
+    max-width: 440px;
+  }
+
+  .empty-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 8px;
+
+    .primary-action-btn {
+      background-color: var(--app-primary, #00e5ff);
+      color: #080b11;
+      font-weight: 700;
+      height: 40px;
+      padding: 0 20px;
+      border-radius: 8px;
+    }
+
+    .action-btn {
+      height: 40px;
+      padding: 0 16px;
+      border-radius: 8px;
+    }
+  }
+}
+
+.refresh-icon-btn {
+  color: var(--app-text-muted, #94a3b8);
+  &:hover {
+    color: var(--app-primary, #00e5ff);
+  }
+}
+

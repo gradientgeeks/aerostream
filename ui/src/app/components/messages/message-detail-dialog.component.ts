@@ -12,6 +12,9 @@ export interface MessageDetailData {
   offset: number;
   length: number;
   payload: string;
+  key?: string;
+  timestamp?: number;
+  headers?: Record<string, string>;
 }
 
 @Component({
@@ -39,7 +42,23 @@ export class MessageDetailDialogComponent implements OnInit {
   lineCount = 1;
 
   ngOnInit(): void {
-    const raw = this.data.payload || '';
+    let raw = this.data.payload || '';
+
+    // If raw contains binary non-printable control characters, extract clean JSON or text
+    if (/[\x00-\x08\x0E-\x1F]/.test(raw)) {
+      const jsonMatch = raw.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+      if (jsonMatch) {
+        raw = jsonMatch[0];
+      } else {
+        const partialJson = raw.match(/(\{[\s\S]*|\[[\s\S]*)/);
+        if (partialJson) {
+          raw = partialJson[0];
+        } else {
+          raw = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+        }
+      }
+    }
+
     try {
       const parsed = JSON.parse(raw);
       this.isJson = true;
@@ -49,6 +68,14 @@ export class MessageDetailDialogComponent implements OnInit {
       this.formattedContent = raw;
     }
     this.lineCount = this.formattedContent.split('\n').length;
+  }
+
+  hasHeaders(): boolean {
+    return !!this.data.headers && Object.keys(this.data.headers).length > 0;
+  }
+
+  headerEntries(): [string, string][] {
+    return this.data.headers ? Object.entries(this.data.headers) : [];
   }
 
   copyPayload(): void {

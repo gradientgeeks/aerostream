@@ -56,7 +56,7 @@ export class MessagesComponent implements OnInit {
   currentPartitionInfo = signal<PartitionInfo | null>(null);
 
   messagesDataSource = new MatTableDataSource<MessageRecord>([]);
-  displayedColumns: string[] = ['offset', 'length', 'payload', 'actions'];
+  displayedColumns: string[] = ['offset', 'key', 'length', 'payload', 'actions'];
 
   isLoadingTopics = signal(false);
   isFetchingMessages = signal(false);
@@ -225,14 +225,26 @@ export class MessagesComponent implements OnInit {
         partition: this.selectedPartition(),
         offset: message.offset,
         length: message.length,
-        payload: message.payload
+        payload: message.payload,
+        key: message.key,
+        timestamp: message.timestamp,
+        headers: message.headers
       }
     });
   }
 
   getPayloadPreview(payload: string): string {
     if (!payload) return '<empty>';
-    const cleaned = payload.replace(/\r?\n|\r/g, ' ');
+    let cleaned = payload;
+    if (/[\x00-\x08\x0E-\x1F]/.test(cleaned)) {
+      const jsonMatch = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+      if (jsonMatch) {
+        cleaned = jsonMatch[0];
+      } else {
+        cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+      }
+    }
+    cleaned = cleaned.replace(/\r?\n|\r/g, ' ');
     return cleaned.length > 80 ? cleaned.substring(0, 80) + '...' : cleaned;
   }
 }

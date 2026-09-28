@@ -1,0 +1,455 @@
+<div class="showcase-page">
+  <!-- 1. HERO SECTION -->
+  <section class="hero-section">
+    <div class="hero-container">
+      <div class="hero-badge-row">
+        <span class="version-pill">
+          <span class="pulse-dot"></span>
+          AeroStream v0.1.0 Release
+        </span>
+        <span class="engine-pill go-pill">Go 1.26 Control Plane</span>
+        <span class="engine-pill rust-pill">Rust 1.98.1 Data Plane</span>
+        <span class="engine-pill kafka-pill">Kafka Port 9092</span>
+      </div>
+
+      <h1 class="hero-title">
+        The Next-Generation <br class="hidden sm:inline" />
+        <span class="text-gradient-dual">Dual-Engine</span> Distributed Streaming Platform
+      </h1>
+
+      <p class="hero-subtitle">
+        Consensus agility and governance powered by <strong>Go Raft</strong>. Ultra-low latency, hardware CRC32C,
+        and zero-copy log throughput powered by <strong>Rust</strong>. A true modern, high-efficiency drop-in replacement
+        for Apache Kafka and Redpanda.
+      </p>
+
+      <div class="hero-actions">
+        <a routerLink="/docs" class="btn-primary">
+          <mat-icon>menu_book</mat-icon>
+          Explore Interactive Docs
+        </a>
+        <a href="#architecture" class="btn-secondary">
+          <mat-icon>account_tree</mat-icon>
+          System Architecture
+        </a>
+        <a href="#quickstart" class="btn-outline">
+          <mat-icon>terminal</mat-icon>
+          Quickstart in 30s
+        </a>
+      </div>
+
+      <!-- Quick Command Bar -->
+      <div class="quick-command-card">
+        <div class="command-prefix">
+          <mat-icon class="terminal-icon">terminal</mat-icon>
+          <span class="command-text">docker run -d -p 9092:9092 -p 9001:9001 gradientgeeks/aerostream:latest</span>
+        </div>
+        <button class="copy-btn" (click)="copyDockerCommand()" matTooltip="Copy docker command">
+          <mat-icon>{{ copiedCommand() ? 'check' : 'content_copy' }}</mat-icon>
+          <span>{{ copiedCommand() ? 'Copied!' : 'Copy' }}</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. DUAL-ENGINE ARCHITECTURE VISUALIZER -->
+  <section class="section architecture-section" id="architecture">
+    <div class="section-header">
+      <span class="section-tag">ENGINEERING SYNERGY</span>
+      <h2 class="section-title">Why Dual-Engine? Decoupling Consensus from Log I/O</h2>
+      <p class="section-desc">
+        Traditional single-runtime message brokers force an impossible tradeoff: JVM garbage collection jitter or
+        complex C++ control plane maintenance. AeroStream assigns each subsystem to its optimal language runtime.
+      </p>
+    </div>
+
+    <div class="architecture-visualizer">
+      <!-- Left: Engine Split View -->
+      <div class="engine-split-container">
+        <!-- Go Control Plane Box -->
+        <div class="engine-box go-box">
+          <div class="engine-header">
+            <div class="engine-title-group">
+              <span class="engine-logo-badge go-badge">GO</span>
+              <div>
+                <h3 class="engine-title">Go Raft Control Plane</h3>
+                <span class="engine-subtitle">Ports 9001 (REST) & 8001 (gRPC / Raft)</span>
+              </div>
+            </div>
+            <span class="runtime-badge">Go 1.26 • Green Tea GC</span>
+          </div>
+
+          <div class="engine-components-list">
+            <button
+              class="component-btn"
+              [class.active]="selectedNodeId() === 'go-raft'"
+              (click)="selectNode('go-raft')">
+              <mat-icon>hub</mat-icon>
+              <span>HashiCorp Raft Quorum & Distributed FSM</span>
+            </button>
+            <button
+              class="component-btn"
+              [class.active]="selectedNodeId() === 'go-governance'"
+              (click)="selectNode('go-governance')">
+              <mat-icon>security</mat-icon>
+              <span>Schema Registry (Avro/JSON) & RBAC Engine</span>
+            </button>
+            <div class="component-item">
+              <mat-icon>transform</mat-icon>
+              <span>In-Broker WASM & Stream Data Transforms</span>
+            </div>
+            <div class="component-item">
+              <mat-icon>handshake</mat-icon>
+              <span>Cooperative Sticky Rebalancer (KIP-848)</span>
+            </div>
+            <div class="component-item">
+              <mat-icon>cable</mat-icon>
+              <span>Kafka Connect Compatible Connector Workers</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sync Bridge -->
+        <div class="sync-bridge">
+          <div class="bridge-line"></div>
+          <div class="bridge-badge">
+            <mat-icon>swap_horiz</mat-icon>
+            <span>Internal gRPC / Protobuf Metadata Sync</span>
+          </div>
+          <div class="bridge-line"></div>
+        </div>
+
+        <!-- Rust Data Plane Box -->
+        <div class="engine-box rust-box">
+          <div class="engine-header">
+            <div class="engine-title-group">
+              <span class="engine-logo-badge rust-badge">RUST</span>
+              <div>
+                <h3 class="engine-title">Rust Storage Data Plane</h3>
+                <span class="engine-subtitle">Ports 9091 (Native) & 9092 (Kafka Wire)</span>
+              </div>
+            </div>
+            <span class="runtime-badge">Rust 1.98.1 • Edition 2024</span>
+          </div>
+
+          <div class="engine-components-list">
+            <button
+              class="component-btn"
+              [class.active]="selectedNodeId() === 'rust-storage'"
+              (click)="selectNode('rust-storage')">
+              <mat-icon>sd_storage</mat-icon>
+              <span>Zero-Copy Commit Log & In-Memory Length Tracking</span>
+            </button>
+            <button
+              class="component-btn"
+              [class.active]="selectedNodeId() === 'rust-kafka'"
+              (click)="selectNode('rust-kafka')">
+              <mat-icon>sync_alt</mat-icon>
+              <span>Kafka Protocol Listener (In-Place Offset Patching)</span>
+            </button>
+            <button
+              class="component-btn"
+              [class.active]="selectedNodeId() === 'rust-tiered'"
+              (click)="selectNode('rust-tiered')">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>Multi-Cloud Tiered Storage (S3, MinIO, GCS, Azure)</span>
+            </button>
+            <div class="component-item">
+              <mat-icon>memory</mat-icon>
+              <span>Hardware CRC32C (SSE4.2/ARMv8 @ 10.9 GB/s)</span>
+            </div>
+            <div class="component-item">
+              <mat-icon>bolt</mat-icon>
+              <span>Linux sendfile(2) Zero-Userspace Transfers</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Node Inspector Panel -->
+      <div class="node-inspector-card" [style.border-color]="selectedNode().color">
+        <div class="inspector-header">
+          <div class="inspector-title-row">
+            <mat-icon [style.color]="selectedNode().color">{{ selectedNode().icon }}</mat-icon>
+            <div>
+              <h4 class="inspector-title">{{ selectedNode().title }}</h4>
+              <span class="inspector-engine">{{ selectedNode().engine }}</span>
+            </div>
+          </div>
+          <span class="inspector-pill">Architecture Deep Dive</span>
+        </div>
+
+        <p class="inspector-summary">{{ selectedNode().summary }}</p>
+
+        <div class="inspector-details">
+          <div class="detail-item" *ngFor="let point of selectedNode().details">
+            <mat-icon class="detail-check">check_circle</mat-icon>
+            <span>{{ point }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. CORE CAPABILITIES (8 FEATURE PILLARS) -->
+  <section class="section features-section" id="features">
+    <div class="section-header">
+      <span class="section-tag">FULL-STACK STREAMING</span>
+      <h2 class="section-title">Built for Modern Mission-Critical Architectures</h2>
+      <p class="section-desc">
+        AeroStream combines enterprise-grade streaming governance, multi-cloud object storage, and hardware-accelerated
+        zero-copy execution into a single, cohesive binary.
+      </p>
+    </div>
+
+    <div class="features-grid">
+      <!-- 1 -->
+      <div class="feature-card">
+        <div class="feature-icon-box go-icon">
+          <mat-icon>layers</mat-icon>
+        </div>
+        <h3 class="feature-title">Dual-Engine Synergy</h3>
+        <p class="feature-desc">
+          Raft consensus state machines in Go are completely decoupled from microsecond commit log disk I/O in Rust,
+          preventing consensus latency spikes from stalling network data planes.
+        </p>
+        <span class="feature-tag">Architecture</span>
+      </div>
+
+      <!-- 2 -->
+      <div class="feature-card">
+        <div class="feature-icon-box rust-icon">
+          <mat-icon>sync_alt</mat-icon>
+        </div>
+        <h3 class="feature-title">Kafka Protocol Drop-In</h3>
+        <p class="feature-desc">
+          Direct wire protocol support on TCP port 9092. Works instantly with <code>kafka-python</code>, <code>aiokafka</code>,
+          Spring Kafka, <code>librdkafka</code>, and Confluent CLI without proxy layers.
+        </p>
+        <span class="feature-tag">Wire Protocol</span>
+      </div>
+
+      <!-- 3 -->
+      <div class="feature-card">
+        <div class="feature-icon-box cloud-icon">
+          <mat-icon>cloud_upload</mat-icon>
+        </div>
+        <h3 class="feature-title">Multi-Cloud Tiered Storage</h3>
+        <p class="feature-desc">
+          Automated rolling of closed segments to AWS S3, MinIO, Google Cloud Storage (GCS), or Azure Blob for infinite
+          retention at low cost while keeping hot logs on local NVMe.
+        </p>
+        <span class="feature-tag">Tiered Storage</span>
+      </div>
+
+      <!-- 4 -->
+      <div class="feature-card">
+        <div class="feature-icon-box purple-icon">
+          <mat-icon>schema</mat-icon>
+        </div>
+        <h3 class="feature-title">Built-In Schema Registry</h3>
+        <p class="feature-desc">
+          Confluent-compatible REST endpoints for Avro, Protobuf, and JSON schemas with BACKWARD, FORWARD, and FULL
+          compatibility validation embedded directly in the cluster controller.
+        </p>
+        <span class="feature-tag">Governance</span>
+      </div>
+
+      <!-- 5 -->
+      <div class="feature-card">
+        <div class="feature-icon-box cyan-icon">
+          <mat-icon>transform</mat-icon>
+        </div>
+        <h3 class="feature-title">In-Broker Stream Transforms</h3>
+        <p class="feature-desc">
+          Real-time stream filtering, JSON mapping, and automated PII data masking powered by sandboxed WASM runners
+          executing directly inside the broker without separate Flink clusters.
+        </p>
+        <span class="feature-tag">Processing</span>
+      </div>
+
+      <!-- 6 -->
+      <div class="feature-card">
+        <div class="feature-icon-box red-icon">
+          <mat-icon>admin_panel_settings</mat-icon>
+        </div>
+        <h3 class="feature-title">Enterprise RBAC & ACLs</h3>
+        <p class="feature-desc">
+          Granular Topic, Group, and Cluster ACL rules supporting principal roles (Super Admin, Operator, Producer, Consumer)
+          and wildcard pattern matching (e.g. <code>orders-*</code>).
+        </p>
+        <span class="feature-tag">Security</span>
+      </div>
+
+      <!-- 7 -->
+      <div class="feature-card">
+        <div class="feature-icon-box green-icon">
+          <mat-icon>handshake</mat-icon>
+        </div>
+        <h3 class="feature-title">Cooperative Sticky Rebalance</h3>
+        <p class="feature-desc">
+          Implements the KIP-848 cooperative rebalancing protocol to eliminate stop-the-world partition revocations,
+          ensuring smooth, uninterrupted consumer stream processing during pod restarts.
+        </p>
+        <span class="feature-tag">Consumers</span>
+      </div>
+
+      <!-- 8 -->
+      <div class="feature-card">
+        <div class="feature-icon-box amber-icon">
+          <mat-icon>cable</mat-icon>
+        </div>
+        <h3 class="feature-title">Connectors Ecosystem</h3>
+        <p class="feature-desc">
+          Built-in Kafka Connect REST API compatibility supporting automated S3 archival sinks, HTTP webhook dispatches,
+          Change Data Capture (CDC), and Elasticsearch indexing.
+        </p>
+        <span class="feature-tag">Integrations</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. INTERACTIVE QUICKSTART TABS -->
+  <section class="section quickstart-section" id="quickstart">
+    <div class="section-header">
+      <span class="section-tag">GET STARTED</span>
+      <h2 class="section-title">Up and Running in 30 Seconds</h2>
+      <p class="section-desc">
+        Deploy a complete multi-broker cluster with Docker Compose or connect your existing Kafka applications with
+        zero configuration changes.
+      </p>
+    </div>
+
+    <div class="quickstart-box">
+      <div class="quickstart-tabs">
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'docker'"
+          (click)="selectTab('docker')">
+          <mat-icon>layers</mat-icon> Docker Compose
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'python'"
+          (click)="selectTab('python')">
+          <mat-icon>code</mat-icon> Python (Kafka Client)
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'go'"
+          (click)="selectTab('go')">
+          <mat-icon>terminal</mat-icon> Go Native SDK
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'java'"
+          (click)="selectTab('java')">
+          <mat-icon>coffee</mat-icon> Java / Spring
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'rest'"
+          (click)="selectTab('rest')">
+          <mat-icon>http</mat-icon> cURL / REST API
+        </button>
+      </div>
+
+      <!-- Docker Compose Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'docker'">
+        <div class="code-header">
+          <span>docker-compose.yml</span>
+          <button class="snippet-copy" (click)="copySnippet(dockerSnippet, 'docker')">
+            <mat-icon>{{ copiedSnippet() === 'docker' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'docker' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="dockerSnippet"></code></pre>
+      </div>
+
+      <!-- Python Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'python'">
+        <div class="code-header">
+          <span>producer.py (Standard Kafka Python Client)</span>
+          <button class="snippet-copy" (click)="copySnippet(pythonSnippet, 'python')">
+            <mat-icon>{{ copiedSnippet() === 'python' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'python' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="pythonSnippet"></code></pre>
+      </div>
+
+      <!-- Go Native Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'go'">
+        <div class="code-header">
+          <span>main.go (AeroStream Native High-Speed Client)</span>
+          <button class="snippet-copy" (click)="copySnippet(goSnippet, 'go')">
+            <mat-icon>{{ copiedSnippet() === 'go' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'go' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="goSnippet"></code></pre>
+      </div>
+
+      <!-- Java / Spring Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'java'">
+        <div class="code-header">
+          <span>application.yml (Spring Kafka Drop-In)</span>
+          <button class="snippet-copy" (click)="copySnippet(javaSnippet, 'java')">
+            <mat-icon>{{ copiedSnippet() === 'java' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'java' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="javaSnippet"></code></pre>
+      </div>
+
+      <!-- REST API Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'rest'">
+        <div class="code-header">
+          <span>cURL (HTTP REST Ingestion & Schema Registry)</span>
+          <button class="snippet-copy" (click)="copySnippet(restSnippet, 'rest')">
+            <mat-icon>{{ copiedSnippet() === 'rest' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'rest' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="restSnippet"></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. CALL TO ACTION & FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-cta-card">
+        <div class="footer-cta-text">
+          <h3>Ready to Elevate Your Distributed Event Streams?</h3>
+          <p>Read the comprehensive technical architecture guide or explore the live cluster documentation.</p>
+        </div>
+        <div class="footer-cta-buttons">
+          <a routerLink="/docs" class="btn-primary">
+            <mat-icon>menu_book</mat-icon>
+            Read Documentation
+          </a>
+          <a href="https://github.com/gradientgeeks/AeroMQ" target="_blank" rel="noopener" class="btn-secondary">
+            <mat-icon>code</mat-icon>
+            GitHub Repository
+          </a>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div class="footer-left">
+          <app-turbine-logo [size]="28" [glow]="false"></app-turbine-logo>
+          <span class="footer-brand">AeroStream</span>
+          <span class="footer-copy">© 2026 Gradient Geeks. Published under the Apache 2.0 / MIT License.</span>
+        </div>
+        <div class="footer-links">
+          <a routerLink="/docs">Documentation</a>
+          <a href="#architecture">Architecture</a>
+          <a href="#features">Features</a>
+          <a href="#quickstart">Quickstart</a>
+          <a href="https://gradientgeeks.com" target="_blank" rel="noopener">Gradient Geeks</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+</div>

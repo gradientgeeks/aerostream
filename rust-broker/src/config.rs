@@ -22,11 +22,30 @@ pub struct BrokerConfig {
     pub controller: String,
     /// Path to store physical partition log files (defaults to ./data/broker_{id}).
     pub storage_dir: Option<PathBuf>,
+    /// Number of shard threads for thread-per-core mode.
+    /// 0 = auto-detect (one per CPU core). Set to 1 to disable sharding.
+    pub shard_threads: usize,
+    /// `broker.rack`: rack / availability-zone label reported to the controller and in Metadata.
+    pub rack: Option<String>,
+    /// KIP-392 replica selector: "rack_aware" (default) or "leader".
+    pub replica_selector: String,
+    /// Consumer-group coordinator: delay before the first rebalance of an empty group completes.
+    pub group_initial_rebalance_delay_ms: u64,
 
     pub storage: StorageConfig,
     pub tiered_storage: crate::storage::TieredStorageConfig,
     pub tls: TlsConfig,
     pub auth: AuthConfig,
+    /// Default topic `compression.type`: producer | uncompressed | gzip | snappy | lz4 | zstd.
+    pub compression_type: String,
+    /// Client quotas (`[[quotas]]` tables); the controller can override them via heartbeat.
+    pub quotas: Vec<crate::kafka::quota::QuotaEntry>,
+    /// Iceberg topics (`[iceberg]` section).
+    pub iceberg: crate::iceberg::IcebergConfig,
+    /// Transaction coordinator settings (`[txn]`).
+    pub txn: crate::txn::TxnConfig,
+    /// Share group (KIP-932) settings (`[share]`).
+    pub share: crate::share::ShareConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -44,6 +63,12 @@ pub struct StorageConfig {
     pub dirty_ratio_threshold: f64,
     /// Duration in seconds to retain tombstones before deleting them (default 86400 = 24h).
     pub tombstone_retention_secs: u64,
+    /// Start page-cache writeback of each partition's active segment every this many bytes (0 disables).
+    /// Prevents dirty pages from piling up into multi-second write stalls, notably under a container memory limit.
+    pub writeback_bytes: u64,
+    /// After a range has been written back, drop it from the page cache. Caps page-cache use and paces the writer
+    /// to the disk, at the cost of serving very recent reads from disk.
+    pub drop_cache_after_writeback: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -78,10 +103,19 @@ impl Default for BrokerConfig {
             kafka_port: 9093,
             controller: "http://127.0.0.1:8001".to_string(),
             storage_dir: None,
+            shard_threads: 0,
+            rack: None,
+            replica_selector: "rack_aware".to_string(),
+            group_initial_rebalance_delay_ms: 3000,
             storage: StorageConfig::default(),
             tiered_storage: crate::storage::TieredStorageConfig::default(),
             tls: TlsConfig::default(),
             auth: AuthConfig::default(),
+            compression_type: "producer".to_string(),
+            quotas: Vec::new(),
+            iceberg: crate::iceberg::IcebergConfig::default(),
+            txn: crate::txn::TxnConfig::default(),
+            share: crate::share::ShareConfig::default(),
         }
     }
 }
@@ -95,10 +129,12 @@ impl Default for StorageConfig {
             max_retention_size: Some(1024 * 1024 * 1024),
             // 7 days.
             max_retention_age_secs: Some(7 * 24 * 3600),
-            // Log compaction enabled by default
-            compaction_enabled: true,
+            // Log compaction opt-in per topic (default false, enabled for cleanup.policy=compact)
+            compaction_enabled: false,
             dirty_ratio_threshold: 0.5,
             tombstone_retention_secs: 86400,
+            writeback_bytes: 8 * 1024 * 1024,
+            drop_cache_after_writeback: false,
         }
     }
 }

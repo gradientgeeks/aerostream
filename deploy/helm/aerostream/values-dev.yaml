@@ -1,0 +1,23 @@
+# Minimal single-node profile for local clusters (kind / minikube / k3d).
+#   helm install aero deploy/helm/aerostream -f deploy/helm/aerostream/values-dev.yaml
+# One controller + one broker, no persistence: data is lost when a pod restarts.
+controller:
+  replicas: 1
+  persistence:
+    enabled: false
+  podAntiAffinityPreset: ""
+  podDisruptionBudget:
+    enabled: false
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+broker:
+  replicas: 1
+  persistence:
+    enabled: false
+  podAntiAffinityPreset: ""
+  podDisruptionBudget:
+    enabled: false
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 1Gi}

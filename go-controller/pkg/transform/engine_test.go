@@ -7,7 +7,7 @@ import (
 )
 
 func TestEngine_SeedTransforms(t *testing.T) {
-	eng := NewEngine()
+	eng := NewEngine().SeedDefaultTransforms()
 	list := eng.ListTransforms()
 	if len(list) < 2 {
 		t.Fatalf("expected at least 2 seeded transforms, got %d", len(list))
@@ -98,7 +98,7 @@ func TestEngine_RegisterAndLifecycle(t *testing.T) {
 }
 
 func TestEngine_ExecuteMaskPII(t *testing.T) {
-	eng := NewEngine()
+	eng := NewEngine().SeedDefaultTransforms()
 	piiTransform, err := eng.GetTransform("pii-masker-orders")
 	if err != nil {
 		t.Fatalf("failed to get pii transform: %v", err)
@@ -155,7 +155,7 @@ func TestEngine_ExecuteMaskPII(t *testing.T) {
 }
 
 func TestEngine_ExecuteFilter(t *testing.T) {
-	eng := NewEngine()
+	eng := NewEngine().SeedDefaultTransforms()
 	filterTransform, err := eng.GetTransform("telemetry-filter-critical")
 	if err != nil {
 		t.Fatalf("failed to get filter transform: %v", err)
@@ -271,7 +271,7 @@ func TestEngine_ExecuteWASM(t *testing.T) {
 }
 
 func TestEngine_Concurrency(t *testing.T) {
-	eng := NewEngine()
+	eng := NewEngine().SeedDefaultTransforms()
 	t1, _ := eng.GetTransform("pii-masker-orders")
 
 	payload := []byte(`{"credit_card": "1234-5678", "order_id": "X"}`)

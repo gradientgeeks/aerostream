@@ -1,10 +1,19 @@
 [package]
 name = "rust-broker"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+
+[features]
+default = ["iceberg"]
+# Iceberg topics (hand-written Parquet/Avro, no extra crates).
+iceberg = []
 
 [dependencies]
 tokio = { version = "1.35", features = ["full"] }
+# Already pulled in transitively (e.g. via tonic); declared directly for select_all in the Kafka Fetch long-poll.
+futures-util = "0.3"
+mimalloc = { version = "0.1", default-features = false }
+crc32c = "0.6"        # hardware CRC32C (SSE4.2 / ARMv8) with runtime detection and a software fallback
 tonic = { version = "0.11", features = ["tls"] }
 prost = "0.12"
 bytes = "1.5"
@@ -20,9 +29,24 @@ aws-sdk-s3 = { version = "1", default-features = false, features = ["rustls", "r
 aws-config = { version = "1", default-features = false, features = ["rustls", "rt-tokio"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 async-trait = "0.1.92"
+flate2 = "1"
+snap = "1"
+lz4_flex = { version = "0.11", default-features = false, features = ["std", "frame", "safe-encode", "safe-decode"] }
+zstd = "0.13"
+hashbrown = "0.15"
+ring = "0.17"
+base64 = "0.21"
+flume = "0.11"
 
 [build-dependencies]
 tonic-build = "0.11"
 
 [dev-dependencies]
 tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,5 +1,6 @@
-import { Injectable, computed, signal } from '@angular/core';
-import { Observable, of } from 'rxjs';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable, catchError, forkJoin, map, of, switchMap, tap } from 'rxjs';
 import {
   CompatibilityMode,
   RegisterSchemaRequest,
@@ -7,139 +8,6 @@ import {
   SchemaRegistryStats,
   SchemaType,
 } from '../models/schema.model';
-
-const STORAGE_KEY = 'aerostream_registered_schemas';
-
-const INITIAL_SCHEMAS: RegisteredSchema[] = [
-  {
-    id: 1001,
-    subject: 'orders-value',
-    version: 2,
-    type: 'AVRO',
-    compatibility: 'BACKWARD',
-    created_at: '2026-09-26T08:15:00Z',
-    description: 'E-commerce order placement and lifecycle event schema with monetary amounts and status enums',
-    topic: 'orders',
-    schema: JSON.stringify(
-      {
-        type: 'record',
-        name: 'OrderEvent',
-        namespace: 'com.aerostream.ecommerce',
-        doc: 'Core transactional order event stream payload',
-        fields: [
-          { name: 'order_id', type: 'string', doc: 'Unique UUID v4 order identifier' },
-          { name: 'customer_id', type: 'string', doc: 'Customer account ID' },
-          { name: 'amount', type: 'double', doc: 'Total order amount in designated currency' },
-          { name: 'currency', type: 'string', default: 'USD' },
-          {
-            name: 'status',
-            type: {
-              type: 'enum',
-              name: 'OrderStatus',
-              symbols: ['PENDING', 'AUTHORIZED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'],
-            },
-          },
-          { name: 'items_count', type: 'int', default: 1 },
-          { name: 'timestamp_epoch_ms', type: 'long', doc: 'Unix epoch timestamp in milliseconds' },
-        ],
-      },
-      null,
-      2
-    ),
-  },
-  {
-    id: 1002,
-    subject: 'telemetry-value',
-    version: 1,
-    type: 'JSON',
-    compatibility: 'BACKWARD',
-    created_at: '2026-09-26T08:20:00Z',
-    description: 'IoT edge gateway environmental telemetry metrics stream (JSON Schema Draft-07)',
-    topic: 'telemetry',
-    schema: JSON.stringify(
-      {
-        $schema: 'http://json-schema.org/draft-07/schema#',
-        title: 'EdgeTelemetryEvent',
-        type: 'object',
-        properties: {
-          device_id: { type: 'string', description: 'Hardware MAC or serial number' },
-          temperature_celsius: { type: 'number', minimum: -50, maximum: 120 },
-          relative_humidity_pct: { type: 'number', minimum: 0, maximum: 100 },
-          battery_pct: { type: 'integer', minimum: 0, maximum: 100 },
-          firmware_version: { type: 'string' },
-          reported_at: { type: 'string', format: 'date-time' },
-        },
-        required: ['device_id', 'temperature_celsius', 'battery_pct', 'reported_at'],
-      },
-      null,
-      2
-    ),
-  },
-  {
-    id: 1003,
-    subject: 'payment-records-value',
-    version: 1,
-    type: 'PROTOBUF',
-    compatibility: 'BACKWARD',
-    created_at: '2026-09-26T08:25:00Z',
-    description: 'High-throughput payment gateway settlement events formatted in Google Protocol Buffers v3',
-    topic: 'payment-records',
-    schema: `syntax = "proto3";
-
-package aerostream.payments.v1;
-
-option java_package = "com.aerostream.payments.v1";
-option java_multiple_files = true;
-
-enum PaymentMethod {
-  PAYMENT_METHOD_UNSPECIFIED = 0;
-  CREDIT_CARD = 1;
-  DEBIT_CARD = 2;
-  APPLE_PAY = 3;
-  GOOGLE_PAY = 4;
-  CRYPTO_USDC = 5;
-}
-
-message PaymentRecord {
-  string transaction_id = 1;
-  string merchant_id = 2;
-  int64 amount_cents = 3;
-  string currency = 4;
-  PaymentMethod method = 5;
-  bool is_idempotent = 6;
-  int64 created_at_unix_ms = 7;
-  map<string, string> metadata = 8;
-}`,
-  },
-  {
-    id: 1004,
-    subject: 'sensor-readings-value',
-    version: 1,
-    type: 'AVRO',
-    compatibility: 'BACKWARD',
-    created_at: '2026-09-26T08:30:00Z',
-    description: 'Industrial vibration and acoustic sensor high-frequency timeseries data',
-    topic: 'sensor-readings',
-    schema: JSON.stringify(
-      {
-        type: 'record',
-        name: 'SensorReading',
-        namespace: 'com.aerostream.industrial',
-        fields: [
-          { name: 'sensor_uuid', type: 'string' },
-          { name: 'station_id', type: 'int' },
-          { name: 'rpm', type: 'double' },
-          { name: 'vibration_rms_g', type: 'float' },
-          { name: 'peak_acceleration', type: 'float' },
-          { name: 'anomaly_flag', type: 'boolean', default: false },
-          { name: 'sample_time_ns', type: 'long' },
-        ],
-      },
-      null,
-      2
-    ),
-  },
-];
 
 export const SCHEMA_TEMPLATES: Record<SchemaType, string> = {
   AVRO: JSON.stringify(
@@ -203,8 +71,16 @@ message DeviceAlert {
   providedIn: 'root',
 })
 export class SchemaService {
-  private readonly _schemas = signal<RegisteredSchema[]>(this.loadSchemas());
+  private readonly http = inject(HttpClient);
+
+  private readonly _schemas = signal<RegisteredSchema[]>([]);
   readonly schemas = this._schemas.asReadonly();
+
+  private readonly _loading = signal<boolean>(false);
+  readonly loading = this._loading.asReadonly();
+
+  private readonly _error = signal<string | null>(null);
+  readonly error = this._error.asReadonly();
 
   readonly stats = computed<SchemaRegistryStats>(() => {
     const list = this._schemas();
@@ -223,35 +99,141 @@ export class SchemaService {
     };
   });
 
-  private loadSchemas(): RegisteredSchema[] {
-    if (typeof localStorage === 'undefined') {
-      return INITIAL_SCHEMAS;
-    }
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) {
-      this.persist(INITIAL_SCHEMAS);
-      return INITIAL_SCHEMAS;
-    }
-    try {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    } catch {
-      // fallback
-    }
-    this.persist(INITIAL_SCHEMAS);
-    return INITIAL_SCHEMAS;
+  constructor() {
+    this.loadSchemas().subscribe({
+      error: (err) => console.warn('Initial schema registry load failed:', err),
+    });
   }
 
-  private persist(schemas: RegisteredSchema[]): void {
-    if (typeof localStorage !== 'undefined') {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(schemas));
-      } catch (e) {
-        console.warn('Failed to save schemas to localStorage', e);
-      }
+  /**
+   * Resolves the API endpoint URL.
+   * If running in development (e.g. localhost:4200), defaults to http://localhost:9001
+   * unless overridden by localStorage. In production or behind a reverse proxy,
+   * uses relative paths.
+   */
+  private getApiUrl(path: string): string {
+    const custom =
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem('aeromq_api_url') || localStorage.getItem('aeromq_api_base_url')
+        : null;
+    if (custom) {
+      return `${custom.replace(/\/$/, '')}${path}`;
     }
+    if (
+      typeof window !== 'undefined' &&
+      window.location.hostname === 'localhost' &&
+      window.location.port === '4200'
+    ) {
+      return `http://localhost:9001${path}`;
+    }
+    return path;
+  }
+
+  /**
+   * Loads all registered subjects and fetches their latest schema definition from
+   * the real Go Controller Schema Registry REST API.
+   */
+  loadSchemas(): Observable<RegisteredSchema[]> {
+    this._loading.set(true);
+    this._error.set(null);
+
+    const url = this.getApiUrl('/subjects');
+    return this.http.get<string[]>(url).pipe(
+      switchMap((subjects) => {
+        if (!Array.isArray(subjects) || subjects.length === 0) {
+          this._schemas.set([]);
+          this._loading.set(false);
+          return of([]);
+        }
+
+        const requests = subjects.map((subj) =>
+          this.fetchSubjectLatest(subj).pipe(
+            catchError((err) => {
+              console.warn(`Failed to fetch schema for subject ${subj}`, err);
+              return of(null);
+            })
+          )
+        );
+
+        return forkJoin(requests).pipe(
+          map((results) => {
+            const valid = results.filter((s): s is RegisteredSchema => s !== null);
+            this._schemas.set(valid);
+            this._loading.set(false);
+            return valid;
+          })
+        );
+      }),
+      catchError((err) => {
+        console.error('Failed to load subjects from Schema Registry', err);
+        this._schemas.set([]);
+        this._loading.set(false);
+        this._error.set(err?.message || 'Failed to connect to Schema Registry');
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Alias for loadSchemas().
+   */
+  fetchSchemas(): Observable<RegisteredSchema[]> {
+    return this.loadSchemas();
+  }
+
+  /**
+   * Fetches latest schema definition and compatibility setting for a single subject.
+   */
+  private fetchSubjectLatest(subject: string): Observable<RegisteredSchema> {
+    const schemaUrl = this.getApiUrl(`/subjects/${encodeURIComponent(subject)}/versions/latest`);
+    const configUrl = this.getApiUrl(`/config/${encodeURIComponent(subject)}`);
+
+    const schema$ = this.http.get<any>(schemaUrl);
+    const config$ = this.http.get<{ compatibilityLevel?: CompatibilityMode; compatibility?: CompatibilityMode }>(configUrl).pipe(
+      catchError(() => of({ compatibilityLevel: 'BACKWARD' as CompatibilityMode }))
+    );
+
+    return forkJoin({ schemaResp: schema$, configResp: config$ }).pipe(
+      map(({ schemaResp, configResp }) => {
+        const rawType = (schemaResp.schemaType || schemaResp.type || 'AVRO').toUpperCase() as SchemaType;
+        const type: SchemaType = (['AVRO', 'JSON', 'PROTOBUF'].includes(rawType) ? rawType : 'AVRO') as SchemaType;
+        const topicName = subject.endsWith('-value')
+          ? subject.slice(0, -6)
+          : subject.endsWith('-key')
+          ? subject.slice(0, -4)
+          : subject;
+
+        let schemaText = typeof schemaResp.schema === 'string' ? schemaResp.schema : JSON.stringify(schemaResp.schema, null, 2);
+        let extractedDesc: string | undefined;
+
+        if (type === 'AVRO' || type === 'JSON') {
+          try {
+            const parsed = typeof schemaResp.schema === 'string' ? JSON.parse(schemaResp.schema) : schemaResp.schema;
+            schemaText = JSON.stringify(parsed, null, 2);
+            extractedDesc = parsed.doc || parsed.description;
+          } catch {
+            // Keep raw schemaText
+          }
+        }
+
+        const compatMode: CompatibilityMode =
+          configResp?.compatibilityLevel || configResp?.compatibility || 'BACKWARD';
+
+        const registered: RegisteredSchema = {
+          id: Number(schemaResp.id) || 1,
+          subject: schemaResp.subject || subject,
+          version: Number(schemaResp.version) || 1,
+          type,
+          schema: schemaText,
+          compatibility: compatMode,
+          created_at: schemaResp.created_at || new Date().toISOString(),
+          description: extractedDesc || `Governed schema contract for topic ${topicName}`,
+          topic: topicName,
+        };
+
+        return registered;
+      })
+    );
   }
 
   getSchemas(): Observable<RegisteredSchema[]> {
@@ -275,70 +257,102 @@ export class SchemaService {
     const exact = this._schemas().find((s) => s.subject.toLowerCase() === directSubject);
     if (exact) return exact;
 
-    const topicMatch = this._schemas().find(
+    return this._schemas().find(
       (s) => s.topic?.toLowerCase() === topicName.toLowerCase() || s.subject.toLowerCase() === topicName.toLowerCase()
     );
-    return topicMatch;
   }
 
+  /**
+   * Registers a new schema or schema evolution version with the Go Controller Schema Registry.
+   * Calls POST /subjects/{subject}/versions and reloads the schemas catalog upon success.
+   */
   registerSchema(req: RegisterSchemaRequest): Observable<RegisteredSchema> {
-    const current = this._schemas();
-    const existingIndex = current.findIndex((s) => s.subject.toLowerCase() === req.subject.trim().toLowerCase());
+    const trimmedSubject = req.subject.trim();
+    const url = this.getApiUrl(`/subjects/${encodeURIComponent(trimmedSubject)}/versions`);
+    const payload = {
+      schema: req.schema,
+      schemaType: req.type,
+    };
 
-    let registered: RegisteredSchema;
-    if (existingIndex >= 0) {
-      // Register new version
-      const existing = current[existingIndex];
-      registered = {
-        ...existing,
-        version: existing.version + 1,
-        type: req.type,
-        schema: req.schema,
-        compatibility: req.compatibility || existing.compatibility || 'BACKWARD',
-        description: req.description || existing.description,
-        created_at: new Date().toISOString(),
-      };
-      const updatedList = [...current];
-      updatedList[existingIndex] = registered;
-      this._schemas.set(updatedList);
-      this.persist(updatedList);
-    } else {
-      const nextId = current.length > 0 ? Math.max(...current.map((s) => s.id)) + 1 : 1001;
-      const topicName = req.subject.endsWith('-value')
-        ? req.subject.slice(0, -6)
-        : req.subject.endsWith('-key')
-        ? req.subject.slice(0, -4)
-        : req.subject;
+    return this.http.post<{ id: number }>(url, payload).pipe(
+      switchMap((res) => {
+        // Optionally set compatibility mode if specified
+        const setCompat$ = req.compatibility
+          ? this.http
+              .put(this.getApiUrl(`/config/${encodeURIComponent(trimmedSubject)}`), {
+                compatibility: req.compatibility,
+              })
+              .pipe(catchError(() => of(null)))
+          : of(null);
 
-      registered = {
-        id: nextId,
-        subject: req.subject.trim(),
-        version: 1,
-        type: req.type,
-        schema: req.schema,
-        compatibility: req.compatibility || 'BACKWARD',
-        created_at: new Date().toISOString(),
-        description: req.description || `Schema for topic ${topicName} events`,
-        topic: topicName,
-      };
-      const updatedList = [registered, ...current];
-      this._schemas.set(updatedList);
-      this.persist(updatedList);
-    }
+        return setCompat$.pipe(
+          switchMap(() => this.fetchSchemas()),
+          map((schemas) => {
+            const found = schemas.find(
+              (s) => s.subject.toLowerCase() === trimmedSubject.toLowerCase()
+            );
+            if (found) {
+              return found;
+            }
+            const topicName = trimmedSubject.endsWith('-value')
+              ? trimmedSubject.slice(0, -6)
+              : trimmedSubject.endsWith('-key')
+              ? trimmedSubject.slice(0, -4)
+              : trimmedSubject;
 
-    return of(registered);
+            return {
+              id: res.id || 1,
+              subject: trimmedSubject,
+              version: 1,
+              type: req.type,
+              schema: req.schema,
+              compatibility: req.compatibility || 'BACKWARD',
+              created_at: new Date().toISOString(),
+              description: req.description || `Governed schema contract for topic ${topicName}`,
+              topic: topicName,
+            } as RegisteredSchema;
+          })
+        );
+      })
+    );
   }
 
+  /**
+   * Tests schema compatibility against a subject and version.
+   * Calls POST /compatibility/subjects/{subject}/versions/{version}
+   */
+  checkCompatibility(
+    subject: string,
+    version: number | string = 'latest',
+    schema: string,
+    schemaType: SchemaType = 'AVRO'
+  ): Observable<{ is_compatible: boolean }> {
+    const url = this.getApiUrl(
+      `/compatibility/subjects/${encodeURIComponent(subject.trim())}/versions/${version}`
+    );
+    return this.http.post<{ is_compatible: boolean }>(url, {
+      schema,
+      schemaType,
+    });
+  }
+
+  /**
+   * Deletes a subject from the Schema Registry.
+   * Calls DELETE /subjects/{subject} and reloads schemas.
+   */
+  deleteSubject(subject: string): Observable<boolean> {
+    const url = this.getApiUrl(`/subjects/${encodeURIComponent(subject.trim())}`);
+    return this.http.delete<number[] | any>(url).pipe(
+      switchMap(() => this.fetchSchemas()),
+      map(() => true)
+    );
+  }
+
+  /**
+   * Backwards compatible alias for deleteSubject.
+   */
   deleteSchema(subject: string): Observable<boolean> {
-    const filtered = this._schemas().filter((s) => s.subject.toLowerCase() !== subject.toLowerCase());
-    this._schemas.set(filtered);
-    this.persist(filtered);
-    return of(true);
-  }
-
-  resetToDefaults(): void {
-    this._schemas.set(INITIAL_SCHEMAS);
-    this.persist(INITIAL_SCHEMAS);
+    return this.deleteSubject(subject);
   }
 
   getTemplate(type: SchemaType): string {

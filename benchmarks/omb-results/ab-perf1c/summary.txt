@@ -1,0 +1,6 @@
+[22:13:01] aerostream:perf1c ready; driver driver-kafka/aerostream.yaml; workload workloads/aerostream-16p-1kb.yaml
+result aerostream-16p-1kb-AeroStream-Kafka-2026-09-27-22-15-09.json
+publish avg 73,930 msg/s (72.2 MB/s)  peak 95,678  consume avg 73,955 msg/s  errors 0
+publish latency ms  p50 162.3  p99 2395.7  p99.9 2656.0  max 2767.5
+end-to-end latency ms  p50 206.0  p99 2452.0
+broker container peak memory 308 MiB, peak CPU 203% (limit 200%)

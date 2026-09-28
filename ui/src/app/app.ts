@@ -109,6 +109,7 @@ export class App implements OnInit {
       items: [
         { path: '/schemas', label: 'Schema Registry', icon: 'schema' },
         { path: '/transforms', label: 'Stream Transforms', icon: 'transform', badge: 'WASM' },
+        { path: '/streams', label: 'Stream Processing', icon: 'query_stats', badge: 'STATE' },
         { path: '/connectors', label: 'Connectors', icon: 'cable' },
       ]
     },
@@ -142,6 +143,7 @@ export class App implements OnInit {
     { id: 'page-producer', title: 'Web Producer Console', subtitle: 'Publish test records, burst events, and check produce latency', category: 'PAGE', icon: 'send', path: '/producer', badge: 'Tool' },
     { id: 'page-schemas', title: 'Schema Registry', subtitle: 'Register and validate Avro, JSON, and Protobuf schemas with compatibility checks', category: 'PAGE', icon: 'schema', path: '/schemas', badge: 'Governance' },
     { id: 'page-transforms', title: 'Stream Transforms', subtitle: 'In-broker WASM data transforms, PII masking, and JSON filtering', category: 'PAGE', icon: 'transform', path: '/transforms', badge: 'WASM' },
+    { id: 'page-streams', title: 'Stream Processing', subtitle: 'Windowed aggregations, stream-table joins and interactive state queries', category: 'PAGE', icon: 'query_stats', path: '/streams', badge: 'STATE' },
     { id: 'page-connectors', title: 'Connectors Ecosystem', subtitle: 'Manage Kafka Connect sources, S3 archival sinks, and CDC plugins', category: 'PAGE', icon: 'cable', path: '/connectors', badge: 'Integration' },
     { id: 'page-groups', title: 'Consumer Groups', subtitle: 'Monitor consumer group rebalancing (KIP-848) and partition lag', category: 'PAGE', icon: 'group_work', path: '/groups', badge: 'Ops' },
     { id: 'page-acls', title: 'Security & ACLs', subtitle: 'Configure role-based access control (RBAC) and granular permission rules', category: 'PAGE', icon: 'admin_panel_settings', path: '/acls', badge: 'RBAC' },

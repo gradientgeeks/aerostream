@@ -34,11 +34,32 @@
         <span class="label text-app-muted">Payload Size:</span>
         <span class="value font-medium text-app">{{ data.length }} bytes</span>
       </div>
+      @if (data.key) {
+        <div class="meta-badge flex items-center gap-1.5 text-xs bg-app-nested px-3 py-1.5 rounded-md border border-app">
+          <span class="label text-app-muted">Key:</span>
+          <span class="value font-mono font-medium text-amber-500">{{ data.key }}</span>
+        </div>
+      }
       <div class="meta-badge flex items-center gap-1.5 text-xs bg-app-nested px-3 py-1.5 rounded-md border border-app">
         <span class="label text-app-muted">Lines:</span>
         <span class="value font-medium text-app">{{ lineCount }}</span>
       </div>
     </div>
+
+    <!-- Headers Box (if present) -->
+    @if (hasHeaders()) {
+      <div class="headers-box mb-3 p-3 rounded-lg border border-app bg-app-surface text-xs">
+        <span class="font-semibold text-app-muted uppercase tracking-wider text-[11px] block mb-2">Record Headers</span>
+        <div class="flex flex-wrap gap-2">
+          @for (h of headerEntries(); track h[0]) {
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-app-nested border border-app font-mono text-[11px]">
+              <span class="text-cyan-500 font-semibold">{{ h[0] }}:</span>
+              <span class="text-app">{{ h[1] }}</span>
+            </span>
+          }
+        </div>
+      </div>
+    }
 
     <!-- Payload Content Box -->
     <div class="content-box w-full max-w-full min-w-0 rounded-lg border border-app bg-[var(--app-code-bg)] overflow-hidden">

@@ -4,12 +4,22 @@ use std::sync::Arc;
 use clap::Parser;
 use tracing::info;
 
+// The produce/fetch hot paths allocate many small, short-lived buffers per message (record keys/values, response
+// frames); mimalloc measurably outperforms the system allocator for that pattern under concurrency.
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod config;
 mod log;
 mod net;
 mod grpc;
+mod iceberg;
+mod txn;
+mod share;
+pub mod topology;
 pub mod kafka;
 pub mod storage;
+pub mod shard;
 
 use config::BrokerConfig;
 
@@ -44,6 +54,14 @@ struct Args {
     /// Path to store physical partition log files
     #[arg(long)]
     storage_dir: Option<PathBuf>,
+
+    /// Number of shard threads for thread-per-core mode.
+    #[arg(long)]
+    shard_threads: Option<usize>,
+
+    /// Rack / availability zone of this broker (broker.rack)
+    #[arg(long)]
+    rack: Option<String>,
 
     /// Tiered Storage Provider: s3, gcs, azure, local, disabled
     #[arg(long)]
@@ -91,8 +109,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(controller) = args.controller {
         cfg.controller = controller;
     }
+    if args.rack.is_some() {
+        cfg.rack = args.rack;
+    }
     if args.storage_dir.is_some() {
         cfg.storage_dir = args.storage_dir;
+    }
+    if let Some(t) = args.shard_threads {
+        cfg.shard_threads = t;
     }
     if let Some(ref p) = args.tiered_storage_provider {
         if let Ok(ptype) = p.parse::<storage::ProviderType>() {
@@ -151,6 +175,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .build()?;
 
+    // Data-plane settings: default compression.type and local client quotas.
+    match kafka::compression::CompressionType::parse(&cfg.compression_type) {
+        Some(t) => kafka::compression::registry().set_default(t),
+        None => tracing::warn!("[AeroMQ Broker] Unknown compression_type '{}', using 'producer'", cfg.compression_type),
+    }
+    kafka::quota::manager().set_entries(cfg.quotas.clone());
+
     let cfg = Arc::new(cfg);
 
     runtime.block_on(async move {
@@ -182,13 +213,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 cfg.storage.compaction_enabled,
                 cfg.storage.dirty_ratio_threshold,
                 std::time::Duration::from_secs(cfg.storage.tombstone_retention_secs),
-            );
+            )
+            .with_writeback(cfg.storage.writeback_bytes, cfg.storage.drop_cache_after_writeback);
 
         if cfg.tiered_storage.enabled {
             log_manager_builder = log_manager_builder.with_tiered_storage(tiered_provider.clone(), offload_tx);
         }
 
         let log_manager = Arc::new(log_manager_builder);
+
+        // Thread-per-core shared-nothing shard engine:
+        // Spawn N shard threads (one per available CPU core), each owning its own
+        // set of PartitionLog instances without any Mutex or cross-thread sharing.
+        let num_shards = if cfg.shard_threads > 0 {
+            cfg.shard_threads
+        } else {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(2)
+        };
+        let sharded = crate::shard::sharded_log_manager::create_sharded(log_manager.clone(), num_shards);
+        let shard_handle = Arc::new(sharded);
+        info!(
+            "[AeroStream] Thread-per-core shard engine started: {} shards on {} CPU cores",
+            num_shards, num_shards
+        );
 
         // Spawn background log compaction cleaner loop (runs every 30 seconds)
         if cfg.storage.compaction_enabled {
@@ -197,6 +246,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "[AeroMQ Broker] Background Log Compaction cleaner loop spawned (interval=30s, threshold={})",
                 cfg.storage.dirty_ratio_threshold
             );
+        }
+
+        // Iceberg topics: tail iceberg-enabled topics into a warehouse
+        #[cfg(feature = "iceberg")]
+        if cfg.iceberg.enabled {
+            let wh_uri = cfg.iceberg.warehouse.clone();
+            let wh = if let Some(rest) = wh_uri.strip_prefix("s3://") {
+                let (bucket, prefix) = rest.split_once('/').unwrap_or((rest, ""));
+                let mut s3 = cfg.tiered_storage.s3.clone();
+                s3.bucket = bucket.to_string();
+                s3.prefix = None;
+                match storage::S3StorageProvider::new(&s3) {
+                    Ok(p) => Some(iceberg::table::Warehouse::Remote {
+                        provider: Arc::new(p),
+                        bucket: bucket.to_string(),
+                        prefix: prefix.trim_matches('/').to_string(),
+                    }),
+                    Err(e) => {
+                        tracing::error!("[AeroStream Iceberg] S3 warehouse init failed: {}", e);
+                        None
+                    }
+                }
+            } else {
+                Some(iceberg::table::Warehouse::local(&wh_uri))
+            };
+            if let Some(wh) = wh {
+                let mgr = iceberg::IcebergManager::new(cfg.iceberg.clone(), Arc::new(wh), log_manager.clone());
+                mgr.spawn();
+                info!("[AeroStream Iceberg] enabled: warehouse={} topics={}", wh_uri, cfg.iceberg.topics.len());
+            }
         }
 
         // Spawn client registration & control plane heartbeat worker
@@ -210,7 +289,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let kafka_bind_addr: SocketAddr = format!("{}:{}", cfg.host, cfg.kafka_port)
             .parse()
             .unwrap_or_else(|_| format!("0.0.0.0:{}", cfg.kafka_port).parse().unwrap());
-        let kafka_server = net::KafkaServer::new(kafka_bind_addr, log_manager.clone(), cfg.clone());
+        // Kafka admin/group-coordinator state + controller topology refresh loop.
+        kafka::admin::init(&cfg, &log_manager);
+        let kafka_server = net::KafkaServer::new(kafka_bind_addr, log_manager.clone(), shard_handle.clone(), cfg.clone());
         tokio::spawn(async move {
             if let Err(e) = kafka_server.run().await {
                 tracing::error!("[AeroMQ Broker] Kafka server error: {:?}", e);
@@ -221,9 +302,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let bind_addr: SocketAddr = format!("{}:{}", cfg.host, cfg.data_port)
             .parse()
             .unwrap_or_else(|_| format!("0.0.0.0:{}", cfg.data_port).parse().unwrap());
-        let server = net::DataServer::new(bind_addr, log_manager, cfg.clone());
+        let server = net::DataServer::new(bind_addr, log_manager, shard_handle.clone(), cfg.clone());
 
         server.run().await?;
+
+        shard_handle.handle.shutdown();
 
         Ok::<(), Box<dyn std::error::Error>>(())
     })?;

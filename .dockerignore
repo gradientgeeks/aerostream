@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Rust
+target/
+rust-broker/target/
+**/*.rs.bk
+
+# Node & UI
+node_modules/
+**/node_modules/
+ui/.angular/
+ui/dist/
+
+# Runtime data & logs
+data/
+*.log
+*.pid
+controller*.log
+broker*.log
+
+# Go binaries
+bin/
+**/bin/
+
+# Python
+.venv/
+**/__pycache__/
+
+# .NET
+obj/
+**/obj/
+examples/dotnet-app/bin/
+examples/dotnet-app/obj/
+
+# Docs and media
+docs/images/
+.gemini/
+.idea/
+.vscode/
+
+# Benchmark tooling and results (not part of the image)
+benchmarks/

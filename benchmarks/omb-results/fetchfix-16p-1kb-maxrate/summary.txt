@@ -1,0 +1,6 @@
+[20:02:32] aerostream:fetchfix ready; workload workloads/aerostream-16p-1kb.yaml
+result aerostream-16p-1kb-AeroStream-Kafka-2026-09-27-20-04-40.json
+publish avg 154,711 msg/s (151.1 MB/s)  peak 187,301  consume avg 154,710 msg/s  errors 0
+publish latency ms  p50 28.9  p99 697.7  p99.9 1777.9  max 1958.8
+end-to-end latency ms  p50 41.0  p99 717.0
+broker container peak memory 417 MiB, peak CPU 205% (limit 200%)

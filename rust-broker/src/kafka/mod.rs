@@ -5,6 +5,13 @@ use tracing::{debug, warn};
 
 pub mod protocol;
 pub mod handlers;
+pub mod compression;
+pub mod quota;
+pub mod codec;
+pub mod admin;
+pub mod groups;
+pub mod group_api;
+pub mod sasl;
 
 pub use handlers::{
     handle_fetch, handle_produce, parse_records, encode_records_batch,

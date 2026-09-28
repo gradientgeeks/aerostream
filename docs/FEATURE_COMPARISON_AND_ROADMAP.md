@@ -16,11 +16,15 @@ To understand the fundamental identity of **AeroStream**, it helps to contrast t
 
 **Conclusion**: Calling the project "MQ" was a historical misnomer. AeroStream is fundamentally a **Distributed Append-Only Event Streaming Platform**.
 
+![AeroStream Zero-Copy Produce & Fetch Pipeline](images/produce_fetch_pipeline.png)
+
 ---
 
 ## 2. Retention Policies in AeroStream
 
 AeroStream implements a deterministic, multi-tiered retention policy engine inside its Rust storage kernel (`rust-broker/src/log/manager.rs` and `config/broker.example.toml`):
+
+![AeroStream Multi-Cloud Tiered Storage Pipeline](images/tiered_storage_pipeline.png)
 
 | Policy Metric | Config Setting | Default Value | Mechanism & Behavior |
 | :--- | :--- | :--- | :--- |
@@ -34,6 +38,8 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 
 ## 3. Comprehensive Feature Comparison Matrix
 
+![AeroStream Cluster Topology & Zero-Downtime Scale-Down](images/cluster_topology_scale_down.png)
+
 | Capability | Apache Kafka (v3.9 / 4.0 KRaft) | Redpanda (C++/Seastar) | AeroStream (Current) | Status in AeroStream |
 | :--- | :---: | :---: | :---: | :--- |
 | **Storage Architecture** | Append-Only Log (Java Heap + Page Cache) | Append-Only Log (Thread-Per-Core C++) | **Append-Only Log (Rust `mmap` + Zero-Copy DMA)** | **Implemented** |
@@ -41,19 +47,30 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 | **Kernel Zero-Copy** | `FileChannel.transferTo()` | Direct I/O via Seastar | **Linux `sendfile(2)` + CPU-affinity pinning** | **Implemented** |
 | **Web UI Console** | External (AKHQ, Conduktor, Provectus) | External / Cloud Console | **Embedded Native Console (`/aerostream/console`)** | **Implemented** |
 | **All-In-One Container** | Complex (multiple containers) | Single binary | **Full-Stack Container (Broker + Controller + UI)** | **Implemented** |
-| **Kafka Wire Protocol** | Native | **100% Wire Compatible** | **Native TCP Shim (Port 9092, ApiKey 0,1,3,18)** | **Implemented** |
+| **Kafka Wire Protocol** | Native | **100% Wire Compatible** | **Native TCP Shim: data plane (0,1,3,18), transactions (22,24-26,28), SASL (17,36), consumer groups & admin (2,8-16,19,20,32,33,37,42-44,60), share groups (76-79)** | **Implemented** |
 | **Log Compaction** | `cleanup.policy=compact` | Supported | **Key-Hash Deduplication & Tombstone GC** | **Implemented** |
-| **Exactly-Once Semantics** | Idempotent Producer + 2PC Coordinator | Idempotent Producer + 2PC | **Idempotent Producer PID & Sequence De-dup** | **Implemented** |
+| **Exactly-Once Semantics** | Idempotent Producer + 2PC Coordinator | Idempotent Producer + 2PC | **Idempotent + Transactional Producer (KIP-98 TV1), `read_committed`, LSO, per-broker coordinator** | **Implemented** |
 | **Cloud Object Storage Tier** | KIP-405 (S3 / GCS / Azure) | Native Shadow Indexing (S3 / GCS) | **Multi-Cloud (AWS S3, MinIO, GCS, Azure, Local)** | **Implemented** |
 | **Built-in Schema Registry** | External (Confluent / Karapace) | **Built-in Schema Registry (Avro/Proto/JSON)** | **Confluent-Compatible Schema Registry** | **Implemented** |
 | **In-Broker Stream Transforms**| External (Flink / Kafka Streams) | **Native WASM Data Transforms** | **Native WASM & Stream Data Transforms Engine + Web Console** | **Implemented** |
 | **Enterprise RBAC / ACLs** | SASL/SCRAM, Kerberos, Granular ACLs | SASL/SCRAM, OIDC, RBAC | **Granular Topic/Group ACLs, Principal Roles, REST API & Web UI** | **Implemented** |
 | **Consumer Rebalancing** | Cooperative Sticky (KIP-848) | Cooperative Sticky (KIP-848) | **Cooperative Sticky Protocol KIP-848** | **Implemented** |
 | **Connectors Ecosystem** | 300+ Kafka Connect plugins | Compatible with Kafka Connect | **Kafka Connect Compatible API + Native Connector Manager & Web UI** | **Implemented** |
+| **Multi-Partition Transactions** | Full 2PC (`AddPartitionsToTxn`, `EndTxn`) | Full 2PC Coordinator | **Full 2PC: transactional producer, `read_committed`, LSO isolation, commit/abort control batch markers** | **Implemented** |
+| **10k+ Partition Density** | Hierarchical Index & FD Pooling | Thread-per-core partition slab | Direct mmap (Optimized up to ~1,000 parts/node) | *Phase 10 (Planned)* |
+| **Wire Security (SASL / mTLS)** | Kerberos, SCRAM-SHA-512, mTLS wire | SASL/SCRAM, OIDC, mTLS wire | **Wire SASL (PLAIN & SCRAM-SHA-256 ApiKey 17/36) + REST RBAC & Bearer Tokens** | **Implemented** |
+| **Cross-Datacenter Geo-Replication** | MirrorMaker 2 (Active-Active) | Multi-Cluster Shadow Indexing | Multi-Cloud S3/GCS/Azure Offload (WAN in dev) | *Phase 13 (Planned)* |
+| **Chaos & Production Hardening** | 13+ Years Battle-Testing (Petabyte Scale)| 5+ Years Enterprise Deployments | Comprehensive Unit, Integration & Benchmarks | *Phase 14 (Planned)* |
+| **Compression Codecs** | gzip / snappy / lz4 / zstd | gzip / snappy / lz4 / zstd | **All four codecs validated on produce, `compression.type` per topic, decompress for compaction / Iceberg** | **Implemented (wire only: multi-record batches are stored uncompressed, see 6.1)** |
+| **Client Quotas / Throttling** | `producer_byte_rate`, `consumer_byte_rate`, `request_percentage` | Same | **Same three quotas, Kafka precedence, `throttle_time_ms`, REST `/api/quotas`** | **Implemented (client-id scope; no SASL principal yet)** |
+| **Rack Awareness / Follower Fetch** | KIP-36 / KIP-392 | Yes (Enterprise) | **`--rack`, rack-spread placement, Fetch v11 `preferred_read_replica`** | **Implemented** |
+| **Share Groups (Queues)** | KIP-932 | Under evaluation | **ShareGroupHeartbeat / ShareFetch / ShareAcknowledge, acquisition locks, DLQ** | **Implemented (v1)** |
+| **Iceberg Topics** | External | Yes (Enterprise) | **Parquet + Iceberg v2 metadata, read back by pyiceberg (`iceberg` cargo feature)** | **Implemented (unpartitioned, at-least-once)** |
+| **Stateful Stream Processing** | Kafka Streams / ksqlDB | External | **Windowed aggregations, stream-table joins, state store, interactive queries, UI page** | **Implemented (controller-side)** |
 
 ---
 
-## 4. Deep-Dive: Enterprise Capabilities Implemented in AeroStream (Phases 1 – 5)
+## 4. Deep-Dive: Enterprise Capabilities Implemented in AeroStream (Phases 1 – 8)
 
 ### 1. Apache Kafka Wire Protocol Compatibility (Phase 1)
 * **What Kafka & Redpanda Have**: Full binary protocol support for standard Kafka ApiKeys (`Produce` 0, `Fetch` 1, `ListOffsets` 2, `Metadata` 3, `OffsetCommit` 8, `JoinGroup` 11, etc.). Applications written in Java (`kafka-clients`), Python (`confluent-kafka`, `kafka-python`), Go (`sarama`), or C# (`Confluent.Kafka`) connect with zero modifications.
@@ -82,6 +99,15 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
   * Evolution governance enforcing `BACKWARD`, `FORWARD`, and `FULL` compatibility modes.
   * Dedicated Web Console Schema Registry UI (`/aerostream/console/schemas`) with master-detail navigation, pre-filled templates, syntax validation, and live topic integration (`{topic}-value`).
 
+### 6. In-Broker Stream Transforms Engine (Phase 6)
+* **AeroStream Implementation**: Native in-broker stream data transformation engine (`go-controller/pkg/transform/engine.go`) executing WASM bytecodes, PII masking, critical status filtering, and JSON mapping directly within streaming pipelines. Includes an interactive live dry-run tester and Web Console UI (`/aerostream/console/transforms`).
+
+### 7. Enterprise RBAC & Granular ACLs (Phase 7)
+* **AeroStream Implementation**: Zero-trust security governance engine (`go-controller/pkg/auth/acls.go`) with principal roles (`SUPER_ADMIN`, `OPERATOR`, `PRODUCER`, `CONSUMER`, `AUDITOR`), wildcard resource matching (`orders-*`), allow vs. deny precedence rules, and live authorization simulation in the Web Console.
+
+### 8. Connectors Ecosystem & Kafka Connect API (Phase 8)
+* **AeroStream Implementation**: Thread-safe Connector Manager (`go-controller/pkg/connect/manager.go`) exposing Kafka Connect-compatible REST API endpoints alongside built-in connectors (AWS S3 Archival, HTTP Webhooks, Database CDC, Elasticsearch) and a visual deployment dashboard (`/aerostream/console/connectors`).
+
 ---
 
 ## 5. Strategic Roadmap for AeroStream
@@ -99,7 +125,20 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 | [x] Phase 7: Enterprise RBAC / ACLs    -> Principal Roles & Granular Rules        |
 | [x] Phase 8: Connectors Ecosystem      -> Kafka Connect API & Native Connectors   |
 +-----------------------------------------------------------------------------------+
+|                       Next-Generation Enterprise Horizon                          |
++-----------------------------------------------------------------------------------+
+| [x] Phase 9: End-to-End 2PC Distributed Transactions (Multi-Topic Atomic Commits) |
+| [ ] Phase 10: Massive Partition Density (10,000+ Partitions per Broker Node)      |
+| [x] Phase 11: Enterprise Wire Security (SASL/PLAIN, SASL/SCRAM-SHA-256)           |
+| [ ] Phase 12: Distributed Stateful Stream Processing (Windows, KTable State Stores)|
+| [ ] Phase 13: Cross-Datacenter Active-Active Geo-Replication (Cluster Mirroring)  |
+| [ ] Phase 14: Chaos Engineering, Jepsen Hardening & Soak Testing                  |
++-----------------------------------------------------------------------------------+
 ```
+
+---
+
+### Implemented Capabilities (Phases 1 – 8)
 
 1. **Phase 1: Kafka Protocol Wire Compatibility Shim [IMPLEMENTED]**:
    * Protocol translation layer in the Rust broker handling `Produce` (ApiKey 0), `Fetch` (ApiKey 1), `Metadata` (ApiKey 3), and `ApiVersions` (ApiKey 18) over TCP port 9092. Unlocks drop-in interoperability for `kafka-python`, `librdkafka`, `Spring Kafka`, and `confluent-kafka`.
@@ -120,4 +159,71 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 
 ---
 
-*For detailed benchmark metrics and performance test logs across 1 MB, 10 MB, and 50 MB payloads, see [`docs/BENCHMARK_RESULTS.md`](./BENCHMARK_RESULTS.md).*
+### Next-Generation Enterprise Horizon (Phases 9 – 14)
+
+> **Status (September 2026):** parts of Phase 9 (transactional producer with `read_committed`, single-coordinator scope) and Phase 12 (windowed aggregations and stream-table joins in the controller) have landed; see Section 6 for their limits. The rest of the plan below is unchanged.
+
+#### Phase 9: End-to-End Exactly-Once Distributed Transactions (2PC)
+* **Industry State**: Apache Kafka and Redpanda support full two-phase commit (2PC) distributed transactions (`InitProducerId`, `AddPartitionsToTxn`, `AddOffsetsToTxn`, `EndTxn`, `WriteTxnMarkers`) along with zombie fencing across multiple topics and partitions.
+* **AeroStream Horizon**:
+  * Implement the **Transaction Coordinator** module within the Go Controller and Rust broker storage engine.
+  * Wire Kafka Transactional ApiKeys (`AddPartitionsToTxn` ApiKey 24, `AddOffsetsToTxn` ApiKey 25, `EndTxn` ApiKey 26, `WriteTxnMarkers` ApiKey 27).
+  * Introduce transactional log markers (`COMMIT` / `ABORT`) into segment files, ensuring atomic commits across multiple topics and partitions with consumer isolation level `read_committed`.
+  * Support transactional consumer offset commits (`read-process-write` cycles) with zombie fencing.
+
+#### Phase 10: Massive Partition Density (10,000+ Partitions per Broker)
+* **Industry State**: Apache Kafka and Redpanda are engineered to host 10,000 to 50,000 active partitions per physical broker node via hierarchical index caching, compact in-memory state models, and lazy file descriptor pooling.
+* **AeroStream Horizon**:
+  * Replace static open file descriptors with an **LRU File Descriptor & Mmap Cache Pool**. Inactive partition segments will release open handles back to the OS pool, removing `ulimit -n` bottlenecks.
+  * Implement **Sparse Two-Level Indexing**: Keep primary segment indexes compact in memory (~4 bytes per entry) and load detailed byte offsets dynamically on demand.
+  * Benchmark and validate dense partition scaling up to 25,000 active partitions per broker on modest hardware without OS file descriptor exhaustion.
+
+#### Phase 11: Enterprise Security & Authentication Protocols
+* **Industry State**: Apache Kafka and Redpanda support SASL/SCRAM-SHA-256 / SHA-512, Kerberos / GSSAPI, OAuth2 / OIDC token authentication, and mutual TLS (mTLS) with dynamic certificate rotation directly over the wire protocol.
+* **AeroStream Horizon**:
+  * Wire Kafka binary authentication frames on the TCP port: `SaslHandshake` (ApiKey 17) and `SaslAuthenticate` (ApiKey 36).
+  * Support pluggable SASL mechanisms: `PLAIN`, `SCRAM-SHA-256`, and `SCRAM-SHA-512`.
+  * Implement TLS encryption with dynamic, zero-downtime certificate reloading (ACME / Let's Encrypt / Vault integration) on both broker data ports and controller gRPC/REST listeners.
+  * Integrate wire-level SASL credentials directly with the built-in RBAC `AclManager`.
+
+#### Phase 12: Ecosystem & Stateful Stream Processing Frameworks
+* **Industry State**: Kafka features deep ecosystem maturity with Kafka Streams, ksqlDB, Apache Flink, and Apache Spark Streaming, supporting complex stateful processing, tumbling/sliding time windows, and table-stream joins (`KTable`).
+* **AeroStream Horizon**:
+  * Expand the built-in Stream Transforms Engine from stateless inline mapping to a **Distributed Stateful Stream Processing Framework**.
+  * Integrate embedded local key-value state stores (e.g. Sled / RocksDB) backed by AeroStream changelog topics.
+  * Support stateful streaming abstractions: event-time windowing (tumbling, hopping, sliding, session), stateful joins, and aggregation topologies.
+  * Publish certified native connectors for Apache Flink, Apache Spark, and Debezium CDC.
+
+#### Phase 13: Cross-Datacenter Active-Active Geo-Replication
+* **Industry State**: Kafka provides MirrorMaker 2; Redpanda provides cross-cluster continuous replication and multi-cluster Shadow Indexing.
+* **AeroStream Horizon**:
+  * Implement the **AeroStream Mirroring & Georeplication Engine**: An asynchronous, high-throughput replication service that continuously mirrors topics and partitions across geographic regions.
+  * Support active-active bidirectional replication with cyclic loop detection (cluster provenance header tags) and deterministic conflict resolution.
+  * Automated cross-cluster consumer group offset translation for seamless disaster recovery (DR) failovers.
+
+#### Phase 14: Battle-Testing, Chaos Engineering & Production Hardening
+* **Industry State**: Apache Kafka and Redpanda have been battle-tested in mission-critical enterprise production for over a decade, surviving split-brain scenarios, disk failures, network partitions, and hardware corruption at petabyte scale.
+* **AeroStream Horizon**:
+  * Deploy automated **Chaos Mesh** and **Jepsen testing suites** into CI/CD, rigorously validating:
+    * Raft leader election during sudden controller kills and network partitioning.
+    * Storage data plane integrity under power-loss simulations (`kill -9`, sudden host crash, power-cut fsync verification).
+    * Split-brain recovery, partition reassignment races, and disk I/O stall handling.
+  * Execute long-running multi-day soak tests pushing continuous 1 GB/s ingestion under varying failure conditions.
+  * Publish production runbooks, automated disaster recovery scripts, and Grafana / Prometheus dashboards.
+
+---
+
+*For detailed benchmark metrics and performance test logs across 1 MB, 10 MB, and 50 MB payloads, see [`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md).*
+
+
+## 6. Feature-Gap Closure Notes (Phase 9)
+
+Known limitations of the features added in this phase:
+
+* **6.1 Compression at rest.** The log keeps one index entry per offset, so the broker decompresses multi-record batches on produce and stores one uncompressed single-record entry per record. Compression saves producer-to-broker bandwidth only. Storage and Fetch responses are uncompressed. Fixing this needs entries that span several offsets in the log/index layer.
+* **6.2 Quotas.** Enforced per `client-id`. The Kafka path has no SASL principal, so `user` quotas need an authenticated principal first. Quota state lives in the controller process, not Raft.
+* **6.3 Transactions.** The coordinator runs inside a broker, so a transaction can span only partitions led by that broker (no WriteTxnMarkers, ApiKey 27). No TV2 or KIP-939. Validated with synthetic frames, not a real transactional client.
+* **6.4 Share groups.** Group membership is not persisted. Metadata `topic_id` (Metadata v10+) is not served because Metadata tops out at v5.
+* **6.5 Admin / groups.** Classic group protocol only (no KIP-848). Group state is in the coordinator's memory. DeleteTopics removes controller metadata and the receiving broker's logs only. Broker-level configs are read-only.
+* **6.6 Iceberg.** Enabled from the broker `[iceberg]` config only, not per-topic from the controller. Uncompressed Parquet, no partitioning, no catalog, at-least-once commits. S3 warehouse untested.
+* **6.7 Stream processing.** Polls with the legacy fetch path, so it is not transaction-aware and has no exactly-once sink.

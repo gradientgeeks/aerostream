@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewAclManager_DefaultSeeds(t *testing.T) {
-	mgr := auth.NewAclManager()
+	mgr := auth.NewAclManager().SeedDefaults()
 
 	users := mgr.ListUsers()
 	if len(users) < 4 {
@@ -34,7 +34,7 @@ func TestNewAclManager_DefaultSeeds(t *testing.T) {
 }
 
 func TestAclManager_WildcardPatterns(t *testing.T) {
-	mgr := auth.NewAclManager()
+	mgr := auth.NewAclManager().SeedDefaults()
 
 	// Default seed: order_producer can WRITE to "orders-*"
 	// Positive matches:
@@ -104,7 +104,7 @@ func TestAclManager_AllowVsDenyPrecedence(t *testing.T) {
 }
 
 func TestAclManager_RoleChecks(t *testing.T) {
-	mgr := auth.NewAclManager()
+	mgr := auth.NewAclManager().SeedDefaults()
 
 	// 1. SUPER_ADMIN (admin) should be authorized across any topic and operation
 	allowed, reason := mgr.AuthorizeWithReason("User:admin", auth.ResourceTypeTopic, "any-unlisted-topic", auth.OperationAlter)

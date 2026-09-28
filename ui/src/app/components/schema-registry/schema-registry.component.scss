@@ -771,3 +771,34 @@
     color: #22d3ee;
   }
 }
+
+/* Empty State Card */
+.empty-registry-card {
+  background: var(--app-surface, #0e1524);
+  border: 1px dashed var(--app-border, rgba(0, 229, 255, 0.2));
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+
+  .empty-icon-circle {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    background: rgba(0, 229, 255, 0.1);
+    color: var(--app-primary, #00e5ff);
+  }
+}
+
+.loading-state-container {
+  min-height: 280px;
+}
+
+.error-state-card {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 12px;
+}
+

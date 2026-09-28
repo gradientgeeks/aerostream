@@ -20,16 +20,29 @@ use crate::log::LogManager;
 pub struct DataServer {
     addr: SocketAddr,
     log_manager: Arc<LogManager>,
+    shard_handle: Arc<crate::shard::sharded_log_manager::ShardedLogManager>,
     cfg: Arc<BrokerConfig>,
 }
 
 impl DataServer {
-    pub fn new(addr: SocketAddr, log_manager: Arc<LogManager>, cfg: Arc<BrokerConfig>) -> Self {
-        Self { addr, log_manager, cfg }
+    pub fn new(addr: SocketAddr, log_manager: Arc<LogManager>, shard_handle: Arc<crate::shard::sharded_log_manager::ShardedLogManager>, cfg: Arc<BrokerConfig>) -> Self {
+        Self { addr, log_manager, shard_handle, cfg }
     }
 
     pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let listener = TcpListener::bind(self.addr).await?;
+        let std_listener = std::net::TcpListener::bind(self.addr)?;
+        std_listener.set_nonblocking(true)?;
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::io::AsRawFd;
+            let fd = std_listener.as_raw_fd();
+            unsafe {
+                let buf_size: libc::c_int = 8 * 1024 * 1024;
+                libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+                libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+            }
+        }
+        let listener = TcpListener::from_std(std_listener)?;
 
         // Build a TLS acceptor up front if data-plane TLS is enabled.
         let acceptor = if self.cfg.tls.enabled {
@@ -45,6 +58,19 @@ impl DataServer {
 
         loop {
             let (stream, peer_addr) = listener.accept().await?;
+            let _ = stream.set_nodelay(true);
+            #[cfg(target_os = "linux")]
+            {
+                use std::os::unix::io::AsRawFd;
+                let fd = stream.as_raw_fd();
+                unsafe {
+                    let buf_size: libc::c_int = 8 * 1024 * 1024;
+                    libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+                    libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+                    let quickack: libc::c_int = 1;
+                    libc::setsockopt(fd, libc::IPPROTO_TCP, libc::TCP_QUICKACK, &quickack as *const _ as *const libc::c_void, std::mem::size_of_val(&quickack) as libc::socklen_t);
+                }
+            }
             let cpu_core = unsafe { libc::sched_getcpu() };
             info!("[AeroMQ Broker] Accepted connection from {} on CPU core {}", peer_addr, cpu_core);
             let log_manager = self.log_manager.clone();
@@ -217,6 +243,12 @@ async fn handle_connection(
     // Connections start authenticated only when no token is configured.
     let mut authenticated = auth_token.is_none();
 
+    // Reusable connection buffer to eliminate heap malloc/free per request on the connection
+    let mut body = Vec::with_capacity(64 * 1024);
+
+    // Fast-path partition cache for repeated writes to the same topic-partition
+    let mut cached_partition: Option<((String, u32), Arc<tokio::sync::Mutex<crate::log::manager::PartitionLog>>)> = None;
+
     loop {
         // Read Request Header: [magic (2 bytes)] [cmd (1 byte)] [body_len (4 bytes)]
         match stream.read_exact(&mut header).await {
@@ -235,7 +267,8 @@ async fn handle_connection(
         let cmd = header[2];
         let body_len = u32::from_be_bytes(header[3..7].try_into().unwrap()) as usize;
 
-        let mut body = vec![0u8; body_len];
+        body.clear();
+        body.resize(body_len, 0);
         stream.read_exact(&mut body).await?;
 
         // Command 0: AUTH handshake. Body is the raw bearer token.
@@ -268,8 +301,17 @@ async fn handle_connection(
                 // Command 1: Produce/Write
                 let req = parse_produce_body(&body)?;
 
-                // Append to partition log
-                let part_log = log_manager.get_partition(&req.topic, req.partition).await?;
+                // Fast partition resolution: check connection cache before acquiring manager read lock
+                let part_log = match &cached_partition {
+                    Some(((top, part), log)) if top.as_str() == req.topic && *part == req.partition => {
+                        log.clone()
+                    }
+                    _ => {
+                        let log = log_manager.get_partition(req.topic, req.partition).await?;
+                        cached_partition = Some(((req.topic.to_string(), req.partition), log.clone()));
+                        log
+                    }
+                };
                 let mut log_guard = part_log.lock().await;
 
                 // When producer_id >= 0 and base_sequence >= 0, check ProducerStateTracker
@@ -286,12 +328,16 @@ async fn handle_connection(
                             next_off,
                         ) {
                             crate::log::producer_state::SequenceCheckResult::Duplicate { last_offset } => {
-                                // On Duplicate: bypass log append and return success with previous offset
+                                // On Duplicate: bypass log append and return success with previous offset.
+                                // Drop the partition lock before the network write so a slow/backpressured
+                                // client on this connection can't stall producers on other connections.
+                                drop(log_guard);
                                 stream.write_all(&encode_produce_ack(last_offset)).await?;
                                 continue;
                             }
                             crate::log::producer_state::SequenceCheckResult::OutOfOrder { .. } => {
                                 // Status 45 = OutOfOrderSequenceNumber
+                                drop(log_guard);
                                 stream.write_all(&[0xAE, 0x01, 45]).await?;
                                 continue;
                             }
@@ -301,6 +347,9 @@ async fn handle_connection(
                 }
 
                 let offset = log_guard.append(req.payload)?;
+                // Drop before the ack write, same reasoning as the branches above: the disk write is what
+                // needs the lock, not the network round trip.
+                drop(log_guard);
 
                 // Send Response: [magic (2)] [status (1: 0=Success)] [offset (8)]
                 stream.write_all(&encode_produce_ack(offset)).await?;
@@ -310,7 +359,16 @@ async fn handle_connection(
                 let req = parse_fetch_body(&body)?;
 
                 // Read from partition log with High-Watermark blocking
-                let part_log = log_manager.get_partition(&req.topic, req.partition).await?;
+                let part_log = match &cached_partition {
+                    Some(((top, part), log)) if top.as_str() == req.topic && *part == req.partition => {
+                        log.clone()
+                    }
+                    _ => {
+                        let log = log_manager.get_partition(req.topic, req.partition).await?;
+                        cached_partition = Some(((req.topic.to_string(), req.partition), log.clone()));
+                        log
+                    }
+                };
 
                 let mut attempts = 0;
                 let data_opt = loop {
@@ -347,7 +405,16 @@ async fn handle_connection(
                 let req = parse_replica_fetch_body(&body)?;
 
                 // Read from partition log (replicate/sync has no HW limit)
-                let part_log = log_manager.get_partition(&req.topic, req.partition).await?;
+                let part_log = match &cached_partition {
+                    Some(((top, part), log)) if top.as_str() == req.topic && *part == req.partition => {
+                        log.clone()
+                    }
+                    _ => {
+                        let log = log_manager.get_partition(req.topic, req.partition).await?;
+                        cached_partition = Some(((req.topic.to_string(), req.partition), log.clone()));
+                        log
+                    }
+                };
                 let mut log_guard = part_log.lock().await;
 
                 // Record replica progress
@@ -366,6 +433,51 @@ async fn handle_connection(
                     }
                 }
             }
+            4 => {
+                // Command 4: Multi-entry Fetch with long polling (consumer, respects High-Watermark).
+                // Returns every whole entry from start_offset up to the high watermark within max_bytes (at least
+                // one), waiting up to max_wait_ms for data instead of re-polling.
+                let req = parse_fetch_multi_body(&body)?;
+                let part_log = match &cached_partition {
+                    Some(((top, part), log)) if top.as_str() == req.topic && *part == req.partition => {
+                        log.clone()
+                    }
+                    _ => {
+                        let log = log_manager.get_partition(req.topic, req.partition).await?;
+                        cached_partition = Some(((req.topic.to_string(), req.partition), log.clone()));
+                        log
+                    }
+                };
+
+                let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(req.max_wait_ms as u64);
+                // This partition's own notify: a fetch on one partition must not be woken by appends elsewhere.
+                let notify = part_log.lock().await.append_notify.clone().expect("partition always has a notify");
+                let data_opt = loop {
+                    // Register for the wakeup before checking, so an append between the check and the wait is seen.
+                    let notified = notify.notified();
+                    tokio::pin!(notified);
+                    notified.as_mut().enable();
+                    let res = {
+                        let mut log_guard = part_log.lock().await;
+                        let hw = log_guard.high_watermark;
+                        log_guard.read_range_entries(req.start_offset, hw, req.max_bytes.max(1))?
+                    };
+                    if res.is_some() || tokio::time::Instant::now() >= deadline {
+                        break res;
+                    }
+                    let _ = tokio::time::timeout_at(deadline, notified).await;
+                };
+
+                match data_opt {
+                    Some((file, position, bytes_to_read, entries)) => {
+                        stream.write_all(&encode_multi_header(&entries)).await?;
+                        stream.send_file_region(file, position, bytes_to_read).await?;
+                    }
+                    None => {
+                        stream.write_all(&encode_empty_response()).await?;
+                    }
+                }
+            }
             _ => return Err(format!("Unknown protocol command: {}", cmd).into()),
         }
     }
@@ -377,7 +489,7 @@ async fn handle_connection(
 /// `[topic_len(2)][topic][partition(4)][payload_len(4)][payload]`
 #[derive(Debug)]
 struct ProduceRequest<'a> {
-    topic: String,
+    topic: &'a str,
     partition: u32,
     payload: &'a [u8],
 }
@@ -390,7 +502,7 @@ fn parse_produce_body(body: &[u8]) -> Result<ProduceRequest<'_>, Box<dyn std::er
     if body.len() < 10 + topic_len {
         return Err("Produce topic length exceeds body size".into());
     }
-    let topic = String::from_utf8(body[2..2 + topic_len].to_vec())?;
+    let topic = std::str::from_utf8(&body[2..2 + topic_len])?;
     let partition = u32::from_be_bytes(body[2 + topic_len..6 + topic_len].try_into().unwrap());
     let payload_len = u32::from_be_bytes(body[6 + topic_len..10 + topic_len].try_into().unwrap()) as usize;
 
@@ -405,14 +517,14 @@ fn parse_produce_body(body: &[u8]) -> Result<ProduceRequest<'_>, Box<dyn std::er
 /// Parsed fields of a Fetch (cmd=2) request body:
 /// `[topic_len(2)][topic][partition(4)][start_offset(8)][max_bytes(4)]`
 #[derive(Debug)]
-struct FetchRequest {
-    topic: String,
+struct FetchRequest<'a> {
+    topic: &'a str,
     partition: u32,
     start_offset: u64,
     max_bytes: u32,
 }
 
-fn parse_fetch_body(body: &[u8]) -> Result<FetchRequest, Box<dyn std::error::Error>> {
+fn parse_fetch_body(body: &[u8]) -> Result<FetchRequest<'_>, Box<dyn std::error::Error>> {
     if body.len() < 18 {
         return Err("Fetch body too short".into());
     }
@@ -420,7 +532,7 @@ fn parse_fetch_body(body: &[u8]) -> Result<FetchRequest, Box<dyn std::error::Err
     if body.len() < 18 + topic_len {
         return Err("Fetch topic length exceeds body size".into());
     }
-    let topic = String::from_utf8(body[2..2 + topic_len].to_vec())?;
+    let topic = std::str::from_utf8(&body[2..2 + topic_len])?;
     let partition = u32::from_be_bytes(body[2 + topic_len..6 + topic_len].try_into().unwrap());
     let start_offset = u64::from_be_bytes(body[6 + topic_len..14 + topic_len].try_into().unwrap());
     let max_bytes = u32::from_be_bytes(body[14 + topic_len..18 + topic_len].try_into().unwrap());
@@ -428,18 +540,46 @@ fn parse_fetch_body(body: &[u8]) -> Result<FetchRequest, Box<dyn std::error::Err
     Ok(FetchRequest { topic, partition, start_offset, max_bytes })
 }
 
+/// Parsed fields of a Multi Fetch (cmd=4) request body:
+/// `[topic_len(2)][topic][partition(4)][start_offset(8)][max_bytes(4)][max_wait_ms(4)]`
+#[derive(Debug)]
+struct FetchMultiRequest<'a> {
+    topic: &'a str,
+    partition: u32,
+    start_offset: u64,
+    max_bytes: u32,
+    max_wait_ms: u32,
+}
+
+fn parse_fetch_multi_body(body: &[u8]) -> Result<FetchMultiRequest<'_>, Box<dyn std::error::Error>> {
+    if body.len() < 22 {
+        return Err("Multi Fetch body too short".into());
+    }
+    let topic_len = u16::from_be_bytes(body[0..2].try_into().unwrap()) as usize;
+    if body.len() < 22 + topic_len {
+        return Err("Multi Fetch topic length exceeds body size".into());
+    }
+    let topic = std::str::from_utf8(&body[2..2 + topic_len])?;
+    let partition = u32::from_be_bytes(body[2 + topic_len..6 + topic_len].try_into().unwrap());
+    let start_offset = u64::from_be_bytes(body[6 + topic_len..14 + topic_len].try_into().unwrap());
+    let max_bytes = u32::from_be_bytes(body[14 + topic_len..18 + topic_len].try_into().unwrap());
+    let max_wait_ms = u32::from_be_bytes(body[18 + topic_len..22 + topic_len].try_into().unwrap());
+
+    Ok(FetchMultiRequest { topic, partition, start_offset, max_bytes, max_wait_ms })
+}
+
 /// Parsed fields of a Replica Fetch (cmd=3) request body:
 /// `[replica_id(4)][topic_len(2)][topic][partition(4)][start_offset(8)][max_bytes(4)]`
 #[derive(Debug)]
-struct ReplicaFetchRequest {
+struct ReplicaFetchRequest<'a> {
     replica_id: u32,
-    topic: String,
+    topic: &'a str,
     partition: u32,
     start_offset: u64,
     max_bytes: u32,
 }
 
-fn parse_replica_fetch_body(body: &[u8]) -> Result<ReplicaFetchRequest, Box<dyn std::error::Error>> {
+fn parse_replica_fetch_body(body: &[u8]) -> Result<ReplicaFetchRequest<'_>, Box<dyn std::error::Error>> {
     if body.len() < 22 {
         return Err("Replica Fetch body too short".into());
     }
@@ -448,7 +588,7 @@ fn parse_replica_fetch_body(body: &[u8]) -> Result<ReplicaFetchRequest, Box<dyn 
     if body.len() < 22 + topic_len {
         return Err("Replica Fetch topic length exceeds body size".into());
     }
-    let topic = String::from_utf8(body[6..6 + topic_len].to_vec())?;
+    let topic = std::str::from_utf8(&body[6..6 + topic_len])?;
     let partition = u32::from_be_bytes(body[6 + topic_len..10 + topic_len].try_into().unwrap());
     let start_offset = u64::from_be_bytes(body[10 + topic_len..18 + topic_len].try_into().unwrap());
     let max_bytes = u32::from_be_bytes(body[18 + topic_len..22 + topic_len].try_into().unwrap());
@@ -457,21 +597,36 @@ fn parse_replica_fetch_body(body: &[u8]) -> Result<ReplicaFetchRequest, Box<dyn 
 }
 
 /// Encode a successful Produce response: `[magic(2)][status=0][offset(8)]`.
-fn encode_produce_ack(offset: u64) -> Vec<u8> {
-    let mut resp = Vec::with_capacity(11);
-    resp.extend_from_slice(&[0xAE, 0x01]);
-    resp.push(0); // success
-    resp.extend_from_slice(&offset.to_be_bytes());
+fn encode_produce_ack(offset: u64) -> [u8; 11] {
+    let mut resp = [0u8; 11];
+    resp[0] = 0xAE;
+    resp[1] = 0x01;
+    resp[2] = 0x00; // success
+    resp[3..11].copy_from_slice(&offset.to_be_bytes());
     resp
 }
 
 /// Encode a "data follows" Fetch/ReplicaFetch response header:
 /// `[magic(2)][status=2][bytes_to_read(4)]`.
-fn encode_data_header(bytes_to_read: u32) -> Vec<u8> {
-    let mut resp = Vec::with_capacity(7);
-    resp.extend_from_slice(&[0xAE, 0x01]);
-    resp.push(2); // Success with Data
-    resp.extend_from_slice(&bytes_to_read.to_be_bytes());
+fn encode_data_header(bytes_to_read: u32) -> [u8; 7] {
+    let mut resp = [0u8; 7];
+    resp[0] = 0xAE;
+    resp[1] = 0x01;
+    resp[2] = 0x02; // Success with Data
+    resp[3..7].copy_from_slice(&bytes_to_read.to_be_bytes());
+    resp
+}
+
+/// Encode a Multi Fetch (cmd=4) response header; the entry data follows it:
+/// `[magic(2)][status=2][count(4)]` then `count` x `[offset(8)][len(4)]`.
+fn encode_multi_header(entries: &[(u64, u32)]) -> Vec<u8> {
+    let mut resp = Vec::with_capacity(7 + entries.len() * 12);
+    resp.extend_from_slice(&[0xAE, 0x01, 0x02]);
+    resp.extend_from_slice(&(entries.len() as u32).to_be_bytes());
+    for (offset, len) in entries {
+        resp.extend_from_slice(&offset.to_be_bytes());
+        resp.extend_from_slice(&len.to_be_bytes());
+    }
     resp
 }
 
@@ -683,8 +838,96 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_fetch_multi_body_round_trip() {
+        let mut body = encode_fetch_body("orders", 3, 42, 65536);
+        body.extend_from_slice(&500u32.to_be_bytes());
+        let req = parse_fetch_multi_body(&body).unwrap();
+        assert_eq!((req.topic, req.partition, req.start_offset, req.max_bytes, req.max_wait_ms), ("orders", 3, 42, 65536, 500));
+        // a plain Fetch body (no max_wait_ms) is too short
+        assert!(parse_fetch_multi_body(&encode_fetch_body("orders", 3, 42, 65536)).is_err());
+    }
+
+    #[test]
+    fn test_encode_multi_header_format() {
+        let h = encode_multi_header(&[(7, 100), (8, 1)]);
+        assert_eq!(&h[..7], &[0xAE, 0x01, 0x02, 0, 0, 0, 2]);
+        assert_eq!(&h[7..15], &7u64.to_be_bytes());
+        assert_eq!(&h[15..19], &100u32.to_be_bytes());
+        assert_eq!(&h[19..27], &8u64.to_be_bytes());
+        assert_eq!(&h[27..31], &1u32.to_be_bytes());
+        assert_eq!(h.len(), 31);
+    }
+
+    #[test]
     fn test_encode_empty_response_format() {
         let resp = encode_empty_response();
         assert_eq!(resp, [0xAE, 0x01, 1]);
+    }
+
+    /// Regression test for the cmd=1 (Produce) handler holding the partition's async `Mutex` across the ack's
+    /// network write. Two real connections produce concurrently, interleaved, to the SAME topic-partition; if the
+    /// lock were still held across `stream.write_all(...).await`, one connection's produce would serialize behind
+    /// the other's full request/response round trip instead of just its disk write, and this would not complete
+    /// within the deadline once enough interleaved requests are in flight.
+    #[tokio::test]
+    async fn produce_to_same_partition_on_two_connections_does_not_serialize_on_network_io() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_manager = Arc::new(LogManager::new(dir.path(), 1).with_limits(1 << 20, None, None));
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        // Accept loop: hand every connection to the real handler under test, exactly as DataServer::run does.
+        let lm = log_manager.clone();
+        tokio::spawn(async move {
+            loop {
+                let (stream, _) = match listener.accept().await {
+                    Ok(v) => v,
+                    Err(_) => return,
+                };
+                let lm = lm.clone();
+                tokio::spawn(async move {
+                    let _ = handle_connection(Conn::Plain(stream), lm, None).await;
+                });
+            }
+        });
+
+        async fn produce_once(addr: SocketAddr, topic: &str) -> u64 {
+            let mut conn = TcpStream::connect(addr).await.unwrap();
+            let body = encode_produce_body(topic, 0, b"x");
+            let mut frame = vec![0xAE, 0x01, 1];
+            frame.extend_from_slice(&(body.len() as u32).to_be_bytes());
+            frame.extend_from_slice(&body);
+            conn.write_all(&frame).await.unwrap();
+            let mut resp = [0u8; 11];
+            conn.read_exact(&mut resp).await.unwrap();
+            assert_eq!(resp[2], 0, "produce ack status");
+            u64::from_be_bytes(resp[3..11].try_into().unwrap())
+        }
+
+        // 40 interleaved produces per connection to the same partition, both connections racing.
+        let a = tokio::spawn(async move {
+            let mut offsets = Vec::new();
+            for _ in 0..40 {
+                offsets.push(produce_once(addr, "shared").await);
+            }
+            offsets
+        });
+        let b = tokio::spawn(async move {
+            let mut offsets = Vec::new();
+            for _ in 0..40 {
+                offsets.push(produce_once(addr, "shared").await);
+            }
+            offsets
+        });
+
+        let (a, b) = tokio::time::timeout(std::time::Duration::from_secs(5), async { (a.await.unwrap(), b.await.unwrap()) })
+            .await
+            .expect("80 interleaved produces to one partition across 2 connections must not deadlock/serialize");
+
+        // Every offset 0..80 was handed out exactly once between the two connections.
+        let mut all: Vec<u64> = a.into_iter().chain(b).collect();
+        all.sort_unstable();
+        assert_eq!(all, (0..80).collect::<Vec<u64>>());
     }
 }

@@ -55,14 +55,12 @@ type Engine struct {
 }
 
 func NewEngine() *Engine {
-	e := &Engine{
+	return &Engine{
 		transforms: make(map[string]*Transform),
 	}
-	e.seedDefaultTransforms()
-	return e
 }
 
-func (e *Engine) seedDefaultTransforms() {
+func (e *Engine) SeedDefaultTransforms() *Engine {
 	now := time.Now().UTC()
 
 	piiMasker := &Transform{
@@ -100,6 +98,7 @@ func (e *Engine) seedDefaultTransforms() {
 
 	e.transforms[piiMasker.Name] = piiMasker
 	e.transforms[telemetryFilter.Name] = telemetryFilter
+	return e
 }
 
 func (e *Engine) RegisterTransform(t *Transform) error {

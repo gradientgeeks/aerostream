@@ -1,0 +1,5 @@
+[19:53:01] aerostream:base ready; workload workloads/diag-16p-1kb-producers-only-300k.yaml
+result diag-16p-1kb-producers-only-300k-AeroStream-Kafka-2026-09-27-19-55-05.json
+publish avg 205,356 msg/s (200.5 MB/s)  peak 207,642  consume avg 0 msg/s  errors 0
+publish latency ms  p50 330.0  p99 570.6  p99.9 746.4  max 846.8
+broker container peak memory 188 MiB, peak CPU 200% (limit 200%)

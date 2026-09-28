@@ -1,0 +1,185 @@
+{{- $fullname := include "aerostream.fullname" . }}
+{{- $rackLookup := and .Values.broker.rack.enabled (not .Values.broker.rack.value) }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-broker
+  labels:
+    {{- include "aerostream.labels" . | nindent 4 }}
+    app.kubernetes.io/component: broker
+spec:
+  serviceName: {{ include "aerostream.broker.headless" . }}
+  replicas: {{ .Values.broker.replicas }}
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "aerostream.selectorLabels" (dict "ctx" . "component" "broker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "aerostream.labels" . | nindent 8 }}
+        app.kubernetes.io/component: broker
+        {{- with .Values.broker.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/secret-config.yaml") . | sha256sum }}
+        {{- with .Values.broker.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "aerostream.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.broker.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.broker.terminationGracePeriodSeconds }}
+      {{- if $rackLookup }}
+      initContainers:
+        # Resolve broker.rack from this node's topology label (e.g. the availability zone).
+        - name: resolve-rack
+          image: {{ include "aerostream.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -eo pipefail
+              SA=/var/run/secrets/kubernetes.io/serviceaccount
+              RACK=$(curl -sSf --cacert "${SA}/ca.crt" -H "Authorization: Bearer $(cat ${SA}/token)" \
+                  "https://kubernetes.default.svc/api/v1/nodes/${NODE_NAME}" \
+                | grep -o '"{{ .Values.broker.rack.topologyKey }}": *"[^"]*"' | head -1 | sed 's/.*: *"\(.*\)"/\1/' || true)
+              echo "${RACK}" > /rack/rack
+              echo "[aerostream] node ${NODE_NAME} rack='${RACK}'"
+          env:
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - {name: rack, mountPath: /rack}
+      {{- end }}
+      containers:
+        - name: broker
+          image: {{ include "aerostream.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -eo pipefail
+              ORDINAL="${HOSTNAME##*-}"
+              BROKER_ID=$((ORDINAL + 1))
+              ARGS=(
+                --config /etc/aerostream/broker.toml
+                --id "${BROKER_ID}"
+                --host "${POD_IP}"
+                --data-port {{ .Values.broker.ports.data }}
+                --kafka-port {{ .Values.broker.ports.kafka }}
+                --controller "http://{{ include "aerostream.controller.service" . }}:{{ .Values.controller.ports.grpc }}"
+                --storage-dir /data
+              )
+              {{- if .Values.broker.rack.value }}
+              ARGS+=(--rack {{ .Values.broker.rack.value | quote }})
+              {{- else if $rackLookup }}
+              RACK="$(cat /rack/rack 2>/dev/null || true)"
+              [ -n "${RACK}" ] && ARGS+=(--rack "${RACK}")
+              {{- end }}
+              echo "[aerostream] starting broker ${BROKER_ID} host=${POD_IP} rack=${RACK:-none}"
+              exec rust-broker "${ARGS[@]}"
+          env:
+            - name: POD_IP
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            {{- with .Values.broker.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.broker.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - {name: data, containerPort: {{ .Values.broker.ports.data }}}
+            - {name: kafka, containerPort: {{ .Values.broker.ports.kafka }}}
+          startupProbe:
+            tcpSocket: {port: kafka}
+            periodSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            tcpSocket: {port: kafka}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            tcpSocket: {port: kafka}
+            periodSeconds: 5
+            timeoutSeconds: 2
+          {{- with .Values.broker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: config, mountPath: /etc/aerostream, readOnly: true}
+            {{- if $rackLookup }}
+            - {name: rack, mountPath: /rack, readOnly: true}
+            {{- end }}
+      {{- $aff := .Values.broker.affinity }}
+      {{- if or $aff .Values.broker.podAntiAffinityPreset }}
+      affinity:
+        {{- if $aff }}
+        {{- toYaml $aff | nindent 8 }}
+        {{- else }}
+        {{- include "aerostream.podAntiAffinity" (dict "ctx" . "component" "broker" "preset" .Values.broker.podAntiAffinityPreset) | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.broker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.broker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.broker.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ include "aerostream.configSecret" . }}
+        {{- if $rackLookup }}
+        - name: rack
+          emptyDir: {}
+        {{- end }}
+        {{- if not .Values.broker.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if .Values.broker.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "aerostream.selectorLabels" (dict "ctx" . "component" "broker") | nindent 10 }}
+      spec:
+        accessModes: {{- toYaml .Values.broker.persistence.accessModes | nindent 10 }}
+        {{- with .Values.broker.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.broker.persistence.size }}
+  {{- end }}

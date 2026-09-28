@@ -19,6 +19,8 @@ services:
       - "0.0.0.0:9001"
       - "-data-dir"
       - "/data"
+      - "-ui-dir"
+      - "/app/ui"
       - "-bootstrap"
     ports:
       - "7001:7001"
@@ -26,6 +28,7 @@ services:
       - "9001:9001"
     volumes:
       - controller-1-data:/data
+      - ./ui/dist/ui/browser:/app/ui:ro
     networks:
       - aerostream-net
     healthcheck:

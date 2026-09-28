@@ -10,8 +10,13 @@
     </div>
 
     <div class="header-actions flex items-center gap-3">
-      <button mat-stroked-button (click)="connectorService.refresh()" matTooltip="Refresh connector states">
-        <mat-icon>refresh</mat-icon>
+      <button
+        mat-stroked-button
+        (click)="refresh()"
+        [disabled]="connectorService.loading()"
+        matTooltip="Refresh connector states"
+      >
+        <mat-icon [class.spinning]="connectorService.loading()">refresh</mat-icon>
         <span>Refresh</span>
       </button>
       <button mat-flat-button color="primary" class="deploy-hero-btn" (click)="openDeployDialog()">
@@ -19,6 +24,18 @@
         <span>Deploy Connector</span>
       </button>
     </div>
+  </div>
+
+  <!-- Loading Bar Indicator -->
+  <div *ngIf="connectorService.loading()" class="loading-bar-wrapper mb-4">
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  </div>
+
+  <!-- Error Banner -->
+  <div *ngIf="connectorService.error() as err" class="error-banner flex items-center gap-3 p-3 rounded-lg mb-4 bg-red-950/40 border border-red-500/30">
+    <mat-icon class="text-red">error_outline</mat-icon>
+    <span class="text-sm font-medium text-red-200">{{ err }}</span>
+    <button mat-button class="ml-auto text-xs text-red-300" (click)="refresh()">Retry</button>
   </div>
 
   <!-- Metric Cards Grid -->
@@ -130,325 +147,408 @@
       </ng-template>
 
       <div class="tab-content-area mt-4">
-        <!-- Controls Bar: Search & Filters -->
-        <mat-card class="controls-card mb-4">
-          <div class="controls-row flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div class="search-box-col flex-1 w-full">
-              <mat-form-field appearance="outline" class="w-full" subscriptSizing="dynamic">
-                <mat-icon matPrefix>search</mat-icon>
-                <mat-label>Search connectors, classes, topics...</mat-label>
-                <input
-                  matInput
-                  [ngModel]="searchQuery()"
-                  (ngModelChange)="searchQuery.set($event)"
-                  placeholder="e.g. s3 or payment"
-                />
+        <!-- Loading State Spinner when 0 connectors and loading -->
+        <div
+          *ngIf="connectorService.loading() && connectorService.connectors().length === 0"
+          class="loading-cluster-state py-16 flex flex-col items-center justify-center gap-3 text-center"
+        >
+          <mat-spinner diameter="44"></mat-spinner>
+          <span class="text-sm text-muted">Connecting to Kafka Connect REST API...</span>
+        </div>
+
+        <!-- Clean Empty State when 0 connectors exist and not loading -->
+        <div
+          *ngIf="!connectorService.loading() && connectorService.connectors().length === 0"
+          class="empty-cluster-state my-6 p-12 text-center rounded-xl"
+        >
+          <div class="empty-state-icon-circle mx-auto mb-4">
+            <mat-icon class="empty-hero-icon">cable</mat-icon>
+          </div>
+          <h2 class="text-xl font-bold empty-title">No Connectors Deployed</h2>
+          <p class="text-muted mt-2 max-w-md mx-auto empty-subtitle">
+            Connect external datastores, S3 object storage, or HTTP webhooks.
+          </p>
+          <button mat-flat-button color="primary" class="mt-6 deploy-hero-btn" (click)="openDeployDialog()">
+            <mat-icon>add</mat-icon>
+            <span>Deploy Connector</span>
+          </button>
+        </div>
+
+        <!-- Content when connectors exist -->
+        <div *ngIf="connectorService.connectors().length > 0">
+          <!-- Controls Bar: Search & Filters -->
+          <mat-card class="controls-card mb-4">
+            <div class="controls-row flex flex-col md:flex-row gap-4 items-center justify-between">
+              <div class="search-box-col flex-1 w-full">
+                <mat-form-field appearance="outline" class="w-full" subscriptSizing="dynamic">
+                  <mat-icon matPrefix>search</mat-icon>
+                  <mat-label>Search connectors, classes, topics...</mat-label>
+                  <input
+                    matInput
+                    [ngModel]="searchQuery()"
+                    (ngModelChange)="searchQuery.set($event)"
+                    placeholder="e.g. s3 or payment"
+                  />
+                  <button
+                    mat-icon-button
+                    matSuffix
+                    *ngIf="searchQuery()"
+                    (click)="searchQuery.set('')"
+                    aria-label="Clear search"
+                  >
+                    <mat-icon>clear</mat-icon>
+                  </button>
+                </mat-form-field>
+              </div>
+
+              <!-- Filter Chips -->
+              <div class="filter-chips flex gap-2 flex-wrap items-center">
+                <span class="filter-label text-xs text-muted">Type:</span>
                 <button
-                  mat-icon-button
-                  matSuffix
-                  *ngIf="searchQuery()"
-                  (click)="searchQuery.set('')"
-                  aria-label="Clear search"
+                  type="button"
+                  class="filter-chip"
+                  [class.active]="typeFilter() === 'ALL'"
+                  (click)="typeFilter.set('ALL')"
                 >
-                  <mat-icon>clear</mat-icon>
+                  All
                 </button>
-              </mat-form-field>
-            </div>
+                <button
+                  type="button"
+                  class="filter-chip chip-source"
+                  [class.active]="typeFilter() === 'SOURCE'"
+                  (click)="typeFilter.set('SOURCE')"
+                >
+                  Sources
+                </button>
+                <button
+                  type="button"
+                  class="filter-chip chip-sink"
+                  [class.active]="typeFilter() === 'SINK'"
+                  (click)="typeFilter.set('SINK')"
+                >
+                  Sinks
+                </button>
 
-            <!-- Filter Chips -->
-            <div class="filter-chips flex gap-2 flex-wrap items-center">
-              <span class="filter-label text-xs text-muted">Type:</span>
-              <button
-                type="button"
-                class="filter-chip"
-                [class.active]="typeFilter() === 'ALL'"
-                (click)="typeFilter.set('ALL')"
-              >
-                All
-              </button>
-              <button
-                type="button"
-                class="filter-chip chip-source"
-                [class.active]="typeFilter() === 'SOURCE'"
-                (click)="typeFilter.set('SOURCE')"
-              >
-                Sources
-              </button>
-              <button
-                type="button"
-                class="filter-chip chip-sink"
-                [class.active]="typeFilter() === 'SINK'"
-                (click)="typeFilter.set('SINK')"
-              >
-                Sinks
-              </button>
+                <mat-divider vertical class="h-6 mx-1"></mat-divider>
 
-              <mat-divider vertical class="h-6 mx-1"></mat-divider>
-
-              <span class="filter-label text-xs text-muted">State:</span>
-              <button
-                type="button"
-                class="filter-chip"
-                [class.active]="stateFilter() === 'ALL'"
-                (click)="stateFilter.set('ALL')"
-              >
-                All
-              </button>
-              <button
-                type="button"
-                class="filter-chip chip-running"
-                [class.active]="stateFilter() === 'RUNNING'"
-                (click)="stateFilter.set('RUNNING')"
-              >
-                Running
-              </button>
-              <button
-                type="button"
-                class="filter-chip chip-paused"
-                [class.active]="stateFilter() === 'PAUSED'"
-                (click)="stateFilter.set('PAUSED')"
-              >
-                Paused
-              </button>
-            </div>
-          </div>
-        </mat-card>
-
-        <!-- Master-Detail Layout -->
-        <div class="connectors-layout grid grid-cols-1" [class.with-drawer]="selectedConnector() !== null">
-          <!-- Connectors Table / Grid -->
-          <div class="table-container-card">
-            <mat-card class="connectors-table-card">
-              <div class="table-responsive overflow-x-auto">
-                <table class="connectors-table w-full">
-                  <thead>
-                    <tr>
-                      <th class="th-name">Connector</th>
-                      <th class="th-type">Type</th>
-                      <th class="th-class">Plugin Class</th>
-                      <th class="th-topic">Bound Topic</th>
-                      <th class="th-state">State</th>
-                      <th class="th-metrics">Records Processed</th>
-                      <th class="th-actions text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      *ngFor="let c of filteredConnectors()"
-                      class="connector-row"
-                      [class.selected]="selectedConnector()?.name === c.name"
-                      (click)="selectConnector(c)"
-                    >
-                      <!-- Name & Avatar -->
-                      <td class="td-name">
-                        <div class="name-cell flex items-center gap-3">
-                          <div class="class-avatar" [ngClass]="c.type === 'SOURCE' ? 'avatar-source' : 'avatar-sink'">
-                            <mat-icon>{{ getPluginIcon(c.class) }}</mat-icon>
-                          </div>
-                          <div>
-                            <div class="font-mono font-semibold connector-name">{{ c.name }}</div>
-                            <div class="connector-tasks-hint text-xs text-muted">Tasks: {{ c.tasks_count }}</div>
-                          </div>
-                        </div>
-                      </td>
-
-                      <!-- Type -->
-                      <td class="td-type">
-                        <span class="type-pill" [ngClass]="getTypeBadgeClass(c.type)">
-                          {{ c.type }}
-                        </span>
-                      </td>
-
-                      <!-- Plugin Class -->
-                      <td class="td-class font-mono text-xs">
-                        <span class="plugin-class-tag" [title]="c.class">{{ c.class }}</span>
-                      </td>
-
-                      <!-- Topic -->
-                      <td class="td-topic">
-                        <div class="topic-link-cell flex items-center gap-1.5 font-mono text-xs">
-                          <mat-icon class="topic-icon">layers</mat-icon>
-                          <a
-                            [routerLink]="['/messages']"
-                            [queryParams]="{ topic: c.topic }"
-                            (click)="$event.stopPropagation()"
-                            class="topic-anchor"
-                          >
-                            {{ c.topic }}
-                          </a>
-                        </div>
-                      </td>
-
-                      <!-- State with Dot -->
-                      <td class="td-state">
-                        <div class="state-pill" [ngClass]="c.state === 'RUNNING' ? 'state-running' : 'state-paused'">
-                          <span class="state-dot"></span>
-                          <span class="state-text">{{ c.state }}</span>
-                        </div>
-                      </td>
-
-                      <!-- Metrics -->
-                      <td class="td-metrics">
-                        <div class="metrics-cell">
-                          <div class="font-mono font-semibold text-sm">{{ formatNumber(c.records_processed) }}</div>
-                          <div class="text-xs text-muted font-mono">{{ formatBytes(c.bytes_transferred) }}</div>
-                        </div>
-                      </td>
-
-                      <!-- Actions -->
-                      <td class="td-actions text-right" (click)="$event.stopPropagation()">
-                        <div class="action-buttons flex items-center justify-end gap-1">
-                          <button
-                            mat-icon-button
-                            (click)="togglePause(c)"
-                            [matTooltip]="c.state === 'RUNNING' ? 'Pause Pipeline' : 'Resume Pipeline'"
-                            [class.text-amber]="c.state === 'RUNNING'"
-                            [class.text-emerald]="c.state === 'PAUSED'"
-                          >
-                            <mat-icon>{{ c.state === 'RUNNING' ? 'pause_circle_outline' : 'play_circle_outline' }}</mat-icon>
-                          </button>
-
-                          <button
-                            mat-icon-button
-                            (click)="selectConnector(c)"
-                            matTooltip="Inspect Configuration"
-                            class="text-primary"
-                          >
-                            <mat-icon>settings</mat-icon>
-                          </button>
-
-                          <button
-                            mat-icon-button
-                            (click)="deleteConnector(c)"
-                            matTooltip="Delete Connector"
-                            class="text-red"
-                          >
-                            <mat-icon>delete_outline</mat-icon>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-
-                    <!-- Empty State -->
-                    <tr *ngIf="filteredConnectors().length === 0">
-                      <td colspan="7" class="empty-state-cell text-center py-12">
-                        <mat-icon class="empty-icon text-muted">search_off</mat-icon>
-                        <h3 class="text-base font-semibold mt-2">No connectors found</h3>
-                        <p class="text-sm text-muted">Try adjusting your filters or deploy a new connector.</p>
-                        <button mat-stroked-button color="primary" class="mt-4" (click)="openDeployDialog()">
-                          <mat-icon>add</mat-icon>
-                          <span>Deploy Connector</span>
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                <span class="filter-label text-xs text-muted">State:</span>
+                <button
+                  type="button"
+                  class="filter-chip"
+                  [class.active]="stateFilter() === 'ALL'"
+                  (click)="stateFilter.set('ALL')"
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  class="filter-chip chip-running"
+                  [class.active]="stateFilter() === 'RUNNING'"
+                  (click)="stateFilter.set('RUNNING')"
+                >
+                  Running
+                </button>
+                <button
+                  type="button"
+                  class="filter-chip chip-paused"
+                  [class.active]="stateFilter() === 'PAUSED'"
+                  (click)="stateFilter.set('PAUSED')"
+                >
+                  Paused
+                </button>
+                <button
+                  type="button"
+                  class="filter-chip chip-stopped"
+                  [class.active]="stateFilter() === 'STOPPED'"
+                  (click)="stateFilter.set('STOPPED')"
+                >
+                  Stopped
+                </button>
               </div>
-            </mat-card>
-          </div>
+            </div>
+          </mat-card>
 
-          <!-- Configuration Details Drawer (Side Panel) -->
-          <div *ngIf="selectedConnector() as sel" class="connector-drawer-card">
-            <mat-card class="drawer-card">
-              <div class="drawer-header flex items-center justify-between p-4 border-b border-app">
-                <div class="flex items-center gap-2">
-                  <div class="class-avatar small" [ngClass]="sel.type === 'SOURCE' ? 'avatar-source' : 'avatar-sink'">
-                    <mat-icon>{{ getPluginIcon(sel.class) }}</mat-icon>
-                  </div>
-                  <div>
-                    <h3 class="font-mono font-bold text-base m-0">{{ sel.name }}</h3>
-                    <span class="text-xs text-muted">{{ sel.class }}</span>
-                  </div>
+          <!-- Master-Detail Layout -->
+          <div class="connectors-layout grid grid-cols-1" [class.with-drawer]="selectedConnector() !== null">
+            <!-- Connectors Table / Grid -->
+            <div class="table-container-card">
+              <mat-card class="connectors-table-card">
+                <div class="table-responsive overflow-x-auto">
+                  <table class="connectors-table w-full">
+                    <thead>
+                      <tr>
+                        <th class="th-name">Connector</th>
+                        <th class="th-type">Type</th>
+                        <th class="th-class">Plugin Class</th>
+                        <th class="th-topic">Bound Topic</th>
+                        <th class="th-state">State</th>
+                        <th class="th-metrics">Records Processed</th>
+                        <th class="th-actions text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        *ngFor="let c of filteredConnectors()"
+                        class="connector-row"
+                        [class.selected]="selectedConnector()?.name === c.name"
+                        (click)="selectConnector(c)"
+                      >
+                        <!-- Name & Avatar -->
+                        <td class="td-name">
+                          <div class="name-cell flex items-center gap-3">
+                            <div class="class-avatar" [ngClass]="c.type === 'SOURCE' ? 'avatar-source' : 'avatar-sink'">
+                              <mat-icon>{{ getPluginIcon(c.class) }}</mat-icon>
+                            </div>
+                            <div>
+                              <div class="font-mono font-semibold connector-name">{{ c.name }}</div>
+                              <div class="connector-tasks-hint text-xs text-muted">Tasks: {{ c.tasks_count }}</div>
+                            </div>
+                          </div>
+                        </td>
+
+                        <!-- Type -->
+                        <td class="td-type">
+                          <span class="type-pill" [ngClass]="getTypeBadgeClass(c.type)">
+                            {{ c.type }}
+                          </span>
+                        </td>
+
+                        <!-- Plugin Class -->
+                        <td class="td-class font-mono text-xs">
+                          <span class="plugin-class-tag" [title]="c.class">{{ c.class }}</span>
+                        </td>
+
+                        <!-- Topic -->
+                        <td class="td-topic">
+                          <div class="topic-link-cell flex items-center gap-1.5 font-mono text-xs">
+                            <mat-icon class="topic-icon">layers</mat-icon>
+                            <a
+                              [routerLink]="['/messages']"
+                              [queryParams]="{ topic: c.topic }"
+                              (click)="$event.stopPropagation()"
+                              class="topic-anchor"
+                            >
+                              {{ c.topic || 'N/A' }}
+                            </a>
+                          </div>
+                        </td>
+
+                        <!-- State with Dot -->
+                        <td class="td-state">
+                          <div class="state-pill" [ngClass]="getStateClass(c.state)">
+                            <span class="state-dot"></span>
+                            <span class="state-text">{{ c.state }}</span>
+                          </div>
+                        </td>
+
+                        <!-- Metrics -->
+                        <td class="td-metrics">
+                          <div class="metrics-cell">
+                            <div class="font-mono font-semibold text-sm">{{ formatNumber(c.records_processed) }}</div>
+                            <div class="text-xs text-muted font-mono">{{ formatBytes(c.bytes_transferred) }}</div>
+                          </div>
+                        </td>
+
+                        <!-- Actions -->
+                        <td class="td-actions text-right" (click)="$event.stopPropagation()">
+                          <div class="action-buttons flex items-center justify-end gap-1">
+                            <!-- Pause / Resume Toggle -->
+                            <button
+                              mat-icon-button
+                              (click)="togglePause(c)"
+                              [matTooltip]="c.state === 'RUNNING' ? 'Pause Pipeline' : 'Resume Pipeline'"
+                              [class.text-amber]="c.state === 'RUNNING'"
+                              [class.text-emerald]="c.state !== 'RUNNING'"
+                            >
+                              <mat-icon>{{ c.state === 'RUNNING' ? 'pause_circle_outline' : 'play_circle_outline' }}</mat-icon>
+                            </button>
+
+                            <!-- Stop (KIP-875) -->
+                            <button
+                              mat-icon-button
+                              *ngIf="c.state === 'RUNNING' || c.state === 'PAUSED'"
+                              (click)="stopConnector(c)"
+                              matTooltip="Stop Connector (KIP-875)"
+                              class="text-muted"
+                            >
+                              <mat-icon>stop_circle</mat-icon>
+                            </button>
+
+                            <!-- Restart -->
+                            <button
+                              mat-icon-button
+                              (click)="restartConnector(c)"
+                              matTooltip="Restart Connector & Tasks"
+                              class="text-muted"
+                            >
+                              <mat-icon>restart_alt</mat-icon>
+                            </button>
+
+                            <!-- Details -->
+                            <button
+                              mat-icon-button
+                              (click)="selectConnector(c)"
+                              matTooltip="Inspect Configuration"
+                              class="text-primary"
+                            >
+                              <mat-icon>settings</mat-icon>
+                            </button>
+
+                            <!-- Delete -->
+                            <button
+                              mat-icon-button
+                              (click)="deleteConnector(c)"
+                              matTooltip="Delete Connector"
+                              class="text-red"
+                            >
+                              <mat-icon>delete_outline</mat-icon>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      <!-- Filter Empty State -->
+                      <tr *ngIf="filteredConnectors().length === 0">
+                        <td colspan="7" class="empty-state-cell text-center py-12">
+                          <mat-icon class="empty-icon text-muted">search_off</mat-icon>
+                          <h3 class="text-base font-semibold mt-2">No connectors match your filter</h3>
+                          <p class="text-sm text-muted">Try adjusting your filters or deploy a new connector.</p>
+                          <button
+                            mat-stroked-button
+                            color="primary"
+                            class="mt-4"
+                            (click)="searchQuery.set(''); typeFilter.set('ALL'); stateFilter.set('ALL')"
+                          >
+                            <mat-icon>clear</mat-icon>
+                            <span>Reset Filters</span>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <button mat-icon-button (click)="selectedConnector.set(null)" aria-label="Close drawer">
-                  <mat-icon>close</mat-icon>
-                </button>
-              </div>
+              </mat-card>
+            </div>
 
-              <div class="drawer-body p-4 flex flex-col gap-4">
-                <!-- Status & Throughput overview -->
-                <div class="overview-box grid grid-cols-2 gap-3 p-3 rounded-lg bg-nested">
-                  <div>
-                    <span class="text-xs text-muted uppercase font-semibold">State</span>
-                    <div class="state-pill mt-1" [ngClass]="sel.state === 'RUNNING' ? 'state-running' : 'state-paused'">
-                      <span class="state-dot"></span>
-                      <span>{{ sel.state }}</span>
+            <!-- Configuration Details Drawer (Side Panel) -->
+            <div *ngIf="selectedConnector() as sel" class="connector-drawer-card">
+              <mat-card class="drawer-card">
+                <div class="drawer-header flex items-center justify-between p-4 border-b border-app">
+                  <div class="flex items-center gap-2">
+                    <div class="class-avatar small" [ngClass]="sel.type === 'SOURCE' ? 'avatar-source' : 'avatar-sink'">
+                      <mat-icon>{{ getPluginIcon(sel.class) }}</mat-icon>
+                    </div>
+                    <div>
+                      <h3 class="font-mono font-bold text-base m-0">{{ sel.name }}</h3>
+                      <span class="text-xs text-muted">{{ sel.class }}</span>
                     </div>
                   </div>
-                  <div>
-                    <span class="text-xs text-muted uppercase font-semibold">Tasks Count</span>
-                    <div class="font-mono font-bold mt-1">{{ sel.tasks_count }}</div>
-                  </div>
-                  <div>
-                    <span class="text-xs text-muted uppercase font-semibold">Records</span>
-                    <div class="font-mono font-bold mt-1">{{ formatNumber(sel.records_processed) }}</div>
-                  </div>
-                  <div>
-                    <span class="text-xs text-muted uppercase font-semibold">Transferred</span>
-                    <div class="font-mono font-bold mt-1">{{ formatBytes(sel.bytes_transferred) }}</div>
-                  </div>
+                  <button mat-icon-button (click)="selectedConnector.set(null)" aria-label="Close drawer">
+                    <mat-icon>close</mat-icon>
+                  </button>
                 </div>
 
-                <!-- Topic Association -->
-                <div class="drawer-item">
-                  <span class="text-xs text-muted uppercase font-semibold">Bound Topic</span>
-                  <div class="flex items-center justify-between mt-1 p-2.5 rounded bg-nested font-mono text-xs">
-                    <span>{{ sel.topic }}</span>
-                    <a
-                      mat-button
-                      color="primary"
-                      [routerLink]="['/messages']"
-                      [queryParams]="{ topic: sel.topic }"
-                      class="h-6 text-xs px-2"
+                <div class="drawer-body p-4 flex flex-col gap-4">
+                  <!-- Status & Throughput overview -->
+                  <div class="overview-box grid grid-cols-2 gap-3 p-3 rounded-lg bg-nested">
+                    <div>
+                      <span class="text-xs text-muted uppercase font-semibold">State</span>
+                      <div class="state-pill mt-1" [ngClass]="getStateClass(sel.state)">
+                        <span class="state-dot"></span>
+                        <span>{{ sel.state }}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <span class="text-xs text-muted uppercase font-semibold">Tasks Count</span>
+                      <div class="font-mono font-bold mt-1">{{ sel.tasks_count }}</div>
+                    </div>
+                    <div>
+                      <span class="text-xs text-muted uppercase font-semibold">Records</span>
+                      <div class="font-mono font-bold mt-1">{{ formatNumber(sel.records_processed) }}</div>
+                    </div>
+                    <div>
+                      <span class="text-xs text-muted uppercase font-semibold">Transferred</span>
+                      <div class="font-mono font-bold mt-1">{{ formatBytes(sel.bytes_transferred) }}</div>
+                    </div>
+                  </div>
+
+                  <!-- Topic Association -->
+                  <div class="drawer-item">
+                    <span class="text-xs text-muted uppercase font-semibold">Bound Topic</span>
+                    <div class="flex items-center justify-between mt-1 p-2.5 rounded bg-nested font-mono text-xs">
+                      <span>{{ sel.topic || 'N/A' }}</span>
+                      <a
+                        *ngIf="sel.topic"
+                        mat-button
+                        color="primary"
+                        [routerLink]="['/messages']"
+                        [queryParams]="{ topic: sel.topic }"
+                        class="h-6 text-xs px-2"
+                      >
+                        Browse &rarr;
+                      </a>
+                    </div>
+                  </div>
+
+                  <!-- Config Properties Table -->
+                  <div class="drawer-item">
+                    <div class="flex items-center justify-between mb-1.5">
+                      <span class="text-xs text-muted uppercase font-semibold">Configuration Properties</span>
+                      <span class="text-xs text-muted font-mono">({{ configEntries(sel.config).length }})</span>
+                    </div>
+
+                    <div class="config-table-container rounded border border-app overflow-hidden">
+                      <table class="w-full text-xs font-mono">
+                        <tbody>
+                          <tr *ngFor="let item of configEntries(sel.config)" class="border-b border-app">
+                            <td class="p-2 text-muted bg-nested font-medium w-2/5">{{ item.key }}</td>
+                            <td class="p-2 break-all text-main">{{ item.value }}</td>
+                          </tr>
+                          <tr *ngIf="configEntries(sel.config).length === 0">
+                            <td colspan="2" class="p-4 text-center text-muted">No custom config properties defined.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- Drawer Actions -->
+                  <div class="drawer-footer flex flex-wrap gap-2 mt-2">
+                    <button
+                      mat-stroked-button
+                      class="flex-1"
+                      (click)="togglePause(sel)"
                     >
-                      Browse &rarr;
-                    </a>
+                      <mat-icon>{{ sel.state === 'RUNNING' ? 'pause' : 'play_arrow' }}</mat-icon>
+                      <span>{{ sel.state === 'RUNNING' ? 'Pause' : 'Resume' }}</span>
+                    </button>
+                    <button
+                      mat-stroked-button
+                      *ngIf="sel.state === 'RUNNING' || sel.state === 'PAUSED'"
+                      (click)="stopConnector(sel)"
+                    >
+                      <mat-icon>stop</mat-icon>
+                      <span>Stop</span>
+                    </button>
+                    <button
+                      mat-stroked-button
+                      (click)="restartConnector(sel)"
+                    >
+                      <mat-icon>restart_alt</mat-icon>
+                      <span>Restart</span>
+                    </button>
+                    <button
+                      mat-stroked-button
+                      color="warn"
+                      (click)="deleteConnector(sel)"
+                    >
+                      <mat-icon>delete</mat-icon>
+                      <span>Delete</span>
+                    </button>
                   </div>
                 </div>
-
-                <!-- Config Properties Table -->
-                <div class="drawer-item">
-                  <div class="flex items-center justify-between mb-1.5">
-                    <span class="text-xs text-muted uppercase font-semibold">Configuration Properties</span>
-                    <span class="text-xs text-muted font-mono">({{ configEntries(sel.config).length }})</span>
-                  </div>
-
-                  <div class="config-table-container rounded border border-app overflow-hidden">
-                    <table class="w-full text-xs font-mono">
-                      <tbody>
-                        <tr *ngFor="let item of configEntries(sel.config)" class="border-b border-app">
-                          <td class="p-2 text-muted bg-nested font-medium w-2/5">{{ item.key }}</td>
-                          <td class="p-2 break-all text-main">{{ item.value }}</td>
-                        </tr>
-                        <tr *ngIf="configEntries(sel.config).length === 0">
-                          <td colspan="2" class="p-4 text-center text-muted">No custom config properties defined.</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <!-- Drawer Actions -->
-                <div class="drawer-footer flex gap-2 mt-2">
-                  <button
-                    mat-stroked-button
-                    class="flex-1"
-                    (click)="togglePause(sel)"
-                  >
-                    <mat-icon>{{ sel.state === 'RUNNING' ? 'pause' : 'play_arrow' }}</mat-icon>
-                    <span>{{ sel.state === 'RUNNING' ? 'Pause' : 'Resume' }}</span>
-                  </button>
-                  <button
-                    mat-stroked-button
-                    color="warn"
-                    (click)="deleteConnector(sel)"
-                  >
-                    <mat-icon>delete</mat-icon>
-                    <span>Delete</span>
-                  </button>
-                </div>
-              </div>
-            </mat-card>
+              </mat-card>
+            </div>
           </div>
         </div>
       </div>
@@ -465,7 +565,22 @@
       </ng-template>
 
       <div class="tab-content-area mt-4">
-        <div class="plugins-grid grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Empty plugins state -->
+        <div *ngIf="connectorService.plugins().length === 0" class="empty-cluster-state my-6 p-12 text-center rounded-xl">
+          <div class="empty-state-icon-circle mx-auto mb-4">
+            <mat-icon class="empty-hero-icon">extension_off</mat-icon>
+          </div>
+          <h2 class="text-xl font-bold empty-title">No Plugins Discovered</h2>
+          <p class="text-muted mt-2 max-w-md mx-auto empty-subtitle">
+            No connector plugins detected on Kafka Connect REST API endpoint.
+          </p>
+          <button mat-stroked-button class="mt-4" (click)="loadPlugins()">
+            <mat-icon>refresh</mat-icon>
+            <span>Retry Plugin Discovery</span>
+          </button>
+        </div>
+
+        <div *ngIf="connectorService.plugins().length > 0" class="plugins-grid grid grid-cols-1 md:grid-cols-2 gap-4">
           <mat-card *ngFor="let plugin of connectorService.plugins()" class="plugin-card">
             <mat-card-header>
               <div class="plugin-avatar-icon" [ngClass]="plugin.type === 'SOURCE' ? 'avatar-source' : 'avatar-sink'">
@@ -487,7 +602,7 @@
               <div class="template-preview mt-3 p-3 rounded bg-nested">
                 <div class="text-xs font-semibold uppercase text-muted mb-1 flex items-center gap-1">
                   <mat-icon class="text-xs">tune</mat-icon>
-                  <span>Default Config Keys</span>
+                  <span>Template Config Keys</span>
                 </div>
                 <div class="flex flex-wrap gap-1 mt-1">
                   <span

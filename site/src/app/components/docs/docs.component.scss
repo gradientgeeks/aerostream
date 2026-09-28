@@ -1,0 +1,919 @@
+// ==============================================================================
+// AeroStream Documentation Component SCSS
+// Dual-Engine Theme (Go Cyan #00e5ff + Rust Flame #ff5722)
+// Responsive layout, zero-glow styling, and clean contrast in Dark & Light modes
+// ==============================================================================
+
+:host {
+  display: block;
+  width: 100%;
+  min-height: calc(100vh - 64px);
+  background-color: var(--app-bg);
+  color: var(--app-text);
+}
+
+.docs-layout {
+  display: flex;
+  align-items: flex-start;
+  min-height: calc(100vh - 64px);
+  max-width: 1600px;
+  margin: 0 auto;
+  position: relative;
+}
+
+// -----------------------------------------------------------------------------
+// Mobile Bar (Screens < 1024px)
+// -----------------------------------------------------------------------------
+.mobile-doc-bar {
+  display: none;
+  position: sticky;
+  top: 64px;
+  z-index: 40;
+  width: 100%;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
+  padding: 0.75rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+
+  @media (max-width: 1023px) {
+    display: flex;
+  }
+
+  .mobile-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-block-size: 44px;
+    background: transparent;
+    border: none;
+    color: var(--app-text);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 6px;
+    padding: 0.25rem 0.5rem;
+
+    &:focus-visible {
+      outline: 2px solid var(--app-primary) !important;
+      outline-offset: 2px !important;
+    }
+
+    &:active {
+      transform: scale(0.97);
+    }
+
+    mat-icon {
+      font-size: 1.25rem;
+      width: 1.25rem;
+      height: 1.25rem;
+      color: var(--app-primary);
+    }
+
+    span {
+      max-width: 220px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  .mobile-read-time {
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--app-text-muted);
+    background: var(--app-nested-bg);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--app-border);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Left Sidebar: Chapter Navigation
+// -----------------------------------------------------------------------------
+.docs-sidebar {
+  width: 300px;
+  min-width: 300px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--app-border);
+  background: var(--app-surface);
+  position: sticky;
+  top: 64px;
+  height: calc(100vh - 64px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border) transparent;
+
+  &::-webkit-scrollbar {
+    width: 5px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--app-border);
+    border-radius: 3px;
+  }
+
+  @media (max-width: 1023px) {
+    position: fixed;
+    top: 114px;
+    left: -320px;
+    bottom: 0;
+    height: calc(100vh - 114px);
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.2);
+    transition: left 0.25s ease-in-out;
+
+    &.mobile-open {
+      left: 0;
+    }
+  }
+
+  .sidebar-header {
+    padding: 1rem 0.875rem;
+    border-bottom: 1px solid var(--app-border);
+    position: sticky;
+    top: 0;
+    background: var(--app-surface);
+    z-index: 10;
+
+    .search-input-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--app-input-bg);
+      border: 1px solid var(--app-input-border);
+      border-radius: 8px;
+      padding: 0.4rem 0.65rem;
+      transition: border-color 0.2s;
+
+      &:focus-within {
+        border-color: var(--app-primary);
+      }
+
+      .search-icon {
+        font-size: 1.1rem;
+        width: 1.1rem;
+        height: 1.1rem;
+        color: var(--app-text-muted);
+      }
+
+      .sidebar-search-input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--app-text);
+        font-size: 0.8125rem;
+
+        &::placeholder {
+          color: var(--app-text-muted);
+        }
+      }
+
+      .clear-btn {
+        background: transparent;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        color: var(--app-text-muted);
+
+        &:hover {
+          color: var(--app-text);
+        }
+
+        mat-icon {
+          font-size: 1rem;
+          width: 1rem;
+          height: 1rem;
+        }
+      }
+    }
+  }
+
+  .sidebar-nav {
+    padding: 0.75rem 0.5rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+
+    .nav-chapter-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      text-align: left;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 0.625rem 0.75rem;
+      cursor: pointer;
+      color: var(--app-text);
+      transition: background-color 0.15s, border-color 0.15s;
+
+      &:hover {
+        background-color: var(--app-surface-hover);
+        border-color: var(--app-border);
+      }
+
+      &.active {
+        background-color: var(--app-primary-bg);
+        border-color: var(--app-primary-border);
+        color: var(--app-primary);
+
+        .chapter-title {
+          font-weight: 600;
+          color: var(--app-primary);
+        }
+      }
+
+      .chapter-info {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        min-width: 0;
+
+        .chapter-category {
+          font-size: 0.6875rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          font-weight: 600;
+          color: var(--app-text-muted);
+        }
+
+        .chapter-title {
+          font-size: 0.8125rem;
+          line-height: 1.25;
+          color: var(--app-text);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      }
+
+      .chapter-badge {
+        font-size: 0.6875rem;
+        padding: 0.15rem 0.4rem;
+        border-radius: 4px;
+        background: var(--app-nested-bg);
+        border: 1px solid var(--app-border);
+        color: var(--app-text-muted);
+        font-family: 'JetBrains Mono', monospace;
+        flex-shrink: 0;
+      }
+    }
+
+    .no-results {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--app-text-muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+
+      mat-icon {
+        font-size: 2rem;
+        width: 2rem;
+        height: 2rem;
+      }
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Center Main Content
+// -----------------------------------------------------------------------------
+.docs-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 2rem 2.5rem 4rem;
+
+  @media (max-width: 768px) {
+    padding: 1.5rem 1rem 3rem;
+  }
+
+  .doc-article {
+    flex: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    min-width: 0;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Article Typography & Elements
+// -----------------------------------------------------------------------------
+.article-header {
+  border-bottom: 1px solid var(--app-border);
+  padding-bottom: 1.5rem;
+  margin-bottom: 2rem;
+
+  .article-breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8125rem;
+    color: var(--app-text-muted);
+    margin-bottom: 0.75rem;
+
+    a {
+      color: var(--app-text-muted);
+      text-decoration: none;
+      transition: color 0.15s;
+
+      &:hover {
+        color: var(--app-primary);
+      }
+    }
+
+    mat-icon {
+      font-size: 0.875rem;
+      width: 0.875rem;
+      height: 0.875rem;
+    }
+
+    span {
+      color: var(--app-text);
+      font-weight: 500;
+    }
+  }
+
+  .article-title {
+    font-size: 2.25rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: var(--app-text);
+    margin: 0 0 0.75rem;
+    line-height: 1.2;
+
+    @media (max-width: 640px) {
+      font-size: 1.75rem;
+    }
+  }
+
+  .article-summary {
+    font-size: 1.125rem;
+    color: var(--app-text-muted);
+    line-height: 1.5;
+    margin: 0 0 1.25rem;
+  }
+
+  .article-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    font-size: 0.75rem;
+    color: var(--app-text-muted);
+
+    .meta-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+
+      mat-icon {
+        font-size: 0.95rem;
+        width: 0.95rem;
+        height: 0.95rem;
+        color: var(--app-primary);
+      }
+    }
+  }
+}
+
+.chapter-body {
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--app-text);
+    margin: 2.25rem 0 0.875rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--app-border);
+    scroll-margin-top: 80px;
+
+    &:first-of-type {
+      border-top: none;
+      margin-top: 0;
+      padding-top: 0;
+    }
+  }
+
+  h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--app-text);
+    margin: 1.5rem 0 0.5rem;
+    scroll-margin-top: 80px;
+  }
+
+  p {
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: var(--app-text);
+    margin: 0 0 1rem;
+  }
+
+  ul, ol {
+    margin: 0 0 1.25rem;
+    padding-left: 1.5rem;
+
+    li {
+      font-size: 0.9375rem;
+      line-height: 1.65;
+      color: var(--app-text);
+      margin-bottom: 0.4rem;
+    }
+  }
+
+  strong {
+    font-weight: 600;
+    color: var(--app-text);
+  }
+
+  code:not(pre code) {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.84em;
+    background: var(--app-nested-bg);
+    color: var(--app-primary);
+    padding: 0.15rem 0.35rem;
+    border-radius: 4px;
+    border: 1px solid var(--app-border);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Callouts / Admonitions
+// -----------------------------------------------------------------------------
+.callout {
+  display: flex;
+  gap: 0.875rem;
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  margin: 1.25rem 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+
+  .callout-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    padding-top: 0.1rem;
+
+    mat-icon {
+      font-size: 1.25rem;
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+  }
+
+  .callout-body {
+    flex: 1;
+
+    strong {
+      display: inline-block;
+      margin-bottom: 0.25rem;
+    }
+  }
+
+  &.callout-tip {
+    background: rgba(0, 229, 255, 0.08);
+    border: 1px solid rgba(0, 229, 255, 0.3);
+    color: var(--app-text);
+
+    .callout-icon mat-icon {
+      color: #00bcd4;
+    }
+  }
+
+  &.callout-note {
+    background: rgba(147, 51, 234, 0.08);
+    border: 1px solid rgba(147, 51, 234, 0.3);
+    color: var(--app-text);
+
+    .callout-icon mat-icon {
+      color: #a855f7;
+    }
+  }
+
+  &.callout-warning {
+    background: rgba(255, 87, 34, 0.08);
+    border: 1px solid rgba(255, 87, 34, 0.3);
+    color: var(--app-text);
+
+    .callout-icon mat-icon {
+      color: #ff5722;
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Code Blocks
+// -----------------------------------------------------------------------------
+.code-block {
+  background: var(--app-code-bg);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  margin: 1.25rem 0;
+  overflow: hidden;
+
+  .code-header,
+  .code-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.875rem;
+    background: var(--app-nested-bg);
+    border-bottom: 1px solid var(--app-border);
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--app-text-muted);
+
+    span {
+      font-weight: 500;
+      color: var(--app-text-muted);
+    }
+
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
+      border-radius: 6px;
+      padding: 0.25rem 0.625rem;
+      min-block-size: 28px;
+      font-size: 0.75rem;
+      color: var(--app-text-muted);
+      cursor: pointer;
+      transition: all 0.15s ease-in-out;
+
+      &:focus-visible {
+        outline: 2px solid var(--app-primary) !important;
+        outline-offset: 2px !important;
+      }
+
+      &:hover {
+        background: var(--app-surface-hover);
+        color: var(--app-text);
+        border-color: var(--app-primary-border);
+      }
+
+      &:active {
+        transform: scale(0.97);
+      }
+
+      mat-icon {
+        font-size: 0.875rem;
+        width: 0.875rem;
+        height: 0.875rem;
+      }
+    }
+  }
+
+  pre {
+    margin: 0;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    background: transparent;
+    scrollbar-width: thin;
+    scrollbar-color: var(--app-border) transparent;
+
+    &::-webkit-scrollbar {
+      height: 6px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: var(--app-border);
+      border-radius: 3px;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      color: var(--app-code-text);
+      background: transparent;
+      border: none;
+      padding: 0;
+      white-space: pre;
+    }
+  }
+}
+
+pre.code-block-inner {
+  margin: 1.25rem 0;
+  padding: 1rem 1.25rem;
+  background: var(--app-code-bg);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--app-code-text);
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border) transparent;
+
+  &::-webkit-scrollbar {
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--app-border);
+    border-radius: 3px;
+  }
+
+  code {
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    background: transparent;
+    border: none;
+    padding: 0;
+    white-space: pre;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Spec Tables
+// -----------------------------------------------------------------------------
+.table-responsive,
+.spec-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  border-radius: 8px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border) transparent;
+
+  &::-webkit-scrollbar {
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--app-border);
+    border-radius: 3px;
+  }
+
+  .spec-table {
+    width: 100%;
+    min-width: 500px;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    text-align: left;
+
+    thead {
+      background: var(--app-nested-bg);
+
+      th {
+        padding: 0.875rem 1rem;
+        font-weight: 600;
+        font-size: 0.8125rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--app-text);
+        border-bottom: 1px solid var(--app-border);
+        white-space: nowrap;
+      }
+    }
+
+    tbody {
+      tr {
+        border-bottom: 1px solid var(--app-border);
+        transition: background-color 0.15s;
+
+        &:last-child {
+          border-bottom: none;
+        }
+
+        &:hover {
+          background-color: var(--app-surface-hover);
+        }
+
+        td {
+          padding: 0.75rem 1rem;
+          color: var(--app-text);
+          line-height: 1.5;
+
+          &.accent-cell {
+            font-weight: 600;
+            color: var(--app-primary);
+            font-family: 'JetBrains Mono', monospace;
+          }
+
+          code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82em;
+            background: var(--app-nested-bg);
+            color: var(--app-primary);
+            padding: 0.15rem 0.35rem;
+            border-radius: 4px;
+            border: 1px solid var(--app-border);
+          }
+        }
+      }
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Architecture Cards
+// -----------------------------------------------------------------------------
+.arch-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0;
+
+  .arch-card {
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    padding: 1.25rem;
+
+    .arch-title {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--app-text);
+      margin: 0 0 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+
+      mat-icon {
+        color: var(--app-primary);
+        font-size: 1.1rem;
+        width: 1.1rem;
+        height: 1.1rem;
+      }
+    }
+
+    .arch-desc {
+      font-size: 0.8125rem;
+      color: var(--app-text-muted);
+      line-height: 1.5;
+      margin: 0;
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Article Footer
+// -----------------------------------------------------------------------------
+.article-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--app-border);
+
+  .article-nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+
+    @media (max-width: 640px) {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .back-link, .repo-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      min-block-size: 44px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--app-text);
+      text-decoration: none;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--app-border);
+      background: var(--app-surface);
+      transition: all 0.15s;
+
+      @media (max-width: 640px) {
+        width: 100%;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--app-primary) !important;
+        outline-offset: 2px !important;
+      }
+
+      &:active {
+        transform: scale(0.98);
+      }
+
+      &:hover {
+        background: var(--app-surface-hover);
+        border-color: var(--app-primary);
+        color: var(--app-primary);
+      }
+
+      mat-icon {
+        font-size: 1.1rem;
+        width: 1.1rem;
+        height: 1.1rem;
+      }
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Right Sidebar: On This Page Table of Contents
+// -----------------------------------------------------------------------------
+.toc-sidebar {
+  width: 240px;
+  min-width: 240px;
+  flex-shrink: 0;
+  margin-left: 2rem;
+  position: sticky;
+  top: 64px;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  align-self: flex-start;
+  padding: 1.5rem 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border) transparent;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--app-border);
+    border-radius: 2px;
+  }
+
+  .toc-sticky-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+
+    .toc-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 700;
+      color: var(--app-text-muted);
+      margin: 0;
+    }
+
+    .toc-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+
+      li {
+        .toc-link {
+          background: transparent;
+          border: none;
+          padding: 0.2rem 0;
+          text-align: left;
+          font-size: 0.8125rem;
+          color: var(--app-text-muted);
+          cursor: pointer;
+          transition: color 0.15s;
+          display: block;
+          width: 100%;
+          line-height: 1.4;
+
+          &:hover {
+            color: var(--app-primary);
+          }
+        }
+      }
+    }
+  }
+}
+

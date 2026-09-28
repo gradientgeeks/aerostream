@@ -10,8 +10,17 @@ vendor/
 
 # Rust
 target/
+**/target/
 **/*.rs.bk
 *.pdb
+
+# Java & Maven
+.m2/
+**/.m2/
+*.class
+*.jar
+*.war
+*.ear
 
 # Binaries
 bin/
@@ -37,3 +46,19 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+.claude/
+.agents/
+**/.agents/
+
+# Python
+.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# .NET
+obj/
+**/obj/
+benchmarks/comparison/results

@@ -28,7 +28,7 @@ import { AclService } from '../../services/acl.service';
 })
 export class CreateAclDialogComponent {
   private readonly fb = inject(FormBuilder);
-  private readonly aclService = inject(AclService);
+  protected readonly aclService = inject(AclService);
   private readonly dialogRef = inject(MatDialogRef<CreateAclDialogComponent>);
 
   readonly isSubmitting = signal<boolean>(false);

@@ -1,10 +1,38 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tracing::info;
+use tokio::sync::{Mutex, RwLock};
+use tracing::{debug, info, warn};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PartitionKey {
+    pub topic: String,
+    pub partition: u32,
+}
+
+impl PartitionKey {
+    pub fn new(topic: impl Into<String>, partition: u32) -> Self {
+        Self {
+            topic: topic.into(),
+            partition,
+        }
+    }
+}
+
+impl std::hash::Hash for PartitionKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.topic.hash(state);
+        self.partition.hash(state);
+    }
+}
+
+impl hashbrown::Equivalent<PartitionKey> for (&str, u32) {
+    fn equivalent(&self, key: &PartitionKey) -> bool {
+        self.0 == key.topic.as_str() && self.1 == key.partition
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct LogSegment {
@@ -24,6 +52,20 @@ pub struct PartitionLog {
     pub active_log_file: File,
     pub active_idx_file: File,
     pub next_offset: u64,
+    // Tracked sizes of the active segment files (avoid a metadata()/lseek syscall per append).
+    active_len: u64,
+    active_idx_len: u64,
+    last_retention_check: std::time::Instant,
+    /// Start of the active-segment byte range whose writeback has not been started yet.
+    writeback_start: u64,
+    /// Start of the range handed to writeback on the previous step (dropped from the page cache next time).
+    writeback_prev_start: u64,
+    /// Start writeback every this many bytes (0 disables). See `write_back_progress`.
+    pub writeback_bytes: u64,
+    /// After a range has been written back, drop it from the page cache (POSIX_FADV_DONTNEED).
+    pub drop_cache_after_writeback: bool,
+    /// Woken after every append so long-polling Fetch requests (min_bytes / max_wait_ms) can re-check.
+    pub append_notify: Option<Arc<tokio::sync::Notify>>,
 
     // Configurations
     pub max_segment_size: u64,
@@ -53,6 +95,9 @@ pub struct PartitionLog {
     // Idempotent producer sequence tracking
     pub producer_tracker: ProducerStateTracker,
     pub producer_states: HashMap<i64, ProducerState>,
+
+    // Transaction index (ongoing txns for LSO, aborted txns for read_committed fetch)
+    pub txn_index: crate::txn::PartitionTxnIndex,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -152,9 +197,11 @@ impl PartitionLog {
             active_seg.base_offset
         };
 
-        // Put seek back to end
-        active_idx_file.seek(SeekFrom::End(0))?;
+        // Appends use positioned writes at the tracked lengths
+        let active_len = active_log_file.metadata()?.len();
+        let active_idx_len = index_len;
 
+        let partition_dir_for_txn = partition_dir.clone();
         let mut log = Self {
             topic: topic.to_string(),
             partition,
@@ -163,12 +210,20 @@ impl PartitionLog {
             active_log_file,
             active_idx_file,
             next_offset,
+            active_len,
+            active_idx_len,
+            last_retention_check: std::time::Instant::now(),
+            writeback_start: active_len,
+            writeback_prev_start: active_len,
+            writeback_bytes: 0,
+            drop_cache_after_writeback: false,
+            append_notify: None,
             max_segment_size,
             broker_id,
             storage_base_dir,
             max_retention_size,
             max_retention_age,
-            compaction_enabled: true,
+            compaction_enabled: false,
             dirty_ratio_threshold: 0.5,
             tombstone_retention: std::time::Duration::from_secs(86400),
             offload_tx: None,
@@ -178,6 +233,7 @@ impl PartitionLog {
             replica_ids: Vec::new(),
             producer_tracker: ProducerStateTracker::new(),
             producer_states: HashMap::new(),
+            txn_index: crate::txn::PartitionTxnIndex::open(&partition_dir_for_txn),
         };
         log.recompute_high_watermark();
         Ok(log)
@@ -200,17 +256,19 @@ impl PartitionLog {
     }
 
     pub fn recompute_high_watermark(&mut self) {
-        let other_replicas: Vec<u32> = self.replica_ids.iter().copied().filter(|&id| id != self.broker_id).collect();
-        if other_replicas.is_empty() {
+        let has_other_replicas = self.replica_ids.iter().any(|&id| id != self.broker_id);
+        if !has_other_replicas {
             self.high_watermark = self.next_offset;
             return;
         }
 
         let mut min_offset = self.next_offset;
-        for rep_id in other_replicas {
-            let rep_offset = self.replica_offsets.get(&rep_id).copied().unwrap_or(0);
-            if rep_offset < min_offset {
-                min_offset = rep_offset;
+        for &rep_id in &self.replica_ids {
+            if rep_id != self.broker_id {
+                let rep_offset = self.replica_offsets.get(&rep_id).copied().unwrap_or(0);
+                if rep_offset < min_offset {
+                    min_offset = rep_offset;
+                }
             }
         }
         self.high_watermark = min_offset;
@@ -290,29 +348,89 @@ impl PartitionLog {
     }
 
     pub fn append(&mut self, data: &[u8]) -> io::Result<u64> {
-        let cur_len = self.active_log_file.metadata()?.len();
-        if cur_len + data.len() as u64 > self.max_segment_size && cur_len > 0 {
+        use std::os::unix::fs::FileExt;
+
+        let mut rolled = false;
+        if self.active_len + data.len() as u64 > self.max_segment_size && self.active_len > 0 {
             self.roll_over()?;
+            rolled = true;
         }
 
-        let pos = self.active_log_file.metadata()?.len();
-        // Seek to end before writing (append mode manually simulated for flexibility)
-        self.active_log_file.seek(SeekFrom::End(0))?;
-        self.active_log_file.write_all(data)?;
-        self.active_log_file.flush()?;
+        // Positioned writes at the tracked lengths: no metadata(), lseek or split index writes per record.
+        let pos = self.active_len;
+        self.active_log_file.write_all_at(data, pos)?;
+        self.active_len += data.len() as u64;
+        self.write_back_progress();
 
         let offset = self.next_offset;
-        self.active_idx_file.seek(SeekFrom::End(0))?;
-        self.active_idx_file.write_all(&offset.to_be_bytes())?;
-        self.active_idx_file.write_all(&pos.to_be_bytes())?;
-        self.active_idx_file.flush()?;
+        let mut entry = [0u8; 16];
+        entry[..8].copy_from_slice(&offset.to_be_bytes());
+        entry[8..].copy_from_slice(&pos.to_be_bytes());
+        self.active_idx_file.write_all_at(&entry, self.active_idx_len)?;
+        self.active_idx_len += 16;
 
         self.next_offset += 1;
 
-        // Clean up retention
-        self.clean_retention()?;
+        // Retention is enforced on a timer (like Kafka's log cleaner) and after a roll, not after every record:
+        // it stats every segment file.
+        if rolled || self.last_retention_check.elapsed() >= std::time::Duration::from_secs(1) {
+            self.clean_retention()?;
+            self.last_retention_check = std::time::Instant::now();
+        }
 
         self.recompute_high_watermark();
+        if let Some(n) = &self.append_notify {
+            n.notify_waiters();
+        }
+        Ok(offset)
+    }
+
+    /// Appends a raw record batch slice with in-place base-offset patching directly on disk.
+    /// This bypasses heap cloning of large multi-megabyte record batches.
+    ///
+    /// `record_count` is the number of Kafka records the batch actually contains (its offsets span
+    /// `[base_offset, base_offset + record_count)`), even though it is stored as a single log entry. Pass `1` for
+    /// a single-record batch; a caller storing a whole multi-record batch as one entry (skipping per-record
+    /// `append()`, safe only when nothing needs a distinct offset per record — see `txn::produce::append_payload`)
+    /// must pass the real count so `next_offset` advances correctly and `range_bounds` can find offsets inside the
+    /// batch, not just its base offset.
+    pub fn append_batch_slice(&mut self, base_offset: i64, batch: &[u8], record_count: u64) -> io::Result<u64> {
+        use std::os::unix::fs::FileExt;
+
+        let mut rolled = false;
+        if self.active_len + batch.len() as u64 > self.max_segment_size && self.active_len > 0 {
+            self.roll_over()?;
+            rolled = true;
+        }
+
+        let pos = self.active_len;
+        // In-place base offset patching directly at disk position without cloning the batch:
+        let off_bytes = base_offset.to_be_bytes();
+        self.active_log_file.write_all_at(&off_bytes, pos)?;
+        if batch.len() > 8 {
+            self.active_log_file.write_all_at(&batch[8..], pos + 8)?;
+        }
+        self.active_len += batch.len() as u64;
+        self.write_back_progress();
+
+        let offset = self.next_offset;
+        let mut entry = [0u8; 16];
+        entry[..8].copy_from_slice(&offset.to_be_bytes());
+        entry[8..].copy_from_slice(&pos.to_be_bytes());
+        self.active_idx_file.write_all_at(&entry, self.active_idx_len)?;
+        self.active_idx_len += 16;
+
+        self.next_offset += record_count.max(1);
+
+        if rolled || self.last_retention_check.elapsed() >= std::time::Duration::from_secs(1) {
+            self.clean_retention()?;
+            self.last_retention_check = std::time::Instant::now();
+        }
+
+        self.recompute_high_watermark();
+        if let Some(n) = &self.append_notify {
+            n.notify_waiters();
+        }
         Ok(offset)
     }
 
@@ -344,38 +462,132 @@ impl PartitionLog {
         crate::log::compactor::compute_dirty_ratio(closed, self.tombstone_retention)
     }
 
+    /// Paced writeback of the active segment (like RocksDB's `bytes_per_sync`).
+    ///
+    /// Appends only dirty the page cache. Left alone, dirty pages pile up until the kernel (or, in a container, the
+    /// memory cgroup limit) forces the writer to wait for a large flush, which shows up as multi-second stalls. Every
+    /// `writeback_bytes` we ask the kernel to start writing the newly appended range (`SYNC_FILE_RANGE_WRITE`, does not
+    /// wait). With `drop_cache_after_writeback`, the range started on the previous step is waited for and dropped from
+    /// the page cache, which caps the broker's page-cache footprint and throttles the writer to the disk's speed.
+    fn write_back_progress(&mut self) {
+        if self.writeback_bytes == 0 || self.active_len - self.writeback_start < self.writeback_bytes {
+            return;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::io::AsRawFd;
+            let fd = self.active_log_file.as_raw_fd();
+            let (start, len) = (self.writeback_start, self.active_len - self.writeback_start);
+            // SAFETY: plain syscalls on a valid, open file descriptor; failures are only advisory.
+            unsafe {
+                libc::sync_file_range(fd, start as libc::off64_t, len as libc::off64_t, libc::SYNC_FILE_RANGE_WRITE);
+                if self.drop_cache_after_writeback && self.writeback_prev_start < start {
+                    let (ps, pl) = (self.writeback_prev_start, start - self.writeback_prev_start);
+                    libc::sync_file_range(
+                        fd,
+                        ps as libc::off64_t,
+                        pl as libc::off64_t,
+                        libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER,
+                    );
+                    libc::posix_fadvise(fd, ps as libc::off_t, pl as libc::off_t, libc::POSIX_FADV_DONTNEED);
+                }
+            }
+            self.writeback_prev_start = start;
+        }
+        self.writeback_start = self.active_len;
+    }
+
+    /// Archives a sealed segment into `cold_dir`. A hard link shares the file's data blocks, so this costs no copy and
+    /// no extra page cache, and the archived copy survives retention deleting the local name (compaction replaces
+    /// segment files by rename, so the link keeps the segment exactly as it was sealed). If linking is not possible
+    /// (different filesystem), the segment is copied on a background thread instead of on the append path.
+    /// Archives a just-sealed segment into cold storage (hard link, or a copy if that fails, e.g. across
+    /// filesystems). All of the filesystem work — `create_dir_all`, `hard_link`, and the copy fallback — runs on a
+    /// spawned OS thread, not inline: on a small container (e.g. the 2 vCPU boxes this broker is benchmarked on),
+    /// blocking a Tokio worker thread on directory/inode syscalls here, while `roll_over` still holds the
+    /// partition's lock, can stall every other partition's produce/fetch too if enough segments roll around the
+    /// same time. Nothing here needs to finish before the roll completes: the sealed segment's original path stays
+    /// valid and readable until retention removes it later.
+    ///
+    /// The two source files are opened *synchronously*, before returning, exactly as the old copy-fallback path
+    /// already did: retention (running under the same partition lock on a later append) could delete the sealed
+    /// segment's path before the spawned thread gets to it, and an open file descriptor keeps the underlying data
+    /// readable even after its directory entry is removed (standard POSIX unlink-after-open semantics), so the
+    /// copy fallback stays correct regardless of the race. `hard_link` itself needs the path to still exist, so
+    /// it's attempted first inside the spawned thread and only falls back to copying via the open handles if that
+    /// path is already gone.
+    fn archive_sealed_segment(&self, seg: &LogSegment) -> io::Result<()> {
+        let src_log = File::open(&seg.log_path)?;
+        let src_idx = File::open(&seg.idx_path)?;
+
+        let cold_dir = self.cold_dir();
+        let offload_tx = self.offload_tx.clone();
+        let topic = self.topic.clone();
+        let partition = self.partition;
+        let seg = seg.clone();
+
+        std::thread::spawn(move || {
+            if let Err(e) = fs::create_dir_all(&cold_dir) {
+                warn!("[AeroMQ Broker] Failed to create cold storage dir {:?}: {}", cold_dir, e);
+                return;
+            }
+            let cold_log_path = cold_dir.join(format!("{:020}.log", seg.base_offset));
+            let cold_idx_path = cold_dir.join(format!("{:020}.idx", seg.base_offset));
+            let _ = fs::remove_file(&cold_log_path);
+            let _ = fs::remove_file(&cold_idx_path);
+
+            let offload = offload_tx.map(|tx| {
+                (tx, crate::storage::offloader::OffloadTask::new(
+                    &topic, partition, seg.base_offset, &cold_log_path, &cold_idx_path,
+                ))
+            });
+
+            if fs::hard_link(&seg.log_path, &cold_log_path).is_ok() && fs::hard_link(&seg.idx_path, &cold_idx_path).is_ok() {
+                debug!("[AeroMQ Broker] Segment {} sealed; linked into cold storage {:?}", seg.base_offset, cold_log_path);
+                if let Some((tx, task)) = offload {
+                    let _ = tx.try_send(task);
+                }
+                return;
+            }
+            let _ = fs::remove_file(&cold_log_path);
+            let copy = || -> io::Result<()> {
+                io::copy(&mut &src_log, &mut File::create(&cold_log_path)?)?;
+                io::copy(&mut &src_idx, &mut File::create(&cold_idx_path)?)?;
+                Ok(())
+            };
+            match copy() {
+                Ok(()) => {
+                    info!("[AeroMQ Broker] Segment {} copied to cold storage {:?} (background)", seg.base_offset, cold_log_path);
+                    if let Some((tx, task)) = offload {
+                        let _ = tx.try_send(task);
+                    }
+                }
+                Err(e) => warn!("[AeroMQ Broker] Background cold-storage copy of segment {} failed: {}", seg.base_offset, e),
+            }
+        });
+        Ok(())
+    }
+
     fn roll_over(&mut self) -> io::Result<()> {
         self.active_log_file.flush()?;
         self.active_idx_file.flush()?;
 
         let old_active_seg = self.segments.last().unwrap().clone();
 
-        // Copy old segment to cold storage
-        let cold_dir = self.cold_dir();
-
-        fs::create_dir_all(&cold_dir)?;
-        
-        let cold_log_path = cold_dir.join(format!("{:020}.log", old_active_seg.base_offset));
-        let cold_idx_path = cold_dir.join(format!("{:020}.idx", old_active_seg.base_offset));
-        
-        fs::copy(&old_active_seg.log_path, &cold_log_path)?;
-        fs::copy(&old_active_seg.idx_path, &cold_idx_path)?;
-        info!(
-            "[AeroMQ Broker] Segment {} rolled over and copied to cold storage: {:?}",
-            old_active_seg.base_offset, cold_log_path
-        );
-
-        // Dispatch offload task to tiered object storage if configured
-        if let Some(ref tx) = self.offload_tx {
-            let task = crate::storage::offloader::OffloadTask::new(
-                &self.topic,
-                self.partition,
-                old_active_seg.base_offset,
-                &cold_log_path,
-                &cold_idx_path,
-            );
-            let _ = tx.try_send(task);
+        // Start writeback of the unflushed tail of the sealed segment, then archive it (link, no data copy).
+        if self.writeback_bytes > 0 && self.active_len > self.writeback_start {
+            #[cfg(target_os = "linux")]
+            unsafe {
+                use std::os::unix::io::AsRawFd;
+                libc::sync_file_range(
+                    self.active_log_file.as_raw_fd(),
+                    self.writeback_start as libc::off64_t,
+                    (self.active_len - self.writeback_start) as libc::off64_t,
+                    libc::SYNC_FILE_RANGE_WRITE,
+                );
+            }
         }
+        self.archive_sealed_segment(&old_active_seg)?;
 
         // Create new active segment
         let new_base_offset = self.next_offset;
@@ -396,6 +608,10 @@ impl PartitionLog {
 
         self.active_log_file = new_log_file;
         self.active_idx_file = new_idx_file;
+        self.active_len = 0;
+        self.active_idx_len = 0;
+        self.writeback_start = 0;
+        self.writeback_prev_start = 0;
 
         self.segments.push(LogSegment {
             base_offset: new_base_offset,
@@ -632,6 +848,167 @@ impl PartitionLog {
 
         Ok(Some((log_file, position, bytes_to_read)))
     }
+
+    /// Segment that holds `offset` (local first, then cold storage).
+    fn segment_for_offset(&self, offset: u64) -> io::Result<Option<LogSegment>> {
+        if !self.segments.is_empty() && offset >= self.segments[0].base_offset {
+            let i = self.segments.partition_point(|s| s.base_offset <= offset);
+            if i > 0 {
+                return Ok(Some(self.segments[i - 1].clone()));
+            }
+        }
+        self.find_cold_segment(offset)
+    }
+
+    /// Reads a contiguous run of log entries for a Fetch: from the entry holding the first offset >= `start_offset`
+    /// up to (excluding) `end_offset` (high watermark / LSO), limited to `max_bytes` but always including at least
+    /// the whole first entry (Kafka semantics since KIP-74). Stays within one segment; the next Fetch continues.
+    ///
+    /// Entries for consecutive offsets are stored back to back in the segment file, so the result is one byte range.
+    /// Returns (file, position, length, length of the first entry).
+    pub fn read_range(
+        &mut self,
+        start_offset: u64,
+        end_offset: u64,
+        max_bytes: u32,
+    ) -> io::Result<Option<(File, u64, u32, u32)>> {
+        let r = match self.range_bounds(start_offset, end_offset, max_bytes)? {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+        let first_len = r.end_pos_of(r.first + 1)? - r.pos;
+        Ok(Some((r.log, r.pos, (r.end - r.pos) as u32, first_len as u32)))
+    }
+
+    /// Like `read_range`, but also returns `(offset, length)` of every entry in the region, read from the index
+    /// with one positioned read. The native multi-entry Fetch sends this table ahead of the (sendfile) data.
+    pub fn read_range_entries(
+        &mut self,
+        start_offset: u64,
+        end_offset: u64,
+        max_bytes: u32,
+    ) -> io::Result<Option<(File, u64, u32, Vec<(u64, u32)>)>> {
+        use std::os::unix::fs::FileExt;
+        let r = match self.range_bounds(start_offset, end_offset, max_bytes)? {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+        let mut raw = vec![0u8; ((r.k - r.first) * 16) as usize];
+        r.idx.read_exact_at(&mut raw, r.first * 16)?;
+        let mut entries = Vec::with_capacity(raw.len() / 16);
+        for (i, e) in raw.chunks_exact(16).enumerate() {
+            let off = u64::from_be_bytes(e[0..8].try_into().unwrap());
+            let pos = u64::from_be_bytes(e[8..16].try_into().unwrap());
+            let next = if i + 1 < raw.len() / 16 {
+                u64::from_be_bytes(raw[(i + 1) * 16 + 8..(i + 2) * 16].try_into().unwrap())
+            } else {
+                r.end
+            };
+            entries.push((off, (next - pos) as u32));
+        }
+        Ok(Some((r.log, r.pos, (r.end - r.pos) as u32, entries)))
+    }
+
+    /// Locates the contiguous index entries `[first, k)` of one segment for `read_range`: offsets in
+    /// `[start_offset, end_offset)`, total size within `max_bytes` (at least one entry).
+    fn range_bounds(&mut self, start_offset: u64, end_offset: u64, max_bytes: u32) -> io::Result<Option<RangeBounds>> {
+        use std::os::unix::fs::FileExt;
+        // start_offset >= next_offset means nothing has been written there yet: with the "last entry <= start_offset"
+        // search below, that would otherwise wrongly match the log's last real entry (its offset is < next_offset
+        // <= start_offset) and return stale data instead of "no data available". The old ">= start_offset" search
+        // caught this case implicitly (no entry qualifies), so this keeps that behavior explicit under the new search.
+        if start_offset >= end_offset || start_offset >= self.next_offset {
+            return Ok(None);
+        }
+        let seg = match self.segment_for_offset(start_offset)? {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        let idx = File::open(&seg.idx_path)?;
+        let n = idx.metadata()?.len() / 16;
+        if n == 0 {
+            return Ok(None);
+        }
+        let entry = |i: u64| -> io::Result<(u64, u64)> {
+            let mut b = [0u8; 16];
+            idx.read_exact_at(&mut b, i * 16)?;
+            Ok((u64::from_be_bytes(b[0..8].try_into().unwrap()), u64::from_be_bytes(b[8..16].try_into().unwrap())))
+        };
+        // The last index entry with offset <= start_offset: the entry whose batch *contains* start_offset, whether
+        // or not it has its own exact entry. Every offset has an exact entry when 1 record == 1 entry (native
+        // protocol; idempotent/transactional or compacted-topic Kafka batches), where this picks the same entry a
+        // ">= start_offset" search would have — it only matters once a batch stores multiple records as one entry
+        // (see `append_batch_slice`'s `record_count`), where a ">= start_offset" search would skip past the
+        // containing entry to the next one and silently miss data for any offset that isn't the batch's base.
+        let (mut lo, mut hi) = (0u64, n);
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            if entry(mid)?.0 > start_offset { hi = mid; } else { lo = mid + 1; }
+        }
+        if lo == 0 {
+            // start_offset is before the earliest entry in this segment: nothing to clamp to, fall back to the
+            // first entry (matches the previous behavior for an out-of-range-low start_offset).
+            lo = 1;
+        }
+        let first = lo - 1;
+        if first >= n {
+            return Ok(None);
+        }
+        let (_, pos) = entry(first)?;
+        let log = File::open(&seg.log_path)?;
+        let log_len = log.metadata()?.len();
+        let end_pos_of = |k: u64| -> io::Result<u64> { if k < n { Ok(entry(k)?.1) } else { Ok(log_len) } };
+
+        // entries [first, k_off) have offset < end_offset. Unlike `first`'s search above, this one can stay a
+        // ">= end_offset" search: `end_offset` is always an exact entry boundary, never mid-batch. With no other
+        // replicas, high_watermark == next_offset exactly (see recompute_high_watermark); with replicas, a
+        // follower's reported offset is always one it computed from whole entries read_range/read_range_entries
+        // handed it (they never return a partial entry), so it always lands on an entry boundary too.
+        let (mut lo, mut hi) = (first + 1, n);
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            if entry(mid)?.0 >= end_offset { hi = mid; } else { lo = mid + 1; }
+        }
+        let k_off = lo;
+        // largest k in (first, k_off] whose end position fits in max_bytes; at least first + 1
+        let limit = pos + max_bytes as u64;
+        let (mut lo, mut hi) = (first + 1, k_off);
+        while lo < hi {
+            let mid = hi - (hi - lo) / 2;
+            if end_pos_of(mid)? <= limit { lo = mid; } else { hi = mid - 1; }
+        }
+        let k = lo;
+        let end = end_pos_of(k)?;
+        if end <= pos {
+            return Ok(None);
+        }
+        Ok(Some(RangeBounds { idx, log, log_len, n, first, k, pos, end }))
+    }
+}
+
+/// Result of `PartitionLog::range_bounds`: index entries `[first, k)` of one segment, data bytes `[pos, end)`.
+struct RangeBounds {
+    idx: File,
+    log: File,
+    log_len: u64,
+    n: u64,
+    first: u64,
+    k: u64,
+    pos: u64,
+    end: u64,
+}
+
+impl RangeBounds {
+    /// Start position of index entry `i`, or the log length past the last entry.
+    fn end_pos_of(&self, i: u64) -> io::Result<u64> {
+        use std::os::unix::fs::FileExt;
+        if i >= self.n {
+            return Ok(self.log_len);
+        }
+        let mut b = [0u8; 8];
+        self.idx.read_exact_at(&mut b, i * 16 + 8)?;
+        Ok(u64::from_be_bytes(b))
+    }
 }
 
 pub struct LogManager {
@@ -650,7 +1027,18 @@ pub struct LogManager {
     pub offload_tx: Option<tokio::sync::mpsc::Sender<crate::storage::offloader::OffloadTask>>,
     pub tiered_provider: Option<Arc<dyn crate::storage::TieredStorageProvider>>,
 
-    partitions: Mutex<HashMap<(String, u32), Arc<Mutex<PartitionLog>>>>,
+    // Paced writeback (see PartitionLog::write_back_progress)
+    pub writeback_bytes: u64,
+    pub drop_cache_after_writeback: bool,
+    /// Shared notifier for appends on any partition (see PartitionLog::append_notify).
+    pub append_notify: Arc<tokio::sync::Notify>,
+
+    partitions: RwLock<HashMap<PartitionKey, Arc<Mutex<PartitionLog>>>>,
+
+    /// Lazily-created transaction coordinator (see `crate::txn`).
+    pub txn_coord: std::sync::OnceLock<Arc<crate::txn::TxnCoordinator>>,
+    /// Lazily-created share-group coordinator (see `crate::share`).
+    pub share_coord: std::sync::OnceLock<Arc<crate::share::ShareCoordinator>>,
 }
 
 impl LogManager {
@@ -661,13 +1049,22 @@ impl LogManager {
             max_segment_size: 210, // 210 bytes default for testing/prototype segment rolling
             max_retention_size: Some(256 * 1024), // 256KB default
             max_retention_age: Some(std::time::Duration::from_secs(3600)), // 1 hour default
-            compaction_enabled: true,
+            compaction_enabled: false,
             dirty_ratio_threshold: 0.5,
             tombstone_retention: std::time::Duration::from_secs(86400),
             offload_tx: None,
             tiered_provider: None,
-            partitions: Mutex::new(HashMap::new()),
+            writeback_bytes: 0,
+            drop_cache_after_writeback: false,
+            append_notify: Arc::new(tokio::sync::Notify::new()),
+            partitions: RwLock::new(HashMap::new()),
+            txn_coord: std::sync::OnceLock::new(),
+            share_coord: std::sync::OnceLock::new(),
         }
+    }
+
+    pub fn base_dir(&self) -> &Path {
+        &self.base_dir
     }
 
     pub fn with_limits(
@@ -694,6 +1091,12 @@ impl LogManager {
         self
     }
 
+    pub fn with_writeback(mut self, writeback_bytes: u64, drop_cache_after_writeback: bool) -> Self {
+        self.writeback_bytes = writeback_bytes;
+        self.drop_cache_after_writeback = drop_cache_after_writeback;
+        self
+    }
+
     pub fn with_tiered_storage(
         mut self,
         provider: Arc<dyn crate::storage::TieredStorageProvider>,
@@ -705,19 +1108,50 @@ impl LogManager {
     }
 
     pub async fn get_all_offsets(&self) -> Vec<(String, u32, i64)> {
-        let parts = self.partitions.lock().await;
-        let mut offsets = Vec::new();
-        for ((topic, partition), part_log_arc) in parts.iter() {
+        // Snapshot Arc references under shared read lock, then drop the map lock
+        // to prevent lock convoy / inversion with partition locks.
+        let snapshot: Vec<(String, u32, Arc<Mutex<PartitionLog>>)> = {
+            let parts = self.partitions.read().await;
+            parts
+                .iter()
+                .map(|(k, v)| (k.topic.clone(), k.partition, Arc::clone(v)))
+                .collect()
+        }; // <-- Read lock dropped here!
+
+        let mut offsets = Vec::with_capacity(snapshot.len());
+        for (topic, partition, part_log_arc) in snapshot {
             let part_log = part_log_arc.lock().await;
-            offsets.push((topic.clone(), *partition, part_log.next_offset as i64));
+            offsets.push((topic, partition, part_log.next_offset as i64));
         }
         offsets
     }
 
+    /// Lists partition ids of `topic` present on local disk (used by the Iceberg tailer).
+    pub async fn partitions_for_topic(&self, topic: &str) -> Vec<u32> {
+        let mut ids: Vec<u32> = Vec::new();
+        if let Ok(rd) = fs::read_dir(self.base_dir.join(topic)) {
+            for e in rd.flatten() {
+                if let Some(n) = e.file_name().to_str().and_then(|s| s.strip_prefix("partition_")) {
+                    if let Ok(id) = n.parse::<u32>() {
+                        ids.push(id);
+                    }
+                }
+            }
+        }
+        ids.sort_unstable();
+        ids
+    }
+
     pub async fn compact_eligible_partitions(&self) -> io::Result<usize> {
-        let parts = self.partitions.lock().await;
+        // Snapshot Arcs under shared read lock, then drop map lock so compaction
+        // disk I/O does not block incoming partition requests.
+        let eligible: Vec<Arc<Mutex<PartitionLog>>> = {
+            let parts = self.partitions.read().await;
+            parts.values().cloned().collect()
+        }; // <-- Read lock dropped here!
+
         let mut compacted = 0;
-        for part_arc in parts.values() {
+        for part_arc in eligible {
             let mut part = part_arc.lock().await;
             if !part.compaction_enabled {
                 continue;
@@ -743,10 +1177,51 @@ impl LogManager {
         })
     }
 
+    /// Drop all local partitions of `topic` and remove their on-disk directories (used by DeleteTopics).
+    /// Returns the number of partitions removed.
+    pub async fn delete_topic(&self, topic: &str) -> io::Result<usize> {
+        // Extract matching partitions under exclusive write lock, then release map lock
+        // before executing disk deletion and awaiting partition locks.
+        let removed_partitions: Vec<Arc<Mutex<PartitionLog>>> = {
+            let mut parts = self.partitions.write().await;
+            let keys_to_remove: Vec<PartitionKey> = parts
+                .keys()
+                .filter(|k| k.topic == topic)
+                .cloned()
+                .collect();
+            let mut logs = Vec::with_capacity(keys_to_remove.len());
+            for k in keys_to_remove {
+                if let Some(log) = parts.remove(&k) {
+                    logs.push(log);
+                }
+            }
+            logs
+        }; // <-- Write lock dropped here!
+
+        let mut removed = 0;
+        for log in removed_partitions {
+            let dir = log.lock().await.partition_dir.clone();
+            if dir.exists() {
+                std::fs::remove_dir_all(&dir)?;
+            }
+            removed += 1;
+        }
+        Ok(removed)
+    }
+
     pub async fn get_partition(&self, topic: &str, partition: u32) -> io::Result<Arc<Mutex<PartitionLog>>> {
-        let mut parts = self.partitions.lock().await;
-        let key = (topic.to_string(), partition);
-        if let Some(log) = parts.get(&key) {
+        // Fast path: shared read lock with zero-allocation lookup
+        {
+            let parts = self.partitions.read().await;
+            if let Some(log) = parts.get(&(topic, partition)) {
+                return Ok(log.clone());
+            }
+        }
+
+        // Slow path: acquire exclusive write lock to instantiate and insert new partition
+        let mut parts = self.partitions.write().await;
+        // Double-check under write lock
+        if let Some(log) = parts.get(&(topic, partition)) {
             return Ok(log.clone());
         }
 
@@ -764,16 +1239,63 @@ impl LogManager {
         log.tombstone_retention = self.tombstone_retention;
         log.offload_tx = self.offload_tx.clone();
         log.tiered_provider = self.tiered_provider.clone();
+        log.writeback_bytes = self.writeback_bytes;
+        log.drop_cache_after_writeback = self.drop_cache_after_writeback;
+        // Each partition gets its own Notify. A single shared Notify would mean every append to any
+        // partition on the broker wakes every long-polling Fetch on every other partition too (an
+        // O(total waiters) wakeup storm per append).
+        log.append_notify = Some(Arc::new(tokio::sync::Notify::new()));
 
         let shared = Arc::new(Mutex::new(log));
-        parts.insert(key, shared.clone());
+        parts.insert(PartitionKey::new(topic, partition), shared.clone());
         Ok(shared)
     }
 }
 
+#[async_trait::async_trait]
+pub trait PartitionStore: Send + Sync {
+    async fn get_all_offsets(&self) -> Vec<(String, u32, i64)>;
+    async fn partitions_for_topic(&self, topic: &str) -> Vec<u32>;
+    async fn delete_topic(&self, topic: &str) -> std::io::Result<usize>;
+    fn base_dir(&self) -> &std::path::Path;
+    fn broker_id(&self) -> u32;
+}
+
+#[async_trait::async_trait]
+impl PartitionStore for LogManager {
+    async fn get_all_offsets(&self) -> Vec<(String, u32, i64)> {
+        self.get_all_offsets().await
+    }
+    async fn partitions_for_topic(&self, topic: &str) -> Vec<u32> {
+        self.partitions_for_topic(topic).await
+    }
+    async fn delete_topic(&self, topic: &str) -> std::io::Result<usize> {
+        self.delete_topic(topic).await
+    }
+    fn base_dir(&self) -> &std::path::Path {
+        self.base_dir()
+    }
+    fn broker_id(&self) -> u32 {
+        self.broker_id
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Archiving into cold storage now happens on a spawned background thread (see `archive_sealed_segment`), not
+    /// inline with `roll_over`, so tests that check for it must poll instead of asserting immediately.
+    async fn wait_until_exists(path: &Path) {
+        for _ in 0..500 {
+            if path.exists() {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        panic!("{:?} did not appear within 5s of being archived", path);
+    }
 
     #[tokio::test]
     async fn test_segmented_log_rollover_and_cold_storage() {
@@ -814,7 +1336,7 @@ mod tests {
             .join("test-topic")
             .join("partition_0")
             .join(format!("{:020}.log", 0));
-        assert!(cold_log_path.exists());
+        wait_until_exists(&cold_log_path).await;
 
         // Write more to trigger retention deletion of segment 0 locally
         // Total retention limit is 250 bytes.
@@ -843,5 +1365,95 @@ mod tests {
         // Clean up
         let _ = fs::remove_dir_all(&test_dir);
         let _ = fs::remove_dir_all(&cold_dir);
+    }
+
+    #[tokio::test]
+    async fn writeback_and_cache_drop_keep_data_intact_across_rolls() {
+        let dir = tempfile::tempdir().unwrap();
+        let manager = LogManager::new(dir.path(), 7)
+            .with_limits(64 * 1024, None, None)
+            .with_writeback(8 * 1024, true);
+        let part = manager.get_partition("wb", 0).await.unwrap();
+        let mut log = part.lock().await;
+        let payload = |i: u64| vec![(i % 251) as u8; 3000];
+        for i in 0..100u64 {
+            assert_eq!(log.append(&payload(i)).unwrap(), i);
+        }
+        assert!(log.segments.len() > 1, "expected segment rolls");
+        for i in [0u64, 21, 22, 57, 99] {
+            let (file, pos, len) = log.read_from_offset(i, 3000).unwrap().unwrap();
+            let mut buf = vec![0u8; len as usize];
+            std::os::unix::fs::FileExt::read_exact_at(&file, &mut buf, pos).unwrap();
+            assert_eq!(buf, payload(i), "offset {}", i);
+        }
+    }
+
+    #[tokio::test]
+    async fn sealed_segment_is_hard_linked_into_cold_storage() {
+        use std::os::unix::fs::MetadataExt;
+        let dir = tempfile::tempdir().unwrap();
+        let manager = LogManager::new(dir.path(), 8).with_limits(100, None, None);
+        let part = manager.get_partition("cold", 0).await.unwrap();
+        let mut log = part.lock().await;
+        log.append(&[1; 60]).unwrap();
+        log.append(&[2; 60]).unwrap(); // rolls segment 0
+        let local = log.segments[0].log_path.clone();
+        let cold = dir.path().join("cold_storage").join("broker_8").join("cold").join("partition_0").join(format!("{:020}.log", 0));
+        wait_until_exists(&cold).await;
+        assert_eq!(fs::metadata(&local).unwrap().ino(), fs::metadata(&cold).unwrap().ino(), "archived by hard link, not copy");
+        fs::remove_file(&local).unwrap(); // as retention would
+        assert_eq!(fs::read(&cold).unwrap(), vec![1u8; 60]);
+    }
+
+    #[tokio::test]
+    async fn read_range_spans_entries_within_bounds() {
+        use std::os::unix::fs::FileExt;
+        let dir = tempfile::tempdir().unwrap();
+        let manager = LogManager::new(dir.path(), 9).with_limits(1 << 20, None, None);
+        let part = manager.get_partition("rr", 0).await.unwrap();
+        let mut log = part.lock().await;
+        for i in 0..20u8 {
+            log.append(&[i; 100]).unwrap();
+        }
+        // offsets 5..12 (end bound), plenty of bytes
+        let (f, pos, len, first) = log.read_range(5, 12, 1 << 20).unwrap().unwrap();
+        assert_eq!((pos, len, first), (500, 700, 100));
+        let mut b = vec![0u8; len as usize];
+        f.read_exact_at(&mut b, pos).unwrap();
+        assert_eq!(b[0], 5);
+        assert_eq!(b[699], 11);
+        // byte limit 350 -> 3 whole entries
+        let (_, _, len, _) = log.read_range(5, 20, 350).unwrap().unwrap();
+        assert_eq!(len, 300);
+        // limit below one entry still returns the whole first entry
+        let (_, _, len, _) = log.read_range(5, 20, 10).unwrap().unwrap();
+        assert_eq!(len, 100);
+        // at / past the end bound: nothing
+        assert!(log.read_range(12, 12, 1 << 20).unwrap().is_none());
+        assert!(log.read_range(20, 25, 1 << 20).unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn read_range_entries_reports_each_entry() {
+        use std::os::unix::fs::FileExt;
+        let dir = tempfile::tempdir().unwrap();
+        let manager = LogManager::new(dir.path(), 9).with_limits(1 << 20, None, None);
+        let part = manager.get_partition("rre", 0).await.unwrap();
+        let mut log = part.lock().await;
+        for i in 0..10u8 {
+            log.append(&vec![i; 10 + i as usize]).unwrap(); // entry i is 10 + i bytes
+        }
+        let (f, pos, len, entries) = log.read_range_entries(3, 7, 1 << 20).unwrap().unwrap();
+        assert_eq!(entries, vec![(3, 13), (4, 14), (5, 15), (6, 16)]);
+        assert_eq!(len, 13 + 14 + 15 + 16);
+        let mut b = vec![0u8; len as usize];
+        f.read_exact_at(&mut b, pos).unwrap();
+        assert_eq!((b[0], b[12], b[13], b[len as usize - 1]), (3, 3, 4, 6));
+        // up to the end of the log, byte limit cuts at whole entries
+        let (_, _, len, entries) = log.read_range_entries(8, 10, 1 << 20).unwrap().unwrap();
+        assert_eq!((len, entries), (18 + 19, vec![(8, 18), (9, 19)]));
+        let (_, _, _, entries) = log.read_range_entries(3, 10, 30).unwrap().unwrap();
+        assert_eq!(entries, vec![(3, 13), (4, 14)]);
+        assert!(log.read_range_entries(10, 10, 1 << 20).unwrap().is_none());
     }
 }

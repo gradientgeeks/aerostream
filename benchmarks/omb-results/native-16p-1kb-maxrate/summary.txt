@@ -1,0 +1,6 @@
+[20:15:10] aerostream:fetchfix ready; driver driver-aerostream/aerostream-native.yaml; workload workloads/aerostream-16p-1kb.yaml
+result aerostream-16p-1kb-AeroStream-Native-2026-09-27-20-17-14.json
+publish avg 21,775 msg/s (21.3 MB/s)  peak 23,886  consume avg 21,776 msg/s  errors 0
+publish latency ms  p50 0.1  p99 13.2  p99.9 64.2  max 110.0
+end-to-end latency ms  p50 53.0  p99 126.0
+broker container peak memory 1313 MiB, peak CPU 218% (limit 200%)

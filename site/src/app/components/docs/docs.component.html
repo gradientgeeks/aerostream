@@ -1,0 +1,808 @@
+<div class="docs-layout">
+  <!-- Mobile Navigation Bar (Small Screens) -->
+  <div class="mobile-doc-bar lg:hidden">
+    <button class="mobile-menu-btn" (click)="toggleMobileSidebar()">
+      <mat-icon>{{ isSidebarMobileOpen() ? 'close' : 'menu' }}</mat-icon>
+      <span>{{ activeSection().title }}</span>
+    </button>
+    <span class="mobile-read-time">{{ activeSection().readTime }}</span>
+  </div>
+
+  <!-- Left Sidebar: Chapter Navigation -->
+  <aside class="docs-sidebar" [class.mobile-open]="isSidebarMobileOpen()">
+    <div class="sidebar-header">
+      <div class="search-input-wrapper">
+        <mat-icon class="search-icon">search</mat-icon>
+        <input
+          type="text"
+          class="sidebar-search-input"
+          placeholder="Filter documentation..."
+          [(ngModel)]="searchQuery"
+          aria-label="Filter documentation"
+        />
+        <button *ngIf="searchQuery()" class="clear-btn" (click)="searchQuery.set('')">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-group" *ngFor="let s of filteredSections()">
+        <button
+          class="nav-chapter-btn"
+          [class.active]="activeSectionId() === s.id"
+          (click)="selectSection(s.id)">
+          <div class="chapter-info">
+            <span class="chapter-category">{{ s.category }}</span>
+            <span class="chapter-title">{{ s.title }}</span>
+          </div>
+          <span class="chapter-badge" *ngIf="s.badge">{{ s.badge }}</span>
+        </button>
+      </div>
+
+      <div class="no-results" *ngIf="filteredSections().length === 0">
+        <mat-icon>search_off</mat-icon>
+        <span>No topics match "{{ searchQuery() }}"</span>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- Center Main Content -->
+  <main class="docs-content">
+    <article class="doc-article">
+      <!-- Article Header -->
+      <header class="article-header">
+        <div class="article-breadcrumbs">
+          <a routerLink="/">Home</a>
+          <mat-icon>chevron_right</mat-icon>
+          <a routerLink="/docs">Docs</a>
+          <mat-icon>chevron_right</mat-icon>
+          <span>{{ activeSection().category }}</span>
+        </div>
+
+        <h1 class="article-title">{{ activeSection().title }}</h1>
+        <p class="article-summary">{{ activeSection().summary }}</p>
+
+        <div class="article-metadata">
+          <span class="meta-item"><mat-icon>schedule</mat-icon> {{ activeSection().readTime }} read</span>
+          <span class="meta-item"><mat-icon>update</mat-icon> Updated September 2026</span>
+          <span class="meta-item"><mat-icon>verified</mat-icon> Verified on Go 1.26 & Rust 1.98.1</span>
+        </div>
+      </header>
+
+      <!-- CHAPTER 1: OVERVIEW -->
+      <section *ngIf="activeSectionId() === 'overview'" class="chapter-body">
+        <h2 id="what-is-aerostream">What is AeroStream?</h2>
+        <p>
+          <strong>AeroStream</strong> is an open-source, ultra-high-throughput, cloud-native distributed streaming platform
+          engineered around a <strong>Dual-Engine Architecture</strong>. It combines the distributed consensus stability of
+          <strong>Go Raft</strong> with the zero-copy performance and mechanical sympathy of a <strong>Rust Log Storage Kernel</strong>.
+        </p>
+
+        <div class="callout callout-tip">
+          <div class="callout-icon"><mat-icon>lightbulb</mat-icon></div>
+          <div class="callout-body">
+            <strong>Key Drop-In Capability:</strong> AeroStream natively implements the Apache Kafka wire protocol
+            on TCP port <code>9092</code>. Any existing application using <code>kafka-python</code>, Java/Spring Kafka,
+            or <code>librdkafka</code> can point directly to AeroStream without modifying application code or installing sidecars.
+          </div>
+        </div>
+
+        <h2 id="dual-engine-rationale">Dual-Engine Architectural Rationale</h2>
+        <p>
+          Traditional streaming engines compromise either on developer velocity or low-level mechanical sympathy:
+        </p>
+        <ul>
+          <li><strong>JVM Runtimes (e.g. Apache Kafka)</strong>: Incur heavy memory fragmentation, large object headers (16–24 bytes per reference), non-deterministic Garbage Collection pauses, and high baseline memory and thread overhead.</li>
+          <li><strong>Homogeneous C++ or Rust Brokers</strong>: Deliver raw I/O throughput but suffer high development friction when orchestrating dynamic REST APIs, complex Raft consensus FSMs, schema validation engines, and user access control policies.</li>
+        </ul>
+        <p>
+          AeroStream resolves this by decoupling the control plane from the storage data plane:
+        </p>
+
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Subsystem</th>
+                <th>Engine Runtime</th>
+                <th>Core Responsibilities</th>
+                <th>Performance Highlights</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Control Plane</strong></td>
+                <td>Go 1.26 (Alpine)</td>
+                <td>HashiCorp Raft Quorum, Schema Registry, RBAC ACLs, Stream Transforms, Connectors</td>
+                <td>Green Tea GC (<1ms pause), SIMD Swiss Tables maps, native Kubernetes cgroup auto-tuning</td>
+              </tr>
+              <tr>
+                <td><strong>Data Plane</strong></td>
+                <td>Rust 1.98.1 (Edition 2024)</td>
+                <td>TCP Listeners (Ports 9091/9092), Zero-Copy Segmented Commit Log, Tiered Storage</td>
+                <td>Zero-copy sendfile(2) I/O, microsecond commit latency, lean memory footprint, and lock-free execution</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="quickstart-cluster">Deploying a 30-Second Cluster</h2>
+        <p>
+          You can launch a full local cluster (1 Controller + 1 Broker) with Docker Compose in seconds:
+        </p>
+
+        <div class="code-block">
+          <div class="code-topbar">
+            <span>docker-compose.yml</span>
+            <button class="copy-btn" (click)="copyCode(composeSnippet, 'compose')">
+              <mat-icon>{{ copiedCodeBlock() === 'compose' ? 'check' : 'content_copy' }}</mat-icon>
+              {{ copiedCodeBlock() === 'compose' ? 'Copied' : 'Copy' }}
+            </button>
+          </div>
+          <pre><code [textContent]="composeSnippet"></code></pre>
+        </div>
+
+        <h2 id="connecting-clients">Connecting Clients</h2>
+        <p>
+          Once running, create a topic and begin streaming via standard Kafka tooling or the high-speed native client:
+        </p>
+        <div class="code-block">
+          <div class="code-topbar">
+            <span>Bash</span>
+            <button class="copy-btn" (click)="copyCode(bash1Snippet, 'bash1')">
+              <mat-icon>{{ copiedCodeBlock() === 'bash1' ? 'check' : 'content_copy' }}</mat-icon>
+              {{ copiedCodeBlock() === 'bash1' ? 'Copied' : 'Copy' }}
+            </button>
+          </div>
+          <pre><code [textContent]="bash1Snippet"></code></pre>
+        </div>
+      </section>
+
+      <!-- CHAPTER 2: ARCHITECTURE -->
+      <section *ngIf="activeSectionId() === 'architecture'" class="chapter-body">
+        <h2 id="control-plane-kernel">Control Plane (Go 1.26 & Raft Quorum)</h2>
+        <p>
+          The AeroStream Control Plane runs as a dedicated lightweight microservice. It uses the HashiCorp Raft
+          consensus algorithm to achieve linearizable state machine transitions across cluster controllers.
+        </p>
+        <ul>
+          <li><strong>Quorum Elections & Health Heartbeats</strong>: Brokers send health heartbeats every 2 seconds. In the event of leader loss, Raft elects a new leader in &lt;150 ms.</li>
+          <li><strong>Green Tea GC in Go 1.26</strong>: The newly defaulted GC in Go 1.26 slashes garbage collection overhead by 10%–40%, ensuring control plane metadata lookups do not suffer tail latency spikes.</li>
+          <li><strong>Swiss Tables Maps</strong>: Go 1.24/1.26 runtime hash maps utilize 16-way SIMD vector probing, accelerating topic partition routing and ACL rule lookups by 30%.</li>
+        </ul>
+
+        <h2 id="storage-data-plane">Data Plane Kernel (Rust 1.98.1 & Tokio)</h2>
+        <p>
+          The Storage Broker is built entirely in Rust (compiled with <code>rustc 1.98.1</code>, targeting Edition 2024).
+          It operates directly against Linux kernel APIs for maximum mechanical sympathy:
+        </p>
+        <div class="callout callout-note">
+          <div class="callout-icon"><mat-icon>info</mat-icon></div>
+          <div class="callout-body">
+            <strong>Positioned Writes without Lock Races:</strong> AeroStream writes log segments using <code>FileExt::write_all_at</code>.
+            Because each write supplies its absolute byte position directly, multiple worker threads can append to non-overlapping partition
+            segments concurrently without taking file-pointer mutex locks!
+          </div>
+        </div>
+
+        <h2 id="zero-copy-pipeline">Zero-Copy sendfile(2) Pipeline</h2>
+        <p>
+          When clients fetch records, data is read directly from the Linux Page Cache to the network socket using
+          <code>sendfile(2)</code>. Data never transitions into userspace buffers, eliminating CPU cache evictions and
+          memory bus bandwidth bottlenecks:
+        </p>
+        <pre class="code-block-inner"><code>[ Linux Disk Page Cache ] ──► (Kernel sendfile DMA) ──► [ Network Socket NIC Buffer ]
+                               (Zero Userspace Memory Copying!)</code></pre>
+
+        <h2 id="hardware-crc">Hardware CRC32C Acceleration</h2>
+        <p>
+          AeroStream verifies message batch checksums using hardware instructions (<code>CRC32C</code> on SSE4.2 and ARMv8).
+          This enables <strong>10.9 GB/s checksum throughput</strong>, removing CRC computation from the ingestion critical path.
+        </p>
+      </section>
+
+      <!-- CHAPTER 3: KAFKA PROTOCOL -->
+      <section *ngIf="activeSectionId() === 'kafka-protocol'" class="chapter-body">
+        <h2 id="port-9092-compatibility">Port 9092 Kafka Wire Protocol Drop-In</h2>
+        <p>
+          AeroStream listens on TCP port <code>9092</code>, speaking standard Kafka binary frame serialization. It supports
+          standard client batch framing (Magic 2 RecordBatches), metadata discovery, producer idempotence, and consumer groups.
+        </p>
+
+        <h2 id="supported-api-keys">Supported API Keys & Versions</h2>
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>ApiKey</th>
+                <th>Name</th>
+                <th>Versions</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>0</code></td>
+                <td>Produce</td>
+                <td>v0 – v7</td>
+                <td>Message ingestion with acks=0, acks=1, acks=-1, compression (None, Gzip, Snappy, LZ4, Zstd).</td>
+              </tr>
+              <tr>
+                <td><code>1</code></td>
+                <td>Fetch</td>
+                <td>v0 – v11</td>
+                <td>Consumer data retrieval, rack-aware replica selection (KIP-392), and high watermark tracking.</td>
+              </tr>
+              <tr>
+                <td><code>3</code></td>
+                <td>Metadata</td>
+                <td>v0 – v5</td>
+                <td>Cluster topology, active brokers, topic partitions, leader epochs, and rack IDs.</td>
+              </tr>
+              <tr>
+                <td><code>18</code></td>
+                <td>ApiVersions</td>
+                <td>v0 – v3</td>
+                <td>Protocol negotiation and flexible header encoding support.</td>
+              </tr>
+              <tr>
+                <td><code>22</code></td>
+                <td>InitProducerId</td>
+                <td>v0 – v4</td>
+                <td>Idempotent producer ID allocation and epoch sequencing (KIP-98).</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="in-place-patching">In-Place Base-Offset Patching</h2>
+        <p>
+          Unlike naive compatibility bridges that decompress and re-encode incoming Kafka batches into individual records,
+          AeroStream utilizes <strong>in-place base-offset disk patching</strong>. Because the Kafka CRC32C covers only bytes 21..len,
+          the broker writes the 8-byte assigned base offset directly at the disk segment offset without modifying or re-allocating
+          the multi-megabyte record payload!
+        </p>
+
+        <h2 id="migrating-from-kafka">Migrating from Kafka & Redpanda</h2>
+        <p>
+          Migration requires updating only the client connection bootstrap server string:
+        </p>
+        <div class="code-block">
+          <div class="code-topbar">
+            <span>application.properties</span>
+            <button class="copy-btn" (click)="copyCode(migrationSnippet, 'mig')">
+              <mat-icon>{{ copiedCodeBlock() === 'mig' ? 'check' : 'content_copy' }}</mat-icon>
+              {{ copiedCodeBlock() === 'mig' ? 'Copied' : 'Copy' }}
+            </button>
+          </div>
+          <pre><code [textContent]="migrationSnippet"></code></pre>
+        </div>
+      </section>
+
+      <!-- CHAPTER 4: SCHEMA REGISTRY -->
+      <section *ngIf="activeSectionId() === 'schema-registry'" class="chapter-body">
+        <h2 id="schema-registry-endpoints">Built-in Schema Registry REST Endpoints</h2>
+        <p>
+          AeroStream embeds a Confluent-compatible Schema Registry directly into the cluster controller (port <code>9001</code>).
+          It eliminates the need to run separate Schema Registry containers or external database dependencies.
+        </p>
+
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Endpoint</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>POST</code></td>
+                <td><code>/subjects/&#123;subject&#125;/versions</code></td>
+                <td>Registers a new schema version under the subject. Returns assigned global schema ID.</td>
+              </tr>
+              <tr>
+                <td><code>GET</code></td>
+                <td><code>/subjects</code></td>
+                <td>Lists all registered subject names.</td>
+              </tr>
+              <tr>
+                <td><code>GET</code></td>
+                <td><code>/subjects/&#123;subject&#125;/versions/latest</code></td>
+                <td>Retrieves the latest registered schema version and canonical schema string.</td>
+              </tr>
+              <tr>
+                <td><code>GET</code></td>
+                <td><code>/schemas/ids/&#123;id&#125;</code></td>
+                <td>Fetches schema definition by its immutable global ID.</td>
+              </tr>
+              <tr>
+                <td><code>POST</code></td>
+                <td><code>/compatibility/subjects/&#123;subject&#125;/versions/&#123;version&#125;</code></td>
+                <td>Tests whether a proposed schema is compatible with the specified subject version.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="schema-compatibility">Compatibility Modes</h2>
+        <p>
+          AeroStream enforces industry-standard schema evolution rules:
+        </p>
+        <ul>
+          <li><strong>BACKWARD</strong> (Default): New schemas can read data written by the previous version (fields may only be deleted or optional fields added).</li>
+          <li><strong>FORWARD</strong>: Previous schemas can read data produced by the new schema.</li>
+          <li><strong>FULL</strong>: Both backward and forward compatible.</li>
+          <li><strong>NONE</strong>: Compatibility checks disabled.</li>
+        </ul>
+      </section>
+
+      <!-- CHAPTER 5: TRANSFORMS -->
+      <section *ngIf="activeSectionId() === 'transforms'" class="chapter-body">
+        <h2 id="transform-types">In-Broker Stream Transforms</h2>
+        <p>
+          AeroStream provides high-efficiency in-broker stream transformations. Record streams can be sanitized, filtered,
+          or enriched as they flow from ingress topics to downstream sanitized topics without deploying Apache Flink or Kafka Streams.
+        </p>
+
+        <h2 id="pii-masking">Automated PII Data Masking</h2>
+        <p>
+          Sensitive fields such as credit cards, CVVs, passwords, and Social Security Numbers are automatically masked with
+          <code>***</code> at sub-millisecond speeds:
+        </p>
+        <div class="code-block">
+          <div class="code-topbar">
+            <span>JSON Payload Transformation</span>
+          </div>
+          <pre><code [textContent]="transformSnippet"></code></pre>
+        </div>
+      </section>
+
+      <!-- CHAPTER 6: SECURITY -->
+      <section *ngIf="activeSectionId() === 'security-rbac'" class="chapter-body">
+        <h2 id="rbac-roles">Enterprise Role-Based Access Control (RBAC)</h2>
+        <p>
+          AeroStream implements enterprise zero-trust access control. Users and service accounts are bound to predefined
+          roles with granular permission policies:
+        </p>
+        <ul>
+          <li><code>SUPER_ADMIN</code>: Unrestricted cluster administration, broker draining, and ACL management.</li>
+          <li><code>OPERATOR</code>: Topic creation, partition rebalancing, and connector deployment.</li>
+          <li><code>PRODUCER</code>: Write access to authorized topic patterns (e.g. <code>orders-*</code>).</li>
+          <li><code>CONSUMER</code>: Read access to authorized topic patterns and consumer group coordination.</li>
+          <li><code>AUDITOR</code>: Read-only inspection of cluster metadata, schemas, and ACL policies.</li>
+        </ul>
+
+        <h2 id="cooperative-sticky">Cooperative Sticky Rebalance (KIP-848)</h2>
+        <p>
+          Unlike legacy eager rebalancing which revokes all partition assignments across all consumers whenever a pod restarts,
+          AeroStream implements <strong>Cooperative Sticky Rebalancing</strong>:
+        </p>
+        <ol>
+          <li>Healthy consumers retain their existing assigned partitions uninterrupted.</li>
+          <li>Only partitions migrating between members are revoked.</li>
+          <li>Eliminates stop-the-world rebalance storms and lag accumulation in consumer microservices.</li>
+        </ol>
+      </section>
+
+      <!-- CHAPTER 7: TIERED STORAGE -->
+      <section *ngIf="activeSectionId() === 'tiered-storage'" class="chapter-body">
+        <h2 id="tiered-storage-concept">Hot vs. Cold Storage Tiers</h2>
+        <p>
+          AeroStream splits event retention into two tiers:
+        </p>
+        <ul>
+          <li><strong>Hot Tier (Local NVMe / SSD)</strong>: Active open segments and recently closed segments are stored on local fast NVMe disks for microsecond tail latency.</li>
+          <li><strong>Cold Tier (Cloud Object Storage)</strong>: Once a segment rolls (exceeding 128 MB or retention age), a background worker asynchronously offloads both the <code>.log</code> and <code>.idx</code> files to cloud object storage.</li>
+        </ul>
+
+        <h2 id="configuring-providers">Supported Cloud Object Providers</h2>
+        <p>
+          AeroStream supports all major enterprise object storage backends via native async Rust SDKs:
+        </p>
+        <ul>
+          <li><strong>AWS S3 & MinIO</strong>: High-throughput S3 API with multipart upload support.</li>
+          <li><strong>Google Cloud Storage (GCS)</strong>: Native GCS bucket integration for Google Cloud deployments.</li>
+          <li><strong>Azure Blob Storage</strong>: Azure Block Blob storage for Microsoft Azure enterprises.</li>
+        </ul>
+      </section>
+
+      <!-- CHAPTER 8: OPERATOR GUIDE -->
+      <section *ngIf="activeSectionId() === 'operator-guide'" class="chapter-body">
+        <h2 id="hardware-sizing">Production Hardware Sizing</h2>
+        <p>
+          Due to its Rust storage kernel and zero-copy architecture, AeroStream achieves exceptional density:
+        </p>
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Scale Tier</th>
+                <th>Throughput</th>
+                <th>Recommended CPU</th>
+                <th>Recommended RAM</th>
+                <th>Storage</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Edge / Dev</strong></td>
+                <td>Up to 50 MB/s</td>
+                <td>1 vCPU</td>
+                <td>512 MiB</td>
+                <td>Standard SSD</td>
+              </tr>
+              <tr>
+                <td><strong>Standard Production</strong></td>
+                <td>Up to 500 MB/s</td>
+                <td>2 – 4 vCPUs</td>
+                <td>2 – 4 GiB</td>
+                <td>NVMe SSD + S3 Tiered</td>
+              </tr>
+              <tr>
+                <td><strong>Extreme Scale</strong></td>
+                <td>1,000+ MB/s</td>
+                <td>8 vCPUs (pinned)</td>
+                <td>8 – 16 GiB</td>
+                <td>Dual NVMe RAID-0 + S3 Tiered</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="broker-draining">Graceful Broker Partition Draining</h2>
+        <p>
+          Before shutting down a broker for maintenance or Kubernetes scale-down, trigger an automated partition drain:
+        </p>
+        <div class="code-block">
+          <div class="code-topbar">
+            <span>Bash</span>
+          </div>
+          <pre><code [textContent]="drainSnippet"></code></pre>
+        </div>
+      </section>
+
+      <!-- CHAPTER 9: PERFORMANCE MEASUREMENT -->
+      <section *ngIf="activeSectionId() === 'performance'" class="chapter-body">
+        <h2 id="perf-results">Results at a Glance</h2>
+        <p>
+          Both brokers were driven through the Kafka wire protocol with the
+          <strong>OpenMessaging Benchmark (OMB)</strong>: one topic, 16 partitions, 1 KB messages, 2 producers and
+          2 consumers, at the maximum sustainable rate for 60 seconds. Each broker ran alone in a container limited to
+          <strong>2 CPUs and 2 GiB of memory</strong>.
+        </p>
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>AeroStream</th>
+                <th>Apache Kafka 4.3.1</th>
+                <th>Difference</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Publish throughput (avg)</strong></td>
+                <td>202,395 msg/s (197.7 MB/s)</td>
+                <td>153,235 msg/s (149.6 MB/s)</td>
+                <td>+32%</td>
+              </tr>
+              <tr>
+                <td>Publish throughput (peak interval)</td>
+                <td>216,680 msg/s</td>
+                <td>196,749 msg/s</td>
+                <td>+10%</td>
+              </tr>
+              <tr>
+                <td>Consume throughput (avg)</td>
+                <td>202,418 msg/s</td>
+                <td>153,234 msg/s</td>
+                <td>+32%</td>
+              </tr>
+              <tr>
+                <td>Publish latency p50</td>
+                <td>1.5 ms</td>
+                <td>30.3 ms</td>
+                <td>20x lower</td>
+              </tr>
+              <tr>
+                <td>Publish latency p99</td>
+                <td>452 ms</td>
+                <td>1,099 ms</td>
+                <td>2.4x lower</td>
+              </tr>
+              <tr>
+                <td>Publish latency p99.9</td>
+                <td>494 ms</td>
+                <td>1,289 ms</td>
+                <td>2.6x lower</td>
+              </tr>
+              <tr>
+                <td>Publish latency max</td>
+                <td>565 ms</td>
+                <td>1,344 ms</td>
+                <td>2.4x lower</td>
+              </tr>
+              <tr>
+                <td>End-to-end latency p50</td>
+                <td>4.0 ms</td>
+                <td>33.0 ms</td>
+                <td>8x lower</td>
+              </tr>
+              <tr>
+                <td>End-to-end latency p99</td>
+                <td>485 ms</td>
+                <td>1,098 ms</td>
+                <td>2.3x lower</td>
+              </tr>
+              <tr>
+                <td>Errors</td>
+                <td>0</td>
+                <td>0</td>
+                <td>-</td>
+              </tr>
+              <tr>
+                <td>Peak broker memory</td>
+                <td>533 MiB</td>
+                <td>1,247 MiB</td>
+                <td>2.3x less</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="perf-throughput">Throughput Over Time</h2>
+        <p>
+          OMB reports the publish rate every 10 seconds. AeroStream held a steady rate for the whole minute, while
+          Apache Kafka's rate faded over the run.
+        </p>
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Interval</th>
+                <th>0-10 s</th>
+                <th>10-20 s</th>
+                <th>20-30 s</th>
+                <th>30-40 s</th>
+                <th>40-50 s</th>
+                <th>50-60 s</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>AeroStream (msg/s)</strong></td>
+                <td>209,910</td>
+                <td>181,919</td>
+                <td>197,393</td>
+                <td>216,680</td>
+                <td>207,052</td>
+                <td>201,414</td>
+              </tr>
+              <tr>
+                <td><strong>Apache Kafka (msg/s)</strong></td>
+                <td>142,301</td>
+                <td>196,749</td>
+                <td>174,660</td>
+                <td>164,438</td>
+                <td>122,403</td>
+                <td>118,860</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="perf-cpu-thermal">CPU, Memory &amp; Temperature</h2>
+        <p>
+          The container CPU limit is 2.0 CPUs, which <code>docker stats</code> reports as 200%. The figures below come from
+          sampling <code>docker stats</code> continuously during each run. "Steady state" excludes the ramp-up and
+          cool-down samples, meaning everything from the first to the last sample above 100%.
+        </p>
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Broker container</th>
+                <th>AeroStream</th>
+                <th>Apache Kafka</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Peak CPU</strong></td>
+                <td>208%</td>
+                <td>218%</td>
+              </tr>
+              <tr>
+                <td><strong>Average CPU, steady state</strong></td>
+                <td>134%</td>
+                <td>199%</td>
+              </tr>
+              <tr>
+                <td>Median CPU, steady state</td>
+                <td>142%</td>
+                <td>207%</td>
+              </tr>
+              <tr>
+                <td>Samples at or above 190% (near the cap)</td>
+                <td>32%</td>
+                <td>84%</td>
+              </tr>
+              <tr>
+                <td>Samples below 100%</td>
+                <td>42%</td>
+                <td>0%</td>
+              </tr>
+              <tr>
+                <td><strong>Throughput per 1% of one CPU</strong></td>
+                <td>about 1,500 msg/s</td>
+                <td>about 770 msg/s</td>
+              </tr>
+              <tr>
+                <td>Memory, start to peak</td>
+                <td>41 MiB to 533 MiB</td>
+                <td>312 MiB to 1,247 MiB</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout callout-note">
+          <div class="callout-icon"><mat-icon>info</mat-icon></div>
+          <div class="callout-body">
+            <strong>Apache Kafka was CPU-bound; AeroStream was not.</strong> Kafka sat at or near the 2-CPU cap for
+            84% of the run and never dropped below 100%. AeroStream delivered about 32% more messages while averaging
+            about a third less CPU, so it did roughly twice the work per unit of CPU. Its CPU use also came in
+            repeating bursts: peaks near 200% followed by several intervals at 55-80%. That pattern means the broker
+            was not limited by CPU during the dips. Its cause is still under investigation.
+          </div>
+        </div>
+
+        <p>
+          Temperatures were read from the hardware sensors at the start of each run. They were not logged continuously
+          during the runs, so mid-run thermal throttling cannot be ruled out.
+        </p>
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Sensor (at run start)</th>
+                <th>AeroStream run</th>
+                <th>Apache Kafka run</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>CPU package</strong></td>
+                <td>63 °C</td>
+                <td>45 °C</td>
+              </tr>
+              <tr>
+                <td><strong>NVMe SSD</strong></td>
+                <td>31 °C</td>
+                <td>35 °C</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          For reference, this SSD reports a temperature warning at about 83 °C (critical at about 85 °C), and the CPU
+          reports a maximum of 100 °C. Neither run started near those limits, and the AeroStream run started with the
+          warmer CPU of the two.
+        </p>
+
+        <h2 id="perf-testbed">Test Machine &amp; Methodology</h2>
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Processor</strong></td>
+                <td>Intel Core i5-1235U (12th Gen): 2 performance cores + 8 efficiency cores, 12 threads, 0.4-4.4 GHz</td>
+              </tr>
+              <tr>
+                <td><strong>Memory</strong></td>
+                <td>15 GiB</td>
+              </tr>
+              <tr>
+                <td><strong>Storage</strong></td>
+                <td>Samsung MZVLQ512HBLU NVMe SSD, 512 GB</td>
+              </tr>
+              <tr>
+                <td><strong>Operating system</strong></td>
+                <td>Debian GNU/Linux 13, kernel 6.12.107, Docker 29.8.1</td>
+              </tr>
+              <tr>
+                <td><strong>Machine type</strong></td>
+                <td>Samsung 550XED laptop, bare metal, with a normal desktop session running alongside the benchmark</td>
+              </tr>
+              <tr>
+                <td><strong>Broker limits</strong></td>
+                <td>2.0 CPUs and 2 GiB of memory per broker container</td>
+              </tr>
+              <tr>
+                <td><strong>Workload</strong></td>
+                <td>1 topic, 16 partitions, 1,024-byte messages, 2 producers, 2 consumers, producer rate 0 (OMB's maximum-sustainable-rate discovery mode), 60 seconds</td>
+              </tr>
+              <tr>
+                <td><strong>Client settings</strong></td>
+                <td>OMB Kafka driver with acks=1, linger.ms=1, batch.size=131072, max in-flight requests=5 (identical for both brokers)</td>
+              </tr>
+              <tr>
+                <td><strong>AeroStream build</strong></td>
+                <td>quay.io/gradientgeeks/aerostream:latest, image digest sha256:3cbef320...</td>
+              </tr>
+              <tr>
+                <td><strong>Apache Kafka build</strong></td>
+                <td>apache/kafka:latest (Kafka 4.3.1), single-node KRaft, default JVM settings, image digest sha256:77e3df90...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The machine has a hybrid CPU, so the 2-CPU quota can land on either performance or efficiency cores, which adds
+          run-to-run variation. To reproduce a run:
+        </p>
+        <div class="code-block">
+          <div class="code-topbar">
+            <span>Bash</span>
+          </div>
+          <pre><code [textContent]="perfReproSnippet"></code></pre>
+        </div>
+
+        <h2 id="perf-caveats">Caveats</h2>
+        <div class="callout callout-warning">
+          <div class="callout-icon"><mat-icon>warning</mat-icon></div>
+          <div class="callout-body">
+            <strong>Read these numbers as indicative, not definitive.</strong>
+            <ul>
+              <li>Each broker was measured once. On this machine, run-to-run variation of about 20% is common.</li>
+              <li>The runs were about 30 minutes apart and were not interleaved.</li>
+              <li>This is a shared laptop, not a dedicated benchmark server, and other applications were running.</li>
+              <li>Apache Kafka ran with stock settings and no tuning.</li>
+              <li>Only the Kafka wire protocol at 1 KB messages was measured. Other message sizes and the native protocol are not covered here.</li>
+              <li>Temperatures were sampled at run start only.</li>
+              <li>Redpanda results are not included yet.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Article Footer -->
+      <footer class="article-footer">
+        <div class="article-nav-buttons">
+          <a routerLink="/" class="back-link">
+            <mat-icon>arrow_back</mat-icon>
+            Back to Home
+          </a>
+          <a href="https://github.com/gradientgeeks/AeroMQ" target="_blank" rel="noopener" class="repo-link">
+            <mat-icon>code</mat-icon>
+            View Source on GitHub
+          </a>
+        </div>
+      </footer>
+    </article>
+
+    <!-- Right Sidebar: On This Page Table of Contents -->
+    <aside class="toc-sidebar hidden xl:block">
+      <div class="toc-sticky-container">
+        <h4 class="toc-title">On This Page</h4>
+        <ul class="toc-list">
+          <li *ngFor="let a of activeSection().anchors">
+            <button class="toc-link" (click)="scrollToAnchor(a.id)">
+              {{ a.label }}
+            </button>
+          </li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+</div>

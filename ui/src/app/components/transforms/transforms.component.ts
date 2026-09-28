@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, inject, signal, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -23,10 +23,10 @@ import {
 } from '../../models/transform.model';
 import { DeployTransformDialogComponent } from './deploy-transform-dialog.component';
 
-interface SamplePreset {
+export interface SamplePreset {
   name: string;
+  suggestedType?: TransformType;
   payload: string;
-  associatedTransform?: string;
 }
 
 @Component({
@@ -61,35 +61,13 @@ export class TransformsComponent implements OnInit {
   readonly typeFilter = signal<string>('ALL');
 
   // Playground state
-  readonly selectedTestTransform = signal<string>('pii-masker-orders');
-  readonly testInputJson = signal<string>(
-    JSON.stringify(
-      {
-        order_id: 'ORD-98421',
-        customer: {
-          name: 'Sarah Connor',
-          email: 'sconnor@cyberdyne.org',
-          credit_card: '4532-8819-2041-9923',
-          cvv: '812',
-          password: 'hk-terminator-pass!',
-        },
-        amount: 289.5,
-        currency: 'USD',
-        status: 'PENDING',
-      },
-      null,
-      2
-    )
-  );
-
-  readonly isTesting = signal<boolean>(false);
-  readonly testResult = signal<TestTransformResponse | null>(null);
-  readonly testError = signal<string | null>(null);
+  readonly selectedTestTransform = signal<string>('');
+  readonly selectedTemplateName = signal<string>('');
 
   readonly presets: SamplePreset[] = [
     {
-      name: 'Order with Sensitive PII',
-      associatedTransform: 'pii-masker-orders',
+      name: 'Order with Sensitive PII (Credit Card & Passwords)',
+      suggestedType: 'MASK_PII',
       payload: JSON.stringify(
         {
           order_id: 'ORD-98421',
@@ -102,14 +80,15 @@ export class TransformsComponent implements OnInit {
           },
           amount: 289.5,
           currency: 'USD',
+          status: 'PENDING',
         },
         null,
         2
       ),
     },
     {
-      name: 'Critical Telemetry Event',
-      associatedTransform: 'telemetry-filter-critical',
+      name: 'Critical Telemetry Event (Alert Rule)',
+      suggestedType: 'FILTER',
       payload: JSON.stringify(
         {
           device_id: 'turbine-blade-09',
@@ -123,8 +102,8 @@ export class TransformsComponent implements OnInit {
       ),
     },
     {
-      name: 'Normal Info Telemetry Event',
-      associatedTransform: 'telemetry-filter-critical',
+      name: 'Normal Info Telemetry Event (Filter Drop)',
+      suggestedType: 'FILTER',
       payload: JSON.stringify(
         {
           device_id: 'turbine-blade-09',
@@ -138,8 +117,8 @@ export class TransformsComponent implements OnInit {
       ),
     },
     {
-      name: 'Clickstream WASM Payload',
-      associatedTransform: 'wasm-geo-enricher',
+      name: 'Clickstream Web Payload (WASM / JSON Map)',
+      suggestedType: 'WASM',
       payload: JSON.stringify(
         {
           session_id: 'sess-819a-ff2',
@@ -151,7 +130,28 @@ export class TransformsComponent implements OnInit {
         2
       ),
     },
+    {
+      name: 'User Identity & Compliance Record',
+      suggestedType: 'MASK_PII',
+      payload: JSON.stringify(
+        {
+          user_id: 'usr-10492',
+          email: 'alex.mercer@gentek.com',
+          ssn: '984-12-8841',
+          role: 'researcher',
+          country: 'US',
+        },
+        null,
+        2
+      ),
+    },
   ];
+
+  readonly testInputJson = signal<string>(this.presets[0].payload);
+  readonly isTesting = signal<boolean>(false);
+  readonly testResult = signal<TestTransformResponse | null>(null);
+  readonly testError = signal<string | null>(null);
+  readonly roundTripLatencyMs = signal<number | null>(null);
 
   readonly filteredTransforms = computed(() => {
     const list = this.transformService.transforms();
@@ -171,6 +171,21 @@ export class TransformsComponent implements OnInit {
     });
   });
 
+  constructor() {
+    // Keep selectedTestTransform aligned with available transforms
+    effect(() => {
+      const list = this.transformService.transforms();
+      const current = this.selectedTestTransform();
+      if (list.length > 0) {
+        if (!current || !list.some((t) => t.name === current)) {
+          this.selectedTestTransform.set(list[0].name);
+        }
+      } else {
+        this.selectedTestTransform.set('');
+      }
+    });
+  }
+
   ngOnInit(): void {
     this.transformService.loadTransforms();
   }
@@ -187,6 +202,7 @@ export class TransformsComponent implements OnInit {
           duration: 3500,
           panelClass: 'snackbar-success',
         });
+        this.selectedTestTransform.set(result.name);
       }
     });
   }
@@ -228,10 +244,11 @@ export class TransformsComponent implements OnInit {
 
   selectForTest(t: StreamTransform): void {
     this.selectedTestTransform.set(t.name);
-    // Find matching preset or keep current
-    const preset = this.presets.find((p) => p.associatedTransform === t.name);
+    // Find matching preset by type or keep current
+    const preset = this.presets.find((p) => p.suggestedType === t.type);
     if (preset) {
       this.testInputJson.set(preset.payload);
+      this.selectedTemplateName.set(preset.name);
     }
     // Scroll to playground
     const element = document.getElementById('transform-playground');
@@ -240,16 +257,36 @@ export class TransformsComponent implements OnInit {
     }
   }
 
-  applyPreset(preset: SamplePreset): void {
-    this.testInputJson.set(preset.payload);
-    if (preset.associatedTransform) {
-      this.selectedTestTransform.set(preset.associatedTransform);
+  applyTemplateByName(name: string): void {
+    const preset = this.presets.find((p) => p.name === name);
+    if (preset) {
+      this.selectedTemplateName.set(preset.name);
+      this.testInputJson.set(preset.payload);
+
+      // If user hasn't selected a transform yet, match first transform of same type
+      const current = this.selectedTestTransform();
+      const list = this.transformService.transforms();
+      if ((!current || !list.some((t) => t.name === current)) && preset.suggestedType) {
+        const matchingTransform = list.find((t) => t.type === preset.suggestedType);
+        if (matchingTransform) {
+          this.selectedTestTransform.set(matchingTransform.name);
+        }
+      }
     }
   }
 
   runTest(): void {
     const transformName = this.selectedTestTransform();
+    if (!transformName) {
+      this.testError.set('No stream transform selected. Please deploy or select a transform.');
+      return;
+    }
+
     const rawInput = this.testInputJson().trim();
+    if (!rawInput) {
+      this.testError.set('Payload cannot be empty.');
+      return;
+    }
 
     let parsedPayload: any;
     try {
@@ -261,6 +298,9 @@ export class TransformsComponent implements OnInit {
     this.isTesting.set(true);
     this.testError.set(null);
     this.testResult.set(null);
+    this.roundTripLatencyMs.set(null);
+
+    const startTime = performance.now();
 
     this.transformService
       .testTransform({
@@ -269,15 +309,34 @@ export class TransformsComponent implements OnInit {
       })
       .subscribe({
         next: (res) => {
+          const roundTripMs = performance.now() - startTime;
           this.isTesting.set(false);
           this.testResult.set(res);
+          this.roundTripLatencyMs.set(roundTripMs);
+
+          // Record real execution latency into running average
+          const latency = (res.latency_ms && res.latency_ms > 0) ? res.latency_ms : roundTripMs;
+          this.transformService.recordExecutionLatency(latency);
         },
         error: (err) => {
+          const roundTripMs = performance.now() - startTime;
           this.isTesting.set(false);
+          this.roundTripLatencyMs.set(roundTripMs);
           const msg = err.error?.message || err.error || err.message || 'Execution error';
           this.testError.set(typeof msg === 'string' ? msg : JSON.stringify(msg));
         },
       });
+  }
+
+  formatBackendLatency(latencyMs: number): string {
+    if (latencyMs === undefined || latencyMs === null) {
+      return '0 ms';
+    }
+    if (latencyMs < 1) {
+      const us = latencyMs * 1000;
+      return `${us.toFixed(us < 10 ? 1 : 0)} µs (${latencyMs.toFixed(3)} ms)`;
+    }
+    return `${latencyMs.toFixed(2)} ms`;
   }
 
   formatJsonInput(): void {

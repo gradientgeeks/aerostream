@@ -14,8 +14,10 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
-import { Connector, ConnectorPlugin, ConnectorType } from '../../models/connector.model';
+import { Connector, ConnectorPlugin, ConnectorState, ConnectorType } from '../../models/connector.model';
 import { ConnectorService } from '../../services/connector.service';
 import { DeployConnectorDialogComponent } from './deploy-connector-dialog.component';
 
@@ -38,6 +40,8 @@ import { DeployConnectorDialogComponent } from './deploy-connector-dialog.compon
     MatTabsModule,
     MatDividerModule,
     MatMenuModule,
+    MatProgressBarModule,
+    MatProgressSpinnerModule,
   ],
   templateUrl: './connectors.component.html',
   styleUrl: './connectors.component.scss',
@@ -65,7 +69,7 @@ export class ConnectorsComponent implements OnInit {
         !query ||
         c.name.toLowerCase().includes(query) ||
         c.class.toLowerCase().includes(query) ||
-        c.topic.toLowerCase().includes(query);
+        (c.topic && c.topic.toLowerCase().includes(query));
 
       const matchesType = tFilter === 'ALL' || c.type === tFilter;
       const matchesState = sFilter === 'ALL' || c.state === sFilter;
@@ -75,7 +79,29 @@ export class ConnectorsComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.connectorService.refresh();
+    this.loadConnectors();
+    this.loadPlugins();
+  }
+
+  loadConnectors(): void {
+    this.connectorService.loadConnectors().subscribe({
+      error: (err) => {
+        this.snackBar.open('Failed to load connectors from cluster.', 'Close', { duration: 3000 });
+      },
+    });
+  }
+
+  loadPlugins(): void {
+    this.connectorService.loadPlugins().subscribe({
+      error: (err) => {
+        this.snackBar.open('Failed to load connector plugins from cluster.', 'Close', { duration: 3000 });
+      },
+    });
+  }
+
+  refresh(): void {
+    this.loadConnectors();
+    this.loadPlugins();
   }
 
   openDeployDialog(presetClass?: string, presetTopic?: string): void {
@@ -109,14 +135,42 @@ export class ConnectorsComponent implements OnInit {
         next: () => {
           this.snackBar.open(`Connector "${c.name}" paused.`, 'OK', { duration: 2500 });
         },
+        error: () => {
+          this.snackBar.open(`Failed to pause connector "${c.name}".`, 'Close', { duration: 3000 });
+        },
       });
     } else {
       this.connectorService.resumeConnector(c.name).subscribe({
         next: () => {
           this.snackBar.open(`Connector "${c.name}" resumed.`, 'OK', { duration: 2500 });
         },
+        error: () => {
+          this.snackBar.open(`Failed to resume connector "${c.name}".`, 'Close', { duration: 3000 });
+        },
       });
     }
+  }
+
+  stopConnector(c: Connector): void {
+    this.connectorService.stopConnector(c.name).subscribe({
+      next: () => {
+        this.snackBar.open(`Connector "${c.name}" stopped.`, 'OK', { duration: 2500 });
+      },
+      error: () => {
+        this.snackBar.open(`Failed to stop connector "${c.name}".`, 'Close', { duration: 3000 });
+      },
+    });
+  }
+
+  restartConnector(c: Connector): void {
+    this.connectorService.restartConnector(c.name, true).subscribe({
+      next: () => {
+        this.snackBar.open(`Connector "${c.name}" restarted.`, 'OK', { duration: 2500 });
+      },
+      error: () => {
+        this.snackBar.open(`Failed to restart connector "${c.name}".`, 'Close', { duration: 3000 });
+      },
+    });
   }
 
   deleteConnector(c: Connector): void {
@@ -128,6 +182,9 @@ export class ConnectorsComponent implements OnInit {
           }
           this.snackBar.open(`Connector "${c.name}" deleted.`, 'OK', { duration: 2500 });
         },
+        error: () => {
+          this.snackBar.open(`Failed to delete connector "${c.name}".`, 'Close', { duration: 3000 });
+        },
       });
     }
   }
@@ -137,6 +194,21 @@ export class ConnectorsComponent implements OnInit {
       this.selectedConnector.set(null);
     } else {
       this.selectedConnector.set(c);
+    }
+  }
+
+  getStateClass(state: ConnectorState): string {
+    switch (state) {
+      case 'RUNNING':
+        return 'state-running';
+      case 'PAUSED':
+        return 'state-paused';
+      case 'STOPPED':
+        return 'state-stopped';
+      case 'FAILED':
+        return 'state-failed';
+      default:
+        return 'state-unassigned';
     }
   }
 

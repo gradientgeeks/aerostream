@@ -1,0 +1,6 @@
+[09:41:50] redpanda ready; driver driver-kafka/redpanda.yaml; workload workloads/aerostream-16p-1kb.yaml
+result aerostream-16p-1kb-Redpanda-Kafka-2026-09-28-09-43-57.json
+publish avg 145,649 msg/s (142.2 MB/s)  peak 271,033  consume avg 145,805 msg/s  errors 0
+publish latency ms  p50 1.1  p99 1678.5  p99.9 2646.7  max 2841.9
+end-to-end latency ms  p50 2.0  p99 1684.0
+broker container peak memory 1514 MiB, peak CPU 186% (limit 200%)

@@ -53,6 +53,10 @@ pub fn encode_kv_record_with_timestamp(key: &[u8], value: Option<&[u8]>, timesta
 /// Extracts key, tombstone flag, and timestamp from raw record payload.
 /// Supports Kafka RecordBatch / MessageSet records as well as generic/native KV formats.
 pub fn extract_key(data: &[u8]) -> ExtractedKey {
+    // Transaction markers (control batches) are never compacted away: they carry no user key.
+    if crate::txn::batch::is_control(data) {
+        return ExtractedKey { key: None, is_tombstone: false, timestamp_ms: None };
+    }
     // 1. Try parsing as Kafka RecordBatch (magic 2) or MessageSet (magic 0/1)
     if let Ok(records) = crate::kafka::handlers::parse_records(data) {
         if let Some(first) = records.into_iter().next() {
