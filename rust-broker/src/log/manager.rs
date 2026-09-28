@@ -501,46 +501,68 @@ impl PartitionLog {
     /// no extra page cache, and the archived copy survives retention deleting the local name (compaction replaces
     /// segment files by rename, so the link keeps the segment exactly as it was sealed). If linking is not possible
     /// (different filesystem), the segment is copied on a background thread instead of on the append path.
+    /// Archives a just-sealed segment into cold storage (hard link, or a copy if that fails, e.g. across
+    /// filesystems). All of the filesystem work — `create_dir_all`, `hard_link`, and the copy fallback — runs on a
+    /// spawned OS thread, not inline: on a small container (e.g. the 2 vCPU boxes this broker is benchmarked on),
+    /// blocking a Tokio worker thread on directory/inode syscalls here, while `roll_over` still holds the
+    /// partition's lock, can stall every other partition's produce/fetch too if enough segments roll around the
+    /// same time. Nothing here needs to finish before the roll completes: the sealed segment's original path stays
+    /// valid and readable until retention removes it later.
+    ///
+    /// The two source files are opened *synchronously*, before returning, exactly as the old copy-fallback path
+    /// already did: retention (running under the same partition lock on a later append) could delete the sealed
+    /// segment's path before the spawned thread gets to it, and an open file descriptor keeps the underlying data
+    /// readable even after its directory entry is removed (standard POSIX unlink-after-open semantics), so the
+    /// copy fallback stays correct regardless of the race. `hard_link` itself needs the path to still exist, so
+    /// it's attempted first inside the spawned thread and only falls back to copying via the open handles if that
+    /// path is already gone.
     fn archive_sealed_segment(&self, seg: &LogSegment) -> io::Result<()> {
+        let src_log = File::open(&seg.log_path)?;
+        let src_idx = File::open(&seg.idx_path)?;
+
         let cold_dir = self.cold_dir();
-        fs::create_dir_all(&cold_dir)?;
-        let cold_log_path = cold_dir.join(format!("{:020}.log", seg.base_offset));
-        let cold_idx_path = cold_dir.join(format!("{:020}.idx", seg.base_offset));
-        let _ = fs::remove_file(&cold_log_path);
-        let _ = fs::remove_file(&cold_idx_path);
+        let offload_tx = self.offload_tx.clone();
+        let topic = self.topic.clone();
+        let partition = self.partition;
+        let seg = seg.clone();
 
-        let offload = self.offload_tx.clone().map(|tx| {
-            (tx, crate::storage::offloader::OffloadTask::new(
-                &self.topic, self.partition, seg.base_offset, &cold_log_path, &cold_idx_path,
-            ))
-        });
-
-        if fs::hard_link(&seg.log_path, &cold_log_path).is_ok() && fs::hard_link(&seg.idx_path, &cold_idx_path).is_ok() {
-            debug!("[AeroMQ Broker] Segment {} sealed; linked into cold storage {:?}", seg.base_offset, cold_log_path);
-            if let Some((tx, task)) = offload {
-                let _ = tx.try_send(task);
-            }
-            return Ok(());
-        }
-        let _ = fs::remove_file(&cold_log_path);
-        // Open the sources now: retention may unlink them before the copy runs; open handles keep the data readable.
-        let mut src_log = File::open(&seg.log_path)?;
-        let mut src_idx = File::open(&seg.idx_path)?;
-        let base = seg.base_offset;
         std::thread::spawn(move || {
-            let mut copy = || -> io::Result<()> {
-                io::copy(&mut src_log, &mut File::create(&cold_log_path)?)?;
-                io::copy(&mut src_idx, &mut File::create(&cold_idx_path)?)?;
+            if let Err(e) = fs::create_dir_all(&cold_dir) {
+                warn!("[AeroMQ Broker] Failed to create cold storage dir {:?}: {}", cold_dir, e);
+                return;
+            }
+            let cold_log_path = cold_dir.join(format!("{:020}.log", seg.base_offset));
+            let cold_idx_path = cold_dir.join(format!("{:020}.idx", seg.base_offset));
+            let _ = fs::remove_file(&cold_log_path);
+            let _ = fs::remove_file(&cold_idx_path);
+
+            let offload = offload_tx.map(|tx| {
+                (tx, crate::storage::offloader::OffloadTask::new(
+                    &topic, partition, seg.base_offset, &cold_log_path, &cold_idx_path,
+                ))
+            });
+
+            if fs::hard_link(&seg.log_path, &cold_log_path).is_ok() && fs::hard_link(&seg.idx_path, &cold_idx_path).is_ok() {
+                debug!("[AeroMQ Broker] Segment {} sealed; linked into cold storage {:?}", seg.base_offset, cold_log_path);
+                if let Some((tx, task)) = offload {
+                    let _ = tx.try_send(task);
+                }
+                return;
+            }
+            let _ = fs::remove_file(&cold_log_path);
+            let copy = || -> io::Result<()> {
+                io::copy(&mut &src_log, &mut File::create(&cold_log_path)?)?;
+                io::copy(&mut &src_idx, &mut File::create(&cold_idx_path)?)?;
                 Ok(())
             };
             match copy() {
                 Ok(()) => {
-                    info!("[AeroMQ Broker] Segment {} copied to cold storage {:?} (background)", base, cold_log_path);
+                    info!("[AeroMQ Broker] Segment {} copied to cold storage {:?} (background)", seg.base_offset, cold_log_path);
                     if let Some((tx, task)) = offload {
                         let _ = tx.try_send(task);
                     }
                 }
-                Err(e) => warn!("[AeroMQ Broker] Background cold-storage copy of segment {} failed: {}", base, e),
+                Err(e) => warn!("[AeroMQ Broker] Background cold-storage copy of segment {} failed: {}", seg.base_offset, e),
             }
         });
         Ok(())
@@ -1263,6 +1285,18 @@ impl PartitionStore for LogManager {
 mod tests {
     use super::*;
 
+    /// Archiving into cold storage now happens on a spawned background thread (see `archive_sealed_segment`), not
+    /// inline with `roll_over`, so tests that check for it must poll instead of asserting immediately.
+    async fn wait_until_exists(path: &Path) {
+        for _ in 0..500 {
+            if path.exists() {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        panic!("{:?} did not appear within 5s of being archived", path);
+    }
+
     #[tokio::test]
     async fn test_segmented_log_rollover_and_cold_storage() {
         let test_dir = PathBuf::from("./data/test_temp_segmented_log");
@@ -1302,7 +1336,7 @@ mod tests {
             .join("test-topic")
             .join("partition_0")
             .join(format!("{:020}.log", 0));
-        assert!(cold_log_path.exists());
+        wait_until_exists(&cold_log_path).await;
 
         // Write more to trigger retention deletion of segment 0 locally
         // Total retention limit is 250 bytes.
@@ -1365,7 +1399,7 @@ mod tests {
         log.append(&[2; 60]).unwrap(); // rolls segment 0
         let local = log.segments[0].log_path.clone();
         let cold = dir.path().join("cold_storage").join("broker_8").join("cold").join("partition_0").join(format!("{:020}.log", 0));
-        assert!(cold.exists());
+        wait_until_exists(&cold).await;
         assert_eq!(fs::metadata(&local).unwrap().ino(), fs::metadata(&cold).unwrap().ino(), "archived by hard link, not copy");
         fs::remove_file(&local).unwrap(); // as retention would
         assert_eq!(fs::read(&cold).unwrap(), vec![1u8; 60]);

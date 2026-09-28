@@ -1,9 +1,9 @@
 # AeroStream
 
 [![GitHub License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Fgradientgeeks%2Faerostream-blue?logo=docker)](https://github.com/orgs/gradientgeeks/packages/container/package/aerostream)
-[![Go Report Card](https://img.shields.io/badge/go-1.22-00ADD8?logo=go)](go-controller/)
-[![Rust](https://img.shields.io/badge/rust-2021_edition-orange?logo=rust)](rust-broker/)
+[![Docker Image](https://img.shields.io/badge/docker-quay.io%2Fgradientgeeks%2Faerostream-blue?logo=docker)](https://quay.io/repository/gradientgeeks/aerostream)
+[![Go Report Card](https://img.shields.io/badge/go-1.26-00ADD8?logo=go)](go-controller/)
+[![Rust](https://img.shields.io/badge/rust-2024_edition-orange?logo=rust)](rust-broker/)
 [![Architecture](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-brightgreen)](#-quick-start-with-docker)
 
 **AeroStream** is a high-performance, distributed event-streaming and messaging engine designed for extreme throughput, microsecond latencies, and modern multi-cloud workloads. 
@@ -45,6 +45,11 @@ Methodology, caveats and the write-path fix behind these numbers: [BENCHMARK.md]
 * **Tiered Multi-Cloud Storage**:
   * Hot partition segments on fast local NVMe/SSD.
   * Transparent, non-blocking background offload to **AWS S3 / MinIO**, **Google Cloud Storage (GCS)**, **Azure Blob Storage**, or network filesystem mounts.
+* **Iceberg-Native Topics**:
+  * Topics can write directly into Apache Iceberg tables (Parquet/Avro), for lakehouse-native analytics without a separate sink connector.
+* **Share Groups (KIP-932 Queue Semantics)**:
+  * Cooperative, queue-like consumption where multiple consumers acquire/acknowledge individual records from the same partition without exclusive assignment — ahead of Apache Kafka's own GA timeline for this KIP.
+  * Per-record delivery-attempt limits, lock timeouts, and dead-letter-queue (DLQ) forwarding for records that exhaust retries.
 * **Built-in Schema Registry**:
   * Confluent-compatible REST API on `/subjects`, `/schemas`, and `/compatibility`.
   * First-class support for **Avro**, **Protobuf**, and **JSON Schema** with `BACKWARD`, `FORWARD`, and `FULL` compatibility validation.
@@ -107,8 +112,8 @@ AeroStream achieves its performance through strict decoupling:
 ## 🛠 Local Development & Building from Source
 
 ### Prerequisites
-* **Go**: 1.22 or higher
-* **Rust**: 1.75+ / 2021 edition (Cargo & Rustc)
+* **Go**: 1.26 or higher
+* **Rust**: 2024 edition (Cargo & Rustc)
 * **Node.js**: 20+ and npm (for Web Console)
 * **Make**
 
