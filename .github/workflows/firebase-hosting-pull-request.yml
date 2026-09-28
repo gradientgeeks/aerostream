@@ -78,5 +78,5 @@ jobs:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AEROSTREAM_GG }}
           projectId: aerostream-gg
-          target: aerostream-gg
           entryPoint: site
+
