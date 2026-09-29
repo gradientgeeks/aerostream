@@ -38,36 +38,74 @@ export class MessageDetailDialogComponent implements OnInit {
   private clipboard = inject(Clipboard);
 
   isJson = false;
+  isBinary = false;
+  showHexView = false;
+  sanitizedKey = '';
   formattedContent = '';
+  hexContent = '';
   lineCount = 1;
 
   ngOnInit(): void {
-    let raw = this.data.payload || '';
-
-    // If raw contains binary non-printable control characters, extract clean JSON or text
-    if (/[\x00-\x08\x0E-\x1F]/.test(raw)) {
-      const jsonMatch = raw.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-      if (jsonMatch) {
-        raw = jsonMatch[0];
-      } else {
-        const partialJson = raw.match(/(\{[\s\S]*|\[[\s\S]*)/);
-        if (partialJson) {
-          raw = partialJson[0];
-        } else {
-          raw = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
-        }
+    // Sanitize Key
+    if (this.data.key) {
+      this.sanitizedKey = this.data.key.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '').trim();
+      if (!this.sanitizedKey && this.data.key.length > 0) {
+        this.sanitizedKey = `[Binary Key: ${this.data.key.length}B]`;
       }
     }
 
-    try {
-      const parsed = JSON.parse(raw);
-      this.isJson = true;
-      this.formattedContent = JSON.stringify(parsed, null, 2);
-    } catch {
-      this.isJson = false;
-      this.formattedContent = raw;
+    const raw = this.data.payload || '';
+    const hasBinaryBytes = /[\x00-\x08\x0E-\x1F]/.test(raw);
+
+    if (hasBinaryBytes) {
+      const jsonMatch = raw.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          this.isJson = true;
+          this.formattedContent = JSON.stringify(parsed, null, 2);
+        } catch {
+          this.isBinary = true;
+          this.formattedContent = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '.');
+        }
+      } else {
+        this.isBinary = true;
+        this.formattedContent = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '.');
+      }
+    } else {
+      try {
+        const parsed = JSON.parse(raw);
+        this.isJson = true;
+        this.formattedContent = JSON.stringify(parsed, null, 2);
+      } catch {
+        this.isJson = false;
+        this.formattedContent = raw;
+      }
     }
+
+    this.hexContent = this.generateHexDump(raw);
     this.lineCount = this.formattedContent.split('\n').length;
+  }
+
+  toggleHexView(): void {
+    this.showHexView = !this.showHexView;
+  }
+
+  generateHexDump(input: string): string {
+    if (!input) return '';
+    const bytes: number[] = [];
+    for (let i = 0; i < input.length; i++) {
+      bytes.push(input.charCodeAt(i) & 0xff);
+    }
+    const lines: string[] = [];
+    for (let i = 0; i < bytes.length; i += 16) {
+      const chunk = bytes.slice(i, i + 16);
+      const offsetHex = i.toString(16).padStart(8, '0');
+      const hexPart = chunk.map(b => b.toString(16).padStart(2, '0')).join(' ').padEnd(48, ' ');
+      const asciiPart = chunk.map(b => (b >= 32 && b <= 126 ? String.fromCharCode(b) : '.')).join('');
+      lines.push(`${offsetHex}  ${hexPart}  |${asciiPart}|`);
+    }
+    return lines.join('\n');
   }
 
   hasHeaders(): boolean {

@@ -1,6 +1,8 @@
 package rest
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -15,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/snappy"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/auth"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/connect"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/consensus"
@@ -22,6 +25,8 @@ import (
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/streams"
 	"github.com/gradientgeeks/aerostream/go-controller/pkg/transform"
 	"github.com/hashicorp/raft"
+	"github.com/klauspost/compress/zstd"
+	"github.com/pierrec/lz4/v4"
 )
 
 type Server struct {
@@ -949,32 +954,49 @@ func decodeKafkaRecordPayload(payload []byte) *DecodedKafkaRecord {
 		return nil
 	}
 
+	attributes := binary.BigEndian.Uint16(payload[21:23])
+	compression := attributes & 0x07
+
 	baseTimestamp := int64(binary.BigEndian.Uint64(payload[27:35]))
 	recordsCount := int(binary.BigEndian.Uint32(payload[57:61]))
 	if recordsCount <= 0 {
 		return nil
 	}
 
-	pos := 61
-	if pos >= len(payload) {
+	recBytes := payload[61:]
+	if compression != 0 {
+		decompressed, err := decompressKafkaRecordBatch(recBytes, compression)
+		if err != nil {
+			// Do not attempt to parse compressed binary stream as varints
+			return &DecodedKafkaRecord{
+				Key:       "",
+				Value:     "[Compressed Data]",
+				Timestamp: baseTimestamp,
+			}
+		}
+		recBytes = decompressed
+	}
+
+	if len(recBytes) == 0 {
 		return nil
 	}
 
+	pos := 0
 	// Read record length (zigzag varint)
-	_, n, err := readKafkaVarint(payload[pos:])
+	_, n, err := readKafkaVarint(recBytes[pos:])
 	if err != nil {
 		return nil
 	}
 	pos += n
 
-	if pos >= len(payload) {
+	if pos >= len(recBytes) {
 		return nil
 	}
-	// Attributes
+	// Attributes (1 byte)
 	pos++
 
 	// Timestamp delta (zigzag varint)
-	tsDelta, n, err := readKafkaVarint(payload[pos:])
+	tsDelta, n, err := readKafkaVarint(recBytes[pos:])
 	if err != nil {
 		return nil
 	}
@@ -982,14 +1004,14 @@ func decodeKafkaRecordPayload(payload []byte) *DecodedKafkaRecord {
 	recordTimestamp := baseTimestamp + tsDelta
 
 	// Offset delta (zigzag varint)
-	_, n, err = readKafkaVarint(payload[pos:])
+	_, n, err = readKafkaVarint(recBytes[pos:])
 	if err != nil {
 		return nil
 	}
 	pos += n
 
 	// Key length (zigzag varint)
-	keyLen, n, err := readKafkaVarint(payload[pos:])
+	keyLen, n, err := readKafkaVarint(recBytes[pos:])
 	if err != nil {
 		return nil
 	}
@@ -998,17 +1020,17 @@ func decodeKafkaRecordPayload(payload []byte) *DecodedKafkaRecord {
 	var key string
 	if keyLen > 0 {
 		endKey := pos + int(keyLen)
-		if endKey > len(payload) {
-			endKey = len(payload)
+		if endKey > len(recBytes) {
+			endKey = len(recBytes)
 		}
-		if pos <= len(payload) {
-			key = string(payload[pos:endKey])
+		if pos <= len(recBytes) {
+			key = string(recBytes[pos:endKey])
 			pos = endKey
 		}
 	}
 
 	// Value length (zigzag varint)
-	valLen, n, err := readKafkaVarint(payload[pos:])
+	valLen, n, err := readKafkaVarint(recBytes[pos:])
 	if err != nil {
 		return nil
 	}
@@ -1017,36 +1039,36 @@ func decodeKafkaRecordPayload(payload []byte) *DecodedKafkaRecord {
 	var val string
 	if valLen > 0 {
 		endVal := pos + int(valLen)
-		if endVal > len(payload) {
-			endVal = len(payload)
+		if endVal > len(recBytes) {
+			endVal = len(recBytes)
 		}
-		if pos <= len(payload) {
-			val = string(payload[pos:endVal])
+		if pos <= len(recBytes) {
+			val = string(recBytes[pos:endVal])
 			pos = endVal
 		}
 	}
 
 	// Headers count (zigzag varint)
 	headers := make(map[string]string)
-	if pos < len(payload) {
-		hCount, n, err := readKafkaVarint(payload[pos:])
+	if pos < len(recBytes) {
+		hCount, n, err := readKafkaVarint(recBytes[pos:])
 		if err == nil && hCount > 0 {
 			pos += n
-			for i := int64(0); i < hCount && pos < len(payload); i++ {
-				hkLen, n, err := readKafkaVarint(payload[pos:])
-				if err != nil || hkLen < 0 || pos+n+int(hkLen) > len(payload) {
+			for i := int64(0); i < hCount && pos < len(recBytes); i++ {
+				hkLen, n, err := readKafkaVarint(recBytes[pos:])
+				if err != nil || hkLen < 0 || pos+n+int(hkLen) > len(recBytes) {
 					break
 				}
 				pos += n
-				hKey := string(payload[pos : pos+int(hkLen)])
+				hKey := string(recBytes[pos : pos+int(hkLen)])
 				pos += int(hkLen)
 
-				hvLen, n, err := readKafkaVarint(payload[pos:])
-				if err != nil || hvLen < 0 || pos+n+int(hvLen) > len(payload) {
+				hvLen, n, err := readKafkaVarint(recBytes[pos:])
+				if err != nil || hvLen < 0 || pos+n+int(hvLen) > len(recBytes) {
 					break
 				}
 				pos += n
-				hVal := string(payload[pos : pos+int(hvLen)])
+				hVal := string(recBytes[pos : pos+int(hvLen)])
 				pos += int(hvLen)
 
 				headers[hKey] = hVal
@@ -1059,6 +1081,36 @@ func decodeKafkaRecordPayload(payload []byte) *DecodedKafkaRecord {
 		Value:     val,
 		Headers:   headers,
 		Timestamp: recordTimestamp,
+	}
+}
+
+func decompressKafkaRecordBatch(data []byte, codec uint16) ([]byte, error) {
+	switch codec {
+	case 1: // GZIP
+		r, err := gzip.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		defer r.Close()
+		return io.ReadAll(r)
+	case 2: // Snappy
+		if len(data) >= 16 && bytes.Equal(data[:8], []byte("\x82SNAPPY\x00")) {
+			r := snappy.NewReader(bytes.NewReader(data))
+			return io.ReadAll(r)
+		}
+		return snappy.Decode(nil, data)
+	case 3: // LZ4
+		r := lz4.NewReader(bytes.NewReader(data))
+		return io.ReadAll(r)
+	case 4: // ZSTD
+		dec, err := zstd.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		defer dec.Close()
+		return io.ReadAll(dec)
+	default:
+		return nil, fmt.Errorf("unsupported kafka compression codec: %d", codec)
 	}
 }
 

@@ -28,16 +28,18 @@
     <div class="metadata-bar flex flex-wrap gap-2 sm:gap-3 py-3">
       <div class="meta-badge flex items-center gap-1.5 text-xs bg-app-nested px-3 py-1.5 rounded-md border border-app">
         <span class="label text-app-muted">Format:</span>
-        <span class="value format-tag font-medium text-app" [class.json-tag]="isJson">{{ isJson ? 'JSON' : 'Plain Text' }}</span>
+        <span class="value format-tag font-medium text-app" [class.json-tag]="isJson" [class.text-amber-500]="isBinary">
+          {{ isJson ? 'JSON' : (isBinary ? 'Binary' : 'Plain Text') }}
+        </span>
       </div>
       <div class="meta-badge flex items-center gap-1.5 text-xs bg-app-nested px-3 py-1.5 rounded-md border border-app">
         <span class="label text-app-muted">Payload Size:</span>
         <span class="value font-medium text-app">{{ data.length }} bytes</span>
       </div>
       @if (data.key) {
-        <div class="meta-badge flex items-center gap-1.5 text-xs bg-app-nested px-3 py-1.5 rounded-md border border-app">
-          <span class="label text-app-muted">Key:</span>
-          <span class="value font-mono font-medium text-amber-500">{{ data.key }}</span>
+        <div class="meta-badge flex items-center gap-1.5 text-xs bg-app-nested px-3 py-1.5 rounded-md border border-app max-w-[280px]" [title]="data.key">
+          <span class="label text-app-muted shrink-0">Key:</span>
+          <span class="value font-mono font-medium text-amber-500 truncate">{{ sanitizedKey || data.key }}</span>
         </div>
       }
       <div class="meta-badge flex items-center gap-1.5 text-xs bg-app-nested px-3 py-1.5 rounded-md border border-app">
@@ -64,13 +66,21 @@
     <!-- Payload Content Box -->
     <div class="content-box w-full max-w-full min-w-0 rounded-lg border border-app bg-[var(--app-code-bg)] overflow-hidden">
       <div class="content-toolbar flex items-center justify-between px-3 py-2 bg-app-surface border-b border-app">
-        <span class="toolbar-title text-xs font-semibold uppercase tracking-wider text-app-muted">Payload Content</span>
-        <button mat-stroked-button class="copy-btn h-7 text-xs px-2" (click)="copyPayload()">
-          <mat-icon class="!text-sm !w-3.5 !h-3.5 mr-1">content_copy</mat-icon>
-          <span>Copy</span>
-        </button>
+        <span class="toolbar-title text-xs font-semibold uppercase tracking-wider text-app-muted">
+          {{ showHexView ? 'Hex Dump' : 'Payload Content' }}
+        </span>
+        <div class="flex items-center gap-2">
+          <button mat-stroked-button class="view-mode-btn h-7 text-xs px-2" (click)="toggleHexView()">
+            <mat-icon class="!text-sm !w-3.5 !h-3.5 mr-1">{{ showHexView ? 'text_snippet' : 'memory' }}</mat-icon>
+            <span>{{ showHexView ? 'Text View' : 'Hex Dump' }}</span>
+          </button>
+          <button mat-stroked-button class="copy-btn h-7 text-xs px-2" (click)="copyPayload()">
+            <mat-icon class="!text-sm !w-3.5 !h-3.5 mr-1">content_copy</mat-icon>
+            <span>Copy</span>
+          </button>
+        </div>
       </div>
-      <pre class="code-preview break-all whitespace-pre-wrap max-w-full overflow-x-auto p-4 m-0 font-mono text-xs sm:text-sm leading-relaxed max-h-[440px]" [class.json-code]="isJson"><code>{{ formattedContent }}</code></pre>
+      <pre class="code-preview break-all whitespace-pre-wrap max-w-full overflow-x-auto p-4 m-0 font-mono text-xs sm:text-sm leading-relaxed max-h-[440px]" [class.json-code]="isJson && !showHexView"><code>{{ showHexView ? hexContent : formattedContent }}</code></pre>
     </div>
   </mat-dialog-content>
 
