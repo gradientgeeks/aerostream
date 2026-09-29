@@ -58,7 +58,7 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 | **Connectors Ecosystem** | 300+ Kafka Connect plugins | Compatible with Kafka Connect | **Kafka Connect Compatible API + Native Connector Manager & Web UI** | **Implemented** |
 | **Multi-Partition Transactions** | Full 2PC (`AddPartitionsToTxn`, `EndTxn`) | Full 2PC Coordinator | **Full 2PC: transactional producer, `read_committed`, LSO isolation, commit/abort control batch markers** | **Implemented** |
 | **10k+ Partition Density** | Hierarchical Index & FD Pooling | Thread-per-core partition slab | Direct mmap (Optimized up to ~1,000 parts/node) | *Phase 10 (Planned)* |
-| **Wire Security (SASL / mTLS)** | Kerberos, SCRAM-SHA-512, mTLS wire | SASL/SCRAM, OIDC, mTLS wire | **Wire SASL (PLAIN & SCRAM-SHA-256 ApiKey 17/36) + REST RBAC & Bearer Tokens** | **Implemented** |
+| **Wire Security (SASL / mTLS)** | Kerberos, SCRAM-SHA-512, mTLS wire | SASL/SCRAM, OIDC, mTLS wire | **Wire SASL (PLAIN & SCRAM-SHA-256 ApiKey 17/36) + Mutual TLS (mTLS) with Subject CN Principal Extraction + REST RBAC** | **Implemented** |
 | **Cross-Datacenter Geo-Replication** | MirrorMaker 2 (Active-Active) | Multi-Cluster Shadow Indexing | Multi-Cloud S3/GCS/Azure Offload (WAN in dev) | *Phase 13 (Planned)* |
 | **Chaos & Production Hardening** | 13+ Years Battle-Testing (Petabyte Scale)| 5+ Years Enterprise Deployments | Comprehensive Unit, Integration & Benchmarks | *Phase 14 (Planned)* |
 | **Compression Codecs** | gzip / snappy / lz4 / zstd | gzip / snappy / lz4 / zstd | **All four codecs validated on produce, `compression.type` per topic, decompress for compaction / Iceberg** | **Implemented (wire only: multi-record batches are stored uncompressed, see 6.1)** |
@@ -180,11 +180,17 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 
 #### Phase 11: Enterprise Security & Authentication Protocols
 * **Industry State**: Apache Kafka and Redpanda support SASL/SCRAM-SHA-256 / SHA-512, Kerberos / GSSAPI, OAuth2 / OIDC token authentication, and mutual TLS (mTLS) with dynamic certificate rotation directly over the wire protocol.
-* **AeroStream Horizon**:
-  * Wire Kafka binary authentication frames on the TCP port: `SaslHandshake` (ApiKey 17) and `SaslAuthenticate` (ApiKey 36).
-  * Support pluggable SASL mechanisms: `PLAIN`, `SCRAM-SHA-256`, and `SCRAM-SHA-512`.
-  * Implement TLS encryption with dynamic, zero-downtime certificate reloading (ACME / Let's Encrypt / Vault integration) on both broker data ports and controller gRPC/REST listeners.
-  * Integrate wire-level SASL credentials directly with the built-in RBAC `AclManager`.
+* **Implemented Capabilities (September 2026)**:
+  * **Wire SASL Authentication**: Full support for `SaslHandshake` (ApiKey 17) and `SaslAuthenticate` (ApiKey 36) implementing `PLAIN` and `SCRAM-SHA-256` mechanisms with direct integration into the `AclManager` RBAC engine.
+  * **Mutual TLS (mTLS) & Client Certificate Authentication**: Integrated `tokio-rustls` engine supporting:
+    * Server and mutual TLS on both the native data-plane listener (`net::server`) and Kafka wire-protocol listener (`net::kafka_server`).
+    * Client certificate verification via `WebPkiClientVerifier` backed by a trusted root CA (`tls.ca_file`).
+    * Subject Common Name (`CN`) principal extraction (`tls.client_cert_principal: true`), directly authenticating clients and mapping them to RBAC/ACL principals without requiring SASL.
+    * Outbound TLS/mTLS client credentials (`tls.client_cert_file`, `tls.client_key_file`) for broker-to-controller gRPC synchronization and peer broker replica fetch.
+* **AeroStream Horizon (Next Steps)**:
+  * Support `SCRAM-SHA-512` and Kerberos / GSSAPI SASL mechanisms.
+  * Support OAuth2 / OIDC token bearer authentication over the wire protocol (KIP-255).
+  * Implement dynamic, zero-downtime certificate reloading (ACME / Let's Encrypt / HashiCorp Vault integration) on both broker data ports and controller gRPC/REST listeners.
 
 #### Phase 12: Ecosystem & Stateful Stream Processing Frameworks
 * **Industry State**: Kafka features deep ecosystem maturity with Kafka Streams, ksqlDB, Apache Flink, and Apache Spark Streaming, supporting complex stateful processing, tumbling/sliding time windows, and table-stream joins (`KTable`).
