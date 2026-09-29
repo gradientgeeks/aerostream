@@ -157,23 +157,3 @@ readinessProbe:
   initialDelaySeconds: 3
   periodSeconds: 5
 ```
-
----
-
-## Automated AI Documentation Synchronization
-
-AeroStream incorporates an automated documentation synchronization pipeline powered by **Google Antigravity** and **Gemini** (`.github/workflows/ai-docs-writer.yml`).
-
-### Workflow Mechanics
-
-1. **Diff Extraction**: On every push to `main` (or PR), git diffs across the Rust Broker, Go Controller, Proto contracts, Client SDKs, and Web UI are extracted.
-2. **AI Analysis**: Google Antigravity / Gemini inspects architectural shifts, configuration additions, and API key updates.
-3. **Documentation Regeneration**: Updates are generated for both MkDocs Material docs (`docs/`) and core whitepapers (`core/docs/`).
-4. **Pull Request Automation**: A Pull Request is automatically opened against `main` via `peter-evans/create-pull-request` with a detailed markdown summary of documentation changes.
-
-### Configuration
-
-Add the `GEMINI_API_KEY` secret to your GitHub Repository settings under **Settings > Secrets and variables > Actions**:
-
-* `GEMINI_API_KEY`: Google AI Studio or Gemini Developer API Key (or Service Account JSON).
-
