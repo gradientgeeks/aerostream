@@ -26,7 +26,7 @@ flowchart TD
     Staging --> BG["Async Background Offloader Thread"]
     BG --> Cold["Cold Tier (Cloud Object Storage)<br/>AWS S3, MinIO, GCS, Azure Blob"]
 
-    ConsumersRecent["Real-time Consumers"] -->|sendfile(2) DMA| Hot
+    ConsumersRecent["Real-time Consumers"] -->|Zero-Copy sendfile DMA| Hot
     ConsumersHist["Historical Batch Consumers"] -->|Transparent Cache Fetch| Cold
 ```
 

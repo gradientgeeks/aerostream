@@ -41,9 +41,9 @@ flowchart TD
     ACL --> FSM
     FSM --> RAFT
     RAFT -->|Linearizable Log Entries| FSM
-    HB <-->|Heartbeats & Metadata Sync (gRPC 8001)| B1
-    HB <-->|Heartbeats & Metadata Sync (gRPC 8001)| B2
-    HB <-->|Heartbeats & Metadata Sync (gRPC 8001)| B3
+    HB <-->|Heartbeats & Metadata Sync - gRPC 8001| B1
+    HB <-->|Heartbeats & Metadata Sync - gRPC 8001| B2
+    HB <-->|Heartbeats & Metadata Sync - gRPC 8001| B3
 ```
 
 ### Quorum Elections & Health Heartbeats
