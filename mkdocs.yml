@@ -75,17 +75,11 @@ extra:
 nav:
   - Home: https://aerostream.gradientgeeks.com/
   - Overview: index.md
-  - Architecture:
-      - Core Architecture: ARCHITECTURE.md
-      - Shard-per-Core Engine: SHARD_PER_CORE.md
-      - Distributed Systems Design: DISTRIBUTED_SYSTEMS_DESIGN.md
-      - Kafka Port Optimization: KAFKA_PORT_OPTIMIZATION_RESEARCH.md
-      - Comparison & Roadmap: FEATURE_COMPARISON_AND_ROADMAP.md
-  - Getting Started:
-      - Docker Quickstart: DOCKER_QUICKSTART.md
-      - Kubernetes Quickstart: K8S_QUICKSTART.md
-      - Helm Chart Quickstart: HELM_QUICKSTART.md
-  - API Reference: API_REFERENCE.md
-  - Operations & Benchmarks:
-      - Operator Guide: OPERATOR_GUIDE.md
-      - OpenMessaging Benchmark (OMB): OPENMESSAGING_BENCHMARK_GUIDE.md
+  - Architecture: architecture.md
+  - Kafka Compatibility: kafka-protocol.md
+  - Schema Registry: schema-registry.md
+  - Stream Transforms: transforms.md
+  - Security & RBAC: security-rbac.md
+  - Tiered Storage: tiered-storage.md
+  - Operations: operations.md
+  - Benchmarks: benchmarks.md

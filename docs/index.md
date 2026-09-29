@@ -1,131 +1,257 @@
-# AeroStream Documentation Portal
+# Platform Overview & Quickstart
 
-Welcome to the **AeroStream** documentation suite. AeroStream is a next-generation distributed event-streaming engine built on a **Dual-Engine Architecture**—pairing a resilient **Go-based Raft control plane** with a zero-copy **Rust-based storage and networking data plane**.
+<div class="doc-badge-row" markdown>
+<span class="md-tag md-tag--primary">Core</span>
+<span class="md-tag">4 min read</span>
+<span class="md-tag">Go 1.26 & Rust 1.98.1</span>
+</div>
 
-This directory serves as the centralized technical knowledge base for application developers, system architects, and platform operators.
+## What is AeroStream?
 
----
+**AeroStream** is an open-source, ultra-high-throughput, cloud-native distributed event streaming platform engineered around a **Dual-Engine Architecture**. It combines the distributed consensus stability and operational agility of **Go Raft** with the zero-copy performance and mechanical sympathy of a **Rust Log Storage Kernel**.
 
-## 🗺️ Documentation Directory & Reading Paths
+![AeroStream Architecture](images/dual_engine_architecture.png)
 
-Choose your path based on your role:
-
-```
-                           ┌─────────────────────────────────┐
-                           │   AeroStream Documentation Hub  │
-                           └────────────────┬────────────────┘
-                                            │
-         ┌──────────────────────────────────┼──────────────────────────────────┐
-         ▼                                  ▼                                  ▼
-┌──────────────────┐               ┌──────────────────┐               ┌──────────────────┐
-│   Architects     │               │    Developers    │               │    Operators     │
-│   & Evaluators   │               │   & Integrators  │               │    & SRE Teams   │
-└────────┬─────────┘               └────────┬─────────┘               └────────┬─────────┘
-         │                                  │                                  │
-         ├► Architecture Deep-Dive          ├► REST & Wire API Reference       ├► Operator & Deployment
-         ├► Benchmarks vs Kafka/Redpanda    ├► Python FastAPI Example App      ├► Kubernetes StatefulSets
-         └► Strategic Roadmap (Phases 9-14) └► Schema Registry & Transforms    └► Cluster Scale-Down & Drain
-```
-
-### 1. 🏛️ System Architects & Technical Evaluators
-* **[Shard-per-Core Architecture Whitepaper](SHARD_PER_CORE.md)**: Technical whitepaper on AeroStream's Shared-Nothing Thread-per-Core architecture, hardware core pinning (`libc::sched_setaffinity`), lock-free actor model via `flume` channels, in-place base offset patching, paced page-cache writeback (`sync_file_range`), and NUMA affinity.
-* **[Distributed Systems Engineering & High-Efficiency Systems Programming Guide](DISTRIBUTED_SYSTEMS_DESIGN.md)**: Publication-grade engineering treatise covering dual-engine separation, mechanical sympathy (L1/L2/L3 cache lines, false sharing, page faults), Go runtime patterns (`sync.Pool`, Raft FSM snapshotting, lock-free RCU registry), Rust high-performance patterns (`hashbrown::Equivalent`, scoped locking, `write_all_at`, hardware SSE4.2 CRC32C, 2PC WAL), and 4-way container benchmark analysis.
-* **[Architecture Deep-Dive](ARCHITECTURE.md)**: Exhaustive technical analysis of the dual-engine design, HashiCorp Raft consensus, Rust zero-copy `sendfile(2)` kernel dispatch, memory-mapped (`mmap`) append-only logs, Shard-per-Core engine, and controller-broker orchestration.
-* **[Feature Comparison & Evolution Roadmap](FEATURE_COMPARISON_AND_ROADMAP.md)**: Head-to-head comparison against **Apache Kafka** and **Redpanda**, detailing implemented capabilities (Phases 1–8) and the Next-Generation Enterprise Horizon (Phases 9–14).
-* **[Benchmark Results & Process](https://github.com/gradientgeeks/aerostream/blob/main/benchmarks/BENCHMARK.md)**: Kafka / Redpanda / AeroStream under strict container limits (`2 vCPU, 2 GB RAM`), with scripts, methodology and caveats, highlighting the 13x throughput advantage at 50 MB payloads and write stall elimination.
-* **[OpenMessaging Benchmark (OMB) Execution Guide](OPENMESSAGING_BENCHMARK_GUIDE.md)**: Step-by-step procedure for compiling, configuring, and running the official Linux Foundation OpenMessaging Benchmark against AeroStream's Kafka port (16 partitions, 1 KB payloads, sub-4ms p99 tail latency).
-
-### 2. 🚀 Application Developers & Integrators
-* **[Docker Quickstart Guide](DOCKER_QUICKSTART.md)**: 30-second local setup with single all-in-one container (`quay.io/gradientgeeks/aerostream:latest`), port mapping, and client samples.
-* **[Kubernetes Quickstart Guide](K8S_QUICKSTART.md)**: Production deployment using standard `kubectl` manifests, headless services, StatefulSets, and automated zero-downtime draining.
-* **[Helm Quickstart Guide](HELM_QUICKSTART.md)**: Official Helm v3 chart installation, values customization, S3 tiered storage, and rack-aware zone placement.
-* **[REST & Wire Protocol API Reference](API_REFERENCE.md)**: Complete HTTP REST API schemas, request/response payloads, and binary Kafka Wire Protocol frame structures (`Produce`, `Fetch`, `Metadata`, `ApiVersions`, `InitProducerId`).
-* **[Python FastAPI Microservice Example](https://github.com/gradientgeeks/aerostream/tree/main/examples/fastapi-app)**: Production-ready sample backend demonstrating asynchronous dual-protocol streaming (Kafka wire framing over TCP + HTTP REST) and background consumer workers.
-* **Schema Governance & Built-in Registry**: Confluent-compatible schema evolution for Avro, Protobuf, and JSON Schema contracts (see [API Reference](API_REFERENCE.md)).
-* **In-Broker Stream Transforms**: Inline WASM, PII data masking, and real-time JSON filtering (see [API Reference](API_REFERENCE.md)).
-
-### 3. 🛠️ Platform Engineers & DevOps (SRE)
-* **[Operator & Deployment Guide](OPERATOR_GUIDE.md)**: Production deployment on bare-metal / VMs, systemd unit templates, kernel tuning (`sysctl`), and multi-node cluster configuration.
-* **[Kubernetes StatefulSets Manifests](https://github.com/gradientgeeks/aerostream/tree/main/deploy/k8s)** & **[K8s Quickstart](K8S_QUICKSTART.md)**: Helm-free, production-ready StatefulSet manifests with headless services, persistent volume claims, and automated `preStop` scale-down hooks.
-* **[Helm Chart](https://github.com/gradientgeeks/aerostream/tree/main/deploy/helm/aerostream)** & **[Helm Quickstart](HELM_QUICKSTART.md)**: Multi-replica HA deployments with automated testing and value profiles.
-* **Cluster Lifecycle & Zero-Downtime Operations**: Step-by-step procedures for bootstrapping, graceful broker partition draining (`POST /api/brokers/{id}/drain`), and Raft consensus node removal (`/leave`) (see [Operator Guide](OPERATOR_GUIDE.md)).
-* **[Troubleshooting & Operational Diagnostics](OPERATOR_GUIDE.md)**: Common error signatures (e.g. `Invalid protocol magic bytes`), dual-listener port routing, and socket connection isolation.
+!!! tip "Drop-In Apache Kafka Compatibility"
+    AeroStream natively implements the Apache Kafka wire protocol on TCP port **`9092`**. Any existing application using `confluent-kafka-python`, Java/Spring Kafka, `librdkafka`, `kafkajs`, or `sarama` can point directly to AeroStream without modifying application code, rewriting schemas, or installing sidecars.
 
 ---
 
-## 🖼️ Architecture & Dataflow Gallery
+## Dual-Engine Architectural Rationale
 
-All architecture diagrams are rendered in high-resolution (3200 × 2160) using clean Excalidraw-style hand-drawn typography:
+Traditional streaming platforms make painful compromises between developer velocity and low-level mechanical sympathy:
 
-### 1. Dual-Engine Core Architecture
-Visualizes the decoupled Go control plane and zero-copy Rust storage engine with unified client ingress.
+1. **JVM Runtimes (e.g. Apache Kafka)**: Incur heavy memory fragmentation, large object headers (16–24 bytes per reference), non-deterministic Garbage Collection pauses, and high baseline memory footprints (often requiring gigabytes just to idle).
+2. **Homogeneous C++ or Rust Brokers**: Deliver raw I/O throughput but suffer high development friction and long compile cycles when orchestrating dynamic REST APIs, complex Raft consensus finite state machines (FSM), schema evolution rules, and access control policies.
 
-![Dual Engine Core Architecture](images/dual_engine_architecture.png)
+AeroStream resolves this dichotomy by cleanly decoupling the control plane from the storage data plane:
 
----
-
-### 2. Zero-Copy Produce & Fetch Pipeline
-Shows how write requests bypass heap allocations via memory-mapped buffers, while consumer fetch requests leverage Linux `sendfile(2)` for direct pagecache-to-socket DMA transfers.
-
-![Produce and Fetch Zero-Copy Pipeline](images/produce_fetch_pipeline.png)
-
----
-
-### 3. Multi-Cloud Tiered Storage Pipeline
-Details the lifecycle of partition logs from fast local NVMe segments through automated rolling to asynchronous multi-cloud offloading (AWS S3, MinIO, GCS, Azure Blob).
-
-![Multi-Cloud Tiered Storage Pipeline](images/tiered_storage_pipeline.png)
-
----
-
-### 4. Cluster Topology, Quorum & Graceful Scale-Down
-Illustrates the 3-node Raft controller quorum, broker replication sets, and automated zero-downtime broker draining.
-
-![Cluster Topology and Scale Down](images/cluster_topology_scale_down.png)
-
----
-
-### 5. Shard-per-Core Architecture
-Visualizes the hardware core pinning (`libc::sched_setaffinity`), lock-free actor model via `flume` channels, zero-contention PartitionLog maps, in-place base offset patching, and paced page-cache writeback.
-
-![Shard-per-Core Architecture](images/shard_per_core_architecture.png)
-
----
-
-### 6. Controller-Broker Control Plane Orchestration
-Shows the bidirectional gRPC control stream between Go Controller and Rust Broker, 2s heartbeats with LEO progress, piggybacked dynamic configs (`client_quotas`, `topic_compression`), 8s failure detection, and graceful broker draining.
-
-![Controller-Broker Orchestration](images/controller_broker_orchestration.png)
-
----
-
-## ⚡ Default Ports & Protocol Cheat-Sheet
-
-| Port | Protocol / Transport | Component | Purpose |
+| Subsystem | Engine Runtime | Core Responsibilities | Performance Highlights |
 |---|---|---|---|
-| **`9001`** | `HTTP / REST` | Go Controller | Web Console UI (`/aerostream/console`), REST Management API, Schema Registry, Stream Transforms, and ACLs |
-| **`8001`** | `gRPC` | Go Controller | Internal cluster metadata synchronization and broker heartbeat registration |
-| **`7001`** | `TCP (Raft)` | Go Controller | HashiCorp Raft consensus quorum communication between controllers |
-| **`9093`** | `TCP (Kafka Wire)` | Rust Broker | Standard Kafka binary wire protocol listener (supports `kafka-python`, `librdkafka`, `kafka-clients`) |
-| **`9091`** | `TCP (Native)` | Rust Broker | Native binary zero-copy stream ingestion and high-throughput fetch protocol |
+| **Control Plane** | **Go 1.26** (Alpine) | HashiCorp Raft Quorum, Schema Registry, RBAC ACLs, Stream Transforms, Connectors, Web Console REST API | Green Tea GC (<1ms pause), SIMD Swiss Tables hash maps, native Kubernetes cgroup auto-tuning |
+| **Data Plane** | **Rust 1.98.1** (Edition 2024) | TCP Listeners (Ports 9091/9092), Zero-Copy Segmented Commit Log, Hardware CRC32C, Tiered Storage | Zero-copy `sendfile(2)` I/O, microsecond commit latency, 66% lower RAM footprint, lock-free execution |
+
+```mermaid
+flowchart TD
+    subgraph Clients["Client Ecosystem"]
+        KC["Kafka Clients (Java, Python, Go, Node.js)<br/>Port 9092"]
+        NC["AeroStream Native High-Speed Clients<br/>Port 9091"]
+        RC["REST & Schema Registry Clients<br/>Port 9001"]
+    end
+
+    subgraph AeroStream["AeroStream Instance"]
+        subgraph DP["Rust Data Plane (Port 9091 / 9092)"]
+            KPE["Kafka Protocol Engine<br/>ApiKey 0-36, Magic v2"]
+            NPE["Native Protocol Engine<br/>0xAE51 Magic Header"]
+            CL["Zero-Copy Commit Log<br/>FileExt::write_all_at"]
+            TS["Tiered Storage Engine<br/>Async S3/GCS Offload"]
+        end
+
+        subgraph CP["Go Control Plane (Port 9001 / 8001 / 7001)"]
+            RAFT["HashiCorp Raft Consensus<br/>Port 7001"]
+            SR["Built-in Schema Registry<br/>Avro / JSON / Protobuf"]
+            RBAC["Enterprise RBAC & ACL Engine"]
+            TR["In-Broker Stream Transforms"]
+            UI["Embedded Web Console UI<br/>/aerostream/console"]
+        end
+    end
+
+    KC -->|Kafka Binary Wire| KPE
+    NC -->|High-Speed TCP| NPE
+    RC -->|HTTP REST| CP
+    KPE --> CL
+    NPE --> CL
+    CL --> TS
+    CP <-->|Internal gRPC Port 8001| DP
+```
 
 ---
 
-## 📚 Complete Document Catalog
+## Deploying a 30-Second Cluster
 
-| Document | Description |
-|---|---|
-| **[`README.md`](https://github.com/gradientgeeks/aerostream/blob/main/README.md)** | Root repository overview, quickstart, Docker run instructions, and benchmark highlights |
-| **[`docs/index.md`](index.md)** | *This document* — Central documentation portal and index |
-| **[`docs/SHARD_PER_CORE.md`](SHARD_PER_CORE.md)** | Complete technical whitepaper on the Shard-per-Core architecture & I/O optimizations |
-| **[`docs/ARCHITECTURE.md`](ARCHITECTURE.md)** | Comprehensive technical architecture deep-dive (74 KB) |
-| **[`docs/OPERATOR_GUIDE.md`](OPERATOR_GUIDE.md)** | Bare-metal, Docker, and Kubernetes deployment & operational runbook |
-| **[`docs/API_REFERENCE.md`](API_REFERENCE.md)** | Complete REST API schemas and Kafka wire protocol specification |
-| **[`docs/FEATURE_COMPARISON_AND_ROADMAP.md`](FEATURE_COMPARISON_AND_ROADMAP.md)** | Kafka/Redpanda comparative analysis & Next-Gen Enterprise Roadmap (Phases 9–14) |
-| **[`benchmarks/BENCHMARK.md`](https://github.com/gradientgeeks/aerostream/blob/main/benchmarks/BENCHMARK.md)** | Host and container performance benchmarks across 100B, 1KB, 1MB, 10MB, and 50MB messages |
-| **[`benchmarks/KAFKA_PORT_PERFORMANCE.md`](https://github.com/gradientgeeks/aerostream/blob/main/benchmarks/KAFKA_PORT_PERFORMANCE.md)** | Kafka-port profiling, fixes and sources; isolated 3-way container benchmark data tables (`--cpus=2.0 --memory=2g`) |
-| **[`examples/fastapi-app/README.md`](https://github.com/gradientgeeks/aerostream/tree/main/examples/fastapi-app)** | Python FastAPI microservice integration guide and automated test suite |
-| **[`docs/DOCKER_QUICKSTART.md`](DOCKER_QUICKSTART.md)** | Developer Docker container guide with multi-language code snippets and Compose |
-| **[`deploy/k8s/`](https://github.com/gradientgeeks/aerostream/tree/main/deploy/k8s)** | Kubernetes StatefulSet manifests and headless service configurations |
+You can launch the complete AeroStream stack (Go Controller, Rust Zero-Copy Broker, and Embedded Web Console) with a single command using the official multi-architecture container image:
 
+```bash
+docker run -d --name aerostream \
+  -p 9091:9091 -p 9092:9092 -p 9001:9001 -p 8001:8001 -p 7001:7001 \
+  -v aerostream_data:/data \
+  quay.io/gradientgeeks/aerostream:latest
+```
 
+### Port Mapping Reference
+
+| Port | Protocol | Subsystem | Purpose |
+|---|---|---|---|
+| **`9092`** | `TCP (Kafka Wire)` | Rust Broker | **Standard Kafka Client Ingress** (`spring-kafka`, `confluent-kafka`, `librdkafka`) |
+| **`9001`** | `HTTP / REST` | Go Controller | **Web Console UI**, REST Produce/Fetch, Schema Registry, Management API |
+| **`9091`** | `TCP (Native)` | Rust Broker | Ultra-low latency native binary streaming protocol (`0xAE51` header) |
+| **`8001`** | `gRPC` | Go Controller | Internal cluster metadata synchronization and broker registration |
+| **`7001`** | `TCP (Raft)` | Go Controller | HashiCorp Raft consensus quorum transport |
+
+### Docker Compose Quickstart
+
+Alternatively, create a `docker-compose.yml` file for simple local orchestration:
+
+```yaml
+version: '3.8'
+
+services:
+  aerostream:
+    image: quay.io/gradientgeeks/aerostream:latest
+    container_name: aerostream
+    ports:
+      - "9091:9091"   # Ultra High-Speed Native TCP Protocol
+      - "9092:9092"   # Apache Kafka Wire Protocol
+      - "9001:9001"   # HTTP REST, Admin & Schema Registry
+      - "8001:8001"   # Internal gRPC & Raft Quorum
+      - "7001:7001"   # Web Management Console
+    volumes:
+      - aerostream_data:/data
+    restart: unless-stopped
+
+volumes:
+  aerostream_data:
+```
+
+Launch with:
+
+```bash
+docker compose up -d
+```
+
+### Verifying Cluster Health
+
+Inspect cluster status via the REST API:
+
+```bash
+curl -s http://localhost:9001/api/cluster | jq
+```
+
+*Expected JSON output:*
+
+```json
+{
+  "node_id": "node1",
+  "raft_state": "Leader",
+  "raft_leader": "127.0.0.1:7001",
+  "brokers_count": 1,
+  "brokers": [
+    {
+      "id": 1,
+      "host": "0.0.0.0",
+      "port": 9091,
+      "active": true
+    }
+  ],
+  "topics_count": 0,
+  "groups_count": 0
+}
+```
+
+### Accessing the Web Console
+
+Open your browser to:
+
+[http://localhost:9001/aerostream/console](http://localhost:9001/aerostream/console)
+
+The integrated Web Console allows inspecting cluster topology, topic partition states, live consumer groups, schema definitions, and broker performance metrics in real time.
+
+---
+
+## Connecting Clients
+
+Point standard Kafka client libraries directly at `localhost:9092`.
+
+=== "Python (confluent-kafka)"
+
+    ```python
+    from confluent_kafka import Producer, Consumer
+
+    # Produce records to AeroStream
+    producer = Producer({'bootstrap.servers': 'localhost:9092'})
+    producer.produce('orders', key='ORD-101', value=b'{"amount": 149.50}')
+    producer.flush()
+
+    # Consume records
+    consumer = Consumer({
+        'bootstrap.servers': 'localhost:9092',
+        'group.id': 'orders-analytics',
+        'auto.offset.reset': 'earliest'
+    })
+    consumer.subscribe(['orders'])
+    msg = consumer.poll(1.0)
+    if msg:
+        print(f"Received: {msg.value().decode('utf-8')}")
+    consumer.close()
+    ```
+
+=== "Java / Spring Kafka"
+
+    Add to `application.yml`:
+
+    ```yaml
+    spring:
+      kafka:
+        bootstrap-servers: localhost:9092
+        producer:
+          key-serializer: org.apache.kafka.common.serialization.StringSerializer
+          value-serializer: org.apache.kafka.common.serialization.StringSerializer
+          acks: 1
+        consumer:
+          group-id: inventory-service
+          auto-offset-reset: earliest
+          key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+          value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    ```
+
+=== "Kafka CLI (Bash)"
+
+    ```bash
+    # 1. Create a 3-partition topic via Controller REST API
+    curl -X POST http://localhost:9001/api/topics \
+      -H "Content-Type: application/json" \
+      -d '{"name": "orders", "partitions": 3, "replication_factor": 1}'
+
+    # 2. Produce records via standard Kafka CLI tools
+    echo "order-101: {\"amount\": 89.50}" | kafka-console-producer.sh \
+      --bootstrap-server localhost:9092 \
+      --topic orders
+
+    # 3. Consume records
+    kafka-console-consumer.sh \
+      --bootstrap-server localhost:9092 \
+      --topic orders \
+      --from-beginning
+    ```
+
+=== "Go (Segmentio kafka-go)"
+
+    ```go
+    package main
+
+    import (
+        "context"
+        "fmt"
+        "github.com/segmentio/kafka-go"
+    )
+
+    func main() {
+        w := &kafka.Writer{
+            Addr:     kafka.TCP("localhost:9092"),
+            Topic:    "orders",
+            Balancer: &kafka.LeastBytes{},
+        }
+        defer w.Close()
+
+        err := w.WriteMessages(context.Background(),
+            kafka.Message{
+                Key:   []byte("ORD-101"),
+                Value: []byte(`{"amount": 89.50}`),
+            },
+        )
+        if err != nil {
+            panic(err)
+        }
+        fmt.Println("Produced message successfully to AeroStream!")
+    }
+    ```

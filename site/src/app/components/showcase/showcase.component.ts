@@ -50,22 +50,24 @@ export class ShowcaseComponent implements OnInit {
     });
   }
 
-  readonly dockerSnippet = `services:
-  controller:
-    image: gradientgeeks/aerostream-controller:latest
-    ports:
-      - "9001:9001"   # HTTP REST & Schema Registry
-      - "8001:8001"   # Internal gRPC & Raft Quorum
-    command: ["-bootstrap", "-id", "node1", "-data-dir", "/data"]
+  readonly dockerSnippet = `version: '3.8'
 
-  broker:
-    image: gradientgeeks/aerostream-broker:latest
+services:
+  aerostream:
+    image: quay.io/gradientgeeks/aerostream:latest
+    container_name: aerostream
     ports:
-      - "9091:9091"   # High-Speed Native TCP
       - "9092:9092"   # Kafka Wire Protocol
-    command: ["--id", "1", "--controller", "http://controller:8001", "--storage-dir", "/data"]
-    depends_on:
-      - controller`;
+      - "9001:9001"   # HTTP REST, Schema Registry & Web Console
+      - "9091:9091"   # Ultra High-Speed Native TCP
+      - "8001:8001"   # Internal gRPC & Raft Quorum
+      - "7001:7001"   # Raft Consensus Transport
+    volumes:
+      - aerostream_data:/data
+    restart: unless-stopped
+
+volumes:
+  aerostream_data:`;
 
   readonly pythonSnippet = `from kafka import KafkaProducer
 import json
@@ -194,7 +196,7 @@ curl -X POST http://localhost:9001/subjects/orders-value/versions \\
   );
 
   copyDockerCommand(): void {
-    const cmd = 'docker run -d -p 9092:9092 -p 9001:9001 gradientgeeks/aerostream:latest';
+    const cmd = 'docker run -d --name aerostream -p 9092:9092 -p 9001:9001 -p 9091:9091 -v aerostream_data:/data quay.io/gradientgeeks/aerostream:latest';
     navigator.clipboard.writeText(cmd).then(() => {
       this.copiedCommand.set(true);
       setTimeout(() => this.copiedCommand.set(false), 2000);

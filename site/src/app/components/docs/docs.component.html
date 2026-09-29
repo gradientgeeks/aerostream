@@ -129,7 +129,22 @@
 
         <h2 id="quickstart-cluster">Deploying a 30-Second Cluster</h2>
         <p>
-          You can launch a full local cluster (1 Controller + 1 Broker) with Docker Compose in seconds:
+          You can run the full AeroStream stack (Controller, Zero-Copy Broker, and Web Console) using the official container image via Docker CLI:
+        </p>
+
+        <div class="code-block">
+          <div class="code-topbar">
+            <span>Docker CLI</span>
+            <button class="copy-btn" (click)="copyCode(dockerRunSnippet, 'dockerrun')">
+              <mat-icon>{{ copiedCodeBlock() === 'dockerrun' ? 'check' : 'content_copy' }}</mat-icon>
+              {{ copiedCodeBlock() === 'dockerrun' ? 'Copied' : 'Copy' }}
+            </button>
+          </div>
+          <pre><code [textContent]="dockerRunSnippet"></code></pre>
+        </div>
+
+        <p>
+          Or run with Docker Compose:
         </p>
 
         <div class="code-block">

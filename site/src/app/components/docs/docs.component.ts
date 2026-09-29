@@ -179,41 +179,32 @@ export class DocsComponent {
     this.sections.find(s => s.id === this.activeSectionId()) || this.sections[0]
   );
 
+  readonly dockerRunSnippet = `docker run -d --name aerostream \\
+  -p 9092:9092 -p 9001:9001 -p 9091:9091 -p 8001:8001 -p 7001:7001 \\
+  -v aerostream_data:/data \\
+  quay.io/gradientgeeks/aerostream:latest`;
+
   readonly composeSnippet = `version: '3.8'
 
 services:
-  controller:
-    image: gradientgeeks/aerostream-controller:latest
-    container_name: aerostream-controller
+  aerostream:
+    image: quay.io/gradientgeeks/aerostream:latest
+    container_name: aerostream
     ports:
-      - "9001:9001"   # HTTP REST, Admin & Schema Registry
-      - "8001:8001"   # Internal gRPC & HashiCorp Raft Quorum
-    environment:
-      - AERO_NODE_ID=node1
-      - AERO_RAFT_BOOTSTRAP=true
-      - AERO_DATA_DIR=/data/controller
-    volumes:
-      - controller-data:/data
-
-  broker:
-    image: gradientgeeks/aerostream-broker:latest
-    container_name: aerostream-broker-1
-    ports:
-      - "9091:9091"   # Ultra High-Speed Native TCP Protocol
       - "9092:9092"   # Apache Kafka Wire Protocol
+      - "9001:9001"   # HTTP REST, Admin, Schema Registry & Web Console
+      - "9091:9091"   # Ultra High-Speed Native TCP Protocol
+      - "8001:8001"   # Internal gRPC & HashiCorp Raft Quorum
+      - "7001:7001"   # Raft Consensus Transport
     environment:
-      - BROKER_ID=1
-      - CONTROLLER_ADDR=http://controller:8001
-      - STORAGE_DIR=/data/broker
-      - LOG_SEGMENT_BYTES=134217728  # 128 MB rolling threshold
-    depends_on:
-      - controller
+      - NODE_ID=node1
+      - DATA_DIR=/data
     volumes:
-      - broker-data:/data
+      - aerostream_data:/data
+    restart: unless-stopped
 
 volumes:
-  controller-data:
-  broker-data:`;
+  aerostream_data:`;
 
   readonly bash1Snippet = `# 1. Create a 3-partition topic via Controller REST API
 curl -X POST http://localhost:9001/api/topics \\

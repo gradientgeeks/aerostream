@@ -42,7 +42,7 @@
       <div class="quick-command-card">
         <div class="command-prefix">
           <mat-icon class="terminal-icon">terminal</mat-icon>
-          <span class="command-text">docker run -d -p 9092:9092 -p 9001:9001 gradientgeeks/aerostream:latest</span>
+          <span class="command-text">docker run -d --name aerostream -p 9092:9092 -p 9001:9001 -p 9091:9091 -v aerostream_data:/data quay.io/gradientgeeks/aerostream:latest</span>
         </div>
         <button class="copy-btn" (click)="copyDockerCommand()" matTooltip="Copy docker command">
           <mat-icon>{{ copiedCommand() ? 'check' : 'content_copy' }}</mat-icon>
