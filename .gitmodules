@@ -1,3 +1,0 @@
-[submodule "benchmarks/openmessaging-benchmark"]
-	path = benchmarks/openmessaging-benchmark
-	url = https://github.com/openmessaging/openmessaging-benchmark.git
