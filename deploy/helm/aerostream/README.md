@@ -107,5 +107,41 @@ themselves from the Raft configuration, then turn it off again.
   `broker.extraConfig` instead.
 * **Brokers advertise pod IPs** (there is no `advertised.listeners`), so Kafka clients must be inside the
   cluster / reach the pod network; external access is not supported yet. IPv4 only.
-* TLS for the control/data plane is not wired into the chart (defaults to plaintext; `auth.token` is
-  available). The chart was tested on a 4-node kind cluster with plaintext transport, with and without `auth.token`.
+* TLS defaults to off (plaintext; `auth.token` is available as a lighter-weight alternative). The
+  chart was tested on a 4-node kind cluster with plaintext transport, with and without `auth.token`,
+  and separately with `tls.*` enabled against self-signed certs. See "TLS / mTLS" below.
+
+## TLS / mTLS
+
+Set `tls.existingSecret` to an existing Secret (keys `tls.crt`, `tls.key`, and `ca.crt` when using
+mTLS or an `https://` controller) to turn on TLS. You own the cert lifecycle — cert-manager,
+external-secrets, or a manually created Secret — the chart only mounts it read-only at
+`/etc/aerostream/tls` on the broker and controller pods.
+
+| Value | Effect |
+|---|---|
+| `tls.enabled` | TLS on the broker↔controller gRPC channel and the broker↔broker data-plane listener. |
+| `tls.kafkaEnabled` | TLS on the Kafka wire-protocol listener — the port real Kafka clients connect to. Independent of `tls.enabled`. |
+| `tls.requireClientCert` | mTLS: require and verify a client certificate on whichever listeners above are TLS-enabled (broker↔broker, broker↔controller, and/or the Kafka listener). Requires `ca.crt` in `tls.existingSecret`. |
+| `tls.clientCertPrincipal` | With `requireClientCert`, use the verified client certificate's Subject CN directly as the Kafka principal, bypassing SASL for that connection. |
+| `tls.clientExistingSecret` | The client identity (`tls.crt`/`tls.key`) the broker presents when it dials the controller or a peer broker under mTLS. Defaults to `tls.existingSecret` when unset. |
+
+A minimal mTLS setup, once you have a CA and per-component certs (e.g. via cert-manager) in a
+Secret named `aerostream-tls` (server identity, all components) and `aerostream-tls-client`
+(the identity brokers present as clients):
+
+```yaml
+tls:
+  enabled: true
+  kafkaEnabled: true
+  requireClientCert: true
+  clientCertPrincipal: true
+  existingSecret: aerostream-tls
+  clientExistingSecret: aerostream-tls-client
+```
+
+Note: the Go controller has no separate mTLS toggle — it enforces `RequireAndVerifyClientCert`
+whenever a CA is configured, so `ca.crt` is only written into `controller.toml` when
+`tls.requireClientCert` is set. The Rust broker's `ca.crt` is always included once
+`tls.existingSecret` is set (it also needs the CA to verify the controller's own server
+certificate when TLS is enabled, independent of mTLS).

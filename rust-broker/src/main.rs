@@ -203,6 +203,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
 
+        log::fd_pool::FdPool::global().set_capacity(cfg.storage.max_open_segment_files);
+        log::manager::set_idle_evict_secs(cfg.storage.partition_idle_secs);
         let mut log_manager_builder = log::LogManager::new(storage_dir, cfg.id)
             .with_limits(
                 cfg.storage.max_segment_size,
@@ -304,7 +306,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|_| format!("0.0.0.0:{}", cfg.data_port).parse().unwrap());
         let server = net::DataServer::new(bind_addr, log_manager, shard_handle.clone(), cfg.clone());
 
-        server.run().await?;
+        server.run().await.map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
 
         shard_handle.handle.shutdown();
 

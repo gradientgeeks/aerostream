@@ -10,7 +10,7 @@ use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint};
+use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};
 use tonic::{metadata::MetadataValue, Request};
 use tracing::{debug, warn};
 
@@ -274,6 +274,13 @@ impl GrpcController {
             if let Some(ca) = &cfg.tls.ca_file {
                 let pem = std::fs::read(ca).map_err(|e| e.to_string())?;
                 tls = tls.ca_certificate(Certificate::from_pem(pem));
+            }
+            // Present our own client certificate (mTLS) when configured, matching the
+            // controller-loop connection in `grpc::run_control_plane_loop`.
+            if let (Some(cert_path), Some(key_path)) = (&cfg.tls.client_cert_file, &cfg.tls.client_key_file) {
+                let cert_pem = std::fs::read(cert_path).map_err(|e| e.to_string())?;
+                let key_pem = std::fs::read(key_path).map_err(|e| e.to_string())?;
+                tls = tls.identity(Identity::from_pem(cert_pem, key_pem));
             }
             ep = ep.tls_config(tls).map_err(|e| e.to_string())?;
         }

@@ -26,6 +26,31 @@ serviceAccount:
 auth:
   token: ""
 
+# TLS / mTLS for the control plane (broker<->controller gRPC), the data plane (broker<->broker
+# replication) and the Kafka wire-protocol listener (the port real Kafka clients connect to).
+# Disabled by default (plaintext), matching upstream AeroStream's own default.
+tls:
+  # Enable TLS on the broker<->controller gRPC channel and the broker<->broker data-plane listener.
+  enabled: false
+  # Enable TLS on the Kafka wire-protocol listener. Independent of `enabled` above.
+  kafkaEnabled: false
+  # Require and verify a client certificate (mTLS) on whichever listeners above are TLS-enabled.
+  # Requires `caFile`/`existingSecret`'s ca.crt to be present as the trusted client-cert root.
+  requireClientCert: false
+  # When true (with requireClientCert), the verified client certificate's Subject CN is used
+  # directly as the Kafka principal, bypassing SASL entirely for that connection.
+  clientCertPrincipal: false
+  # Name of an existing Secret holding this component's server identity: keys `tls.crt`, `tls.key`,
+  # and (when requireClientCert is set, or the controller is dialed over https://) `ca.crt`.
+  # Mounted read-only at /etc/aerostream/tls on both the broker and controller pods. You own the
+  # cert lifecycle (cert-manager, external-secrets, manually created) — the chart only consumes it.
+  existingSecret: ""
+  # Name of an existing Secret holding the CLIENT identity the broker presents when it is itself a
+  # TLS client (dialing the controller, dialing a peer broker's data plane): keys `tls.crt`,
+  # `tls.key`. Needed only when the controller/peer enforces mTLS. Defaults to `existingSecret`
+  # when unset (reusing the same cert as both server and client identity).
+  clientExistingSecret: ""
+
 podSecurityContext: {}
 containerSecurityContext:
   allowPrivilegeEscalation: false

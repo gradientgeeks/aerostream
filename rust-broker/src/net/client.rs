@@ -65,9 +65,20 @@ fn build_connector(tls: &TlsConfig) -> io::Result<TlsConnector> {
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
         }
     }
-    let config = ClientConfig::builder()
-        .with_root_certificates(roots)
-        .with_no_client_auth();
+    let builder = ClientConfig::builder().with_root_certificates(roots);
+
+    // When a client identity is configured, present it (mTLS) so a peer broker that enforces
+    // `tls.require_client_cert` on its own data-plane listener can authenticate us.
+    let config = match (&tls.client_cert_file, &tls.client_key_file) {
+        (Some(cert_path), Some(key_path)) => {
+            let certs = crate::net::tls::load_certs(cert_path)?;
+            let key = crate::net::tls::load_key(key_path)?;
+            builder
+                .with_client_auth_cert(certs, key)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
+        }
+        _ => builder.with_no_client_auth(),
+    };
     Ok(TlsConnector::from(Arc::new(config)))
 }
 

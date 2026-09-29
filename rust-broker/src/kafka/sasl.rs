@@ -494,6 +494,36 @@ mod tests {
     }
 
     #[test]
+    fn mtls_pre_authenticated_connection_skips_sasl_credential_check() {
+        // Mirrors what `net::kafka_server::handle_kafka_connection` does when the connection's
+        // TLS handshake already verified an mTLS client certificate and `tls.client_cert_principal`
+        // is set: the connection starts life already `Authenticated`, with no SaslHandshake ever
+        // sent. A client (or an attacker who doesn't have the cert's private key but somehow got
+        // the connection this far) sending SaslAuthenticate with garbage credentials must not be
+        // able to knock the connection back out of its cert-derived identity.
+        let mut state = SaslState::Authenticated {
+            user: "mtls-cert-user".to_string(),
+        };
+        let cfg = Arc::new(BrokerConfig::default());
+
+        let mut auth_bytes = Vec::new();
+        auth_bytes.push(0);
+        auth_bytes.extend_from_slice(b"someone-else");
+        auth_bytes.push(0);
+        auth_bytes.extend_from_slice(b"not-the-cert-holder");
+
+        let mut w = Wr::new(false);
+        w.bytes(&auth_bytes);
+        let resp = handle_sasl_authenticate(1, 104, &w.finish(), &mut state, &cfg).unwrap();
+
+        let error_code = i16::from_be_bytes([resp[4], resp[5]]);
+        assert_eq!(error_code, ERR_NONE);
+        assert!(state.is_authenticated());
+        // Still the mTLS-derived principal, not "someone-else" from the (ignored) PLAIN payload.
+        assert_eq!(state.authenticated_user(), Some("mtls-cert-user"));
+    }
+
+    #[test]
     fn test_scram_sha_256_full_exchange() {
         let cfg = Arc::new(BrokerConfig::default());
         let mut state = SaslState::HandshakeComplete {

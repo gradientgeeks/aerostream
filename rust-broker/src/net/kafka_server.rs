@@ -2,8 +2,9 @@ use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use bytes::{Buf, BufMut, BytesMut};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::TlsAcceptor;
 use tracing::{debug, error, info, warn};
 
 use crate::config::BrokerConfig;
@@ -62,53 +63,137 @@ impl KafkaServer {
             }
         }
         let listener = TcpListener::from_std(std_listener)?;
-        info!(
-            "[AeroMQ Kafka] Kafka Wire Protocol TCP listener active on {}",
-            self.addr
-        );
+
+        // Build a TLS acceptor up front if TLS is enabled on the Kafka wire-protocol listener.
+        // Independent of the internal data-plane `tls.enabled` flag.
+        let acceptor = if self.cfg.tls.kafka_enabled {
+            let cert_path = self
+                .cfg
+                .tls
+                .cert_file
+                .as_deref()
+                .ok_or("tls.kafka_enabled is true but tls.cert_file is not set")?;
+            let key_path = self
+                .cfg
+                .tls
+                .key_file
+                .as_deref()
+                .ok_or("tls.kafka_enabled is true but tls.key_file is not set")?;
+            let acc = crate::net::tls::build_acceptor(
+                cert_path,
+                key_path,
+                self.cfg.tls.ca_file.as_deref(),
+                self.cfg.tls.require_client_cert,
+            )?;
+            info!(
+                "[AeroMQ Kafka] Kafka Wire Protocol TCP listener active on {} (TLS enabled{})",
+                self.addr,
+                if self.cfg.tls.require_client_cert { ", mTLS: client certificates required" } else { "" }
+            );
+            Some(acc)
+        } else {
+            info!(
+                "[AeroMQ Kafka] Kafka Wire Protocol TCP listener active on {}",
+                self.addr
+            );
+            None
+        };
 
         loop {
             let (stream, peer_addr) = listener.accept().await?;
             // Kafka clients pipeline small requests; without TCP_NODELAY, Nagle's algorithm plus the client's delayed
-            // ACK stalls every response for milliseconds.
+            // ACK stalls every response for milliseconds. Applied to the raw socket before any TLS handshake so it
+            // covers both the plaintext and TLS paths.
             let _ = stream.set_nodelay(true);
+            #[cfg(target_os = "linux")]
+            {
+                use std::os::unix::io::AsRawFd;
+                let fd = stream.as_raw_fd();
+                unsafe {
+                    let buf_size: libc::c_int = 8 * 1024 * 1024; // 8MB buffer for 1MB-50MB Kafka batches
+                    libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+                    libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
+                    let quickack: libc::c_int = 1;
+                    libc::setsockopt(fd, libc::IPPROTO_TCP, libc::TCP_QUICKACK, &quickack as *const _ as *const libc::c_void, std::mem::size_of_val(&quickack) as libc::socklen_t);
+                }
+            }
             let log_manager = self.log_manager.clone();
             let cfg = self.cfg.clone();
+            let acceptor = acceptor.clone();
 
             tokio::spawn(async move {
-                if let Err(e) = handle_kafka_connection(stream, log_manager, cfg).await {
-                    debug!(
-                        "[AeroMQ Kafka] Connection ended for {}: {:?}",
-                        peer_addr, e
-                    );
+                match acceptor {
+                    Some(acc) => match accept_kafka_tls(acc, stream, peer_addr, &cfg).await {
+                        Ok((tls_stream, principal)) => {
+                            if let Err(e) = handle_kafka_connection(tls_stream, log_manager, cfg, principal).await {
+                                debug!("[AeroMQ Kafka] Connection ended for {}: {:?}", peer_addr, e);
+                            }
+                        }
+                        Err(e) => {
+                            error!("[AeroMQ Kafka] TLS handshake failed for {}: {:?}", peer_addr, e);
+                        }
+                    },
+                    None => {
+                        if let Err(e) = handle_kafka_connection(stream, log_manager, cfg, None).await {
+                            debug!("[AeroMQ Kafka] Connection ended for {}: {:?}", peer_addr, e);
+                        }
+                    }
                 }
             });
         }
     }
 }
 
-async fn handle_kafka_connection(
-    mut stream: TcpStream,
+/// Complete a Kafka-listener TLS handshake and, when mTLS is configured with
+/// `tls.client_cert_principal`, resolve the verified client certificate's Subject CN into a
+/// Kafka principal that pre-authenticates the connection (bypassing SASL for it entirely).
+async fn accept_kafka_tls(
+    acceptor: TlsAcceptor,
+    stream: TcpStream,
+    peer_addr: SocketAddr,
+    cfg: &Arc<BrokerConfig>,
+) -> io::Result<(tokio_rustls::server::TlsStream<TcpStream>, Option<String>)> {
+    let tls_stream = acceptor.accept(stream).await?;
+
+    let principal = if cfg.tls.require_client_cert && cfg.tls.client_cert_principal {
+        kafka_tls_peer_principal(&tls_stream)
+    } else {
+        None
+    };
+    if let Some(p) = &principal {
+        info!("[AeroMQ Kafka] {} authenticated via mTLS client certificate as principal '{}'", peer_addr, p);
+    }
+
+    Ok((tls_stream, principal))
+}
+
+/// Isolated in its own function so the borrow of `tls_stream` needed to read the verified peer
+/// certificate chain ends with the call, not with the caller's enclosing statement.
+fn kafka_tls_peer_principal(tls_stream: &tokio_rustls::server::TlsStream<TcpStream>) -> Option<String> {
+    let (_, session) = tls_stream.get_ref();
+    let der: Vec<u8> = session.peer_certificates()?.first()?.as_ref().to_vec();
+    crate::net::tls::common_name_from_der(&der)
+}
+
+async fn handle_kafka_connection<S: AsyncRead + AsyncWrite + Unpin>(
+    mut stream: S,
     log_manager: Arc<LogManager>,
     cfg: Arc<BrokerConfig>,
+    initial_principal: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::io::AsRawFd;
-        let fd = stream.as_raw_fd();
-        unsafe {
-            let buf_size: libc::c_int = 8 * 1024 * 1024; // 8MB buffer for 1MB-50MB Kafka batches
-            libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
-            libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_SNDBUF, &buf_size as *const _ as *const libc::c_void, std::mem::size_of_val(&buf_size) as libc::socklen_t);
-            let quickack: libc::c_int = 1;
-            libc::setsockopt(fd, libc::IPPROTO_TCP, libc::TCP_QUICKACK, &quickack as *const _ as *const libc::c_void, std::mem::size_of_val(&quickack) as libc::socklen_t);
-        }
-    }
+    // Socket-buffer/TCP_QUICKACK tuning happens on the raw `TcpStream` before the TLS handshake
+    // (see `KafkaServer::run`), since it needs `AsRawFd` and this function is generic over both
+    // plaintext and TLS streams.
 
     let mut len_buf = [0u8; 4];
     // Reusable connection-level frame buffer to eliminate memory reallocation and page-faults:
     let mut frame_buf: Vec<u8> = Vec::with_capacity(256 * 1024);
-    let mut conn_sasl = crate::kafka::sasl::SaslState::default();
+    // An mTLS-verified client certificate (when `tls.client_cert_principal` is set) pre-authenticates
+    // the connection, bypassing the SASL handshake entirely.
+    let mut conn_sasl = match initial_principal {
+        Some(user) => crate::kafka::sasl::SaslState::Authenticated { user },
+        None => crate::kafka::sasl::SaslState::default(),
+    };
     let mut partition_cache: PartitionCache = Vec::new();
 
     loop {
@@ -820,6 +905,16 @@ pub(crate) async fn handle_fetch_with_topo(
                         // The partition lock covers only in-memory state and the index lookup; file reads happen after.
                         let (hw, lso, aborted_txns, read_spec) = {
                             let mut guard = part_log.lock().await;
+                            if let Some(ref info) = topo.partition(topic_name, partition_index) {
+                                if info.leader == my_id {
+                                    let other_isr = info.isr.iter().any(|&r| r != my_id);
+                                    if !other_isr {
+                                        guard.high_watermark = guard.next_offset;
+                                    } else if info.high_watermark > 0 {
+                                        guard.high_watermark = guard.high_watermark.max(info.high_watermark as u64);
+                                    }
+                                }
+                            }
                             let view = crate::txn::produce::fetch_view(&guard, fetch_offset, isolation_level);
                             let mut upper_bound = view.upper_bound;
                             let mut hw = view.high_watermark;

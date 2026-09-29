@@ -1,0 +1,18 @@
+[project]
+name = "aeromq-kafka-consumer-suite"
+version = "0.1.0"
+description = "Production-grade Kafka Consumer test application suite for AeroStream (port 9092/9093)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "confluent-kafka>=2.3.0",
+    "kafka-python-ng>=2.2.0",
+    "cryptography>=41.0.0",
+]
+
+[project.scripts]
+aero-consumer = "cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

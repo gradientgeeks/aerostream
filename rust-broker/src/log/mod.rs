@@ -1,6 +1,8 @@
 pub mod compactor;
+pub mod fd_pool;
 pub mod manager;
 pub mod producer_state;
+pub mod sparse_index;
 
 #[allow(unused_imports)]
 pub use compactor::{CompactionStats, ExtractedKey, extract_key};

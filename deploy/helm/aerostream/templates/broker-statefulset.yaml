@@ -1,5 +1,6 @@
 {{- $fullname := include "aerostream.fullname" . }}
 {{- $rackLookup := and .Values.broker.rack.enabled (not .Values.broker.rack.value) }}
+{{- $clientTlsSecret := .Values.tls.clientExistingSecret | default .Values.tls.existingSecret }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -85,7 +86,7 @@ spec:
                 --host "${POD_IP}"
                 --data-port {{ .Values.broker.ports.data }}
                 --kafka-port {{ .Values.broker.ports.kafka }}
-                --controller "http://{{ include "aerostream.controller.service" . }}:{{ .Values.controller.ports.grpc }}"
+                --controller "{{ if .Values.tls.enabled }}https{{ else }}http{{ end }}://{{ include "aerostream.controller.service" . }}:{{ .Values.controller.ports.grpc }}"
                 --storage-dir /data
               )
               {{- if .Values.broker.rack.value }}
@@ -135,6 +136,12 @@ spec:
             {{- if $rackLookup }}
             - {name: rack, mountPath: /rack, readOnly: true}
             {{- end }}
+            {{- if .Values.tls.existingSecret }}
+            - {name: tls, mountPath: /etc/aerostream/tls, readOnly: true}
+            {{- end }}
+            {{- if $clientTlsSecret }}
+            - {name: tls-client, mountPath: /etc/aerostream/tls-client, readOnly: true}
+            {{- end }}
       {{- $aff := .Values.broker.affinity }}
       {{- if or $aff .Values.broker.podAntiAffinityPreset }}
       affinity:
@@ -163,6 +170,16 @@ spec:
         {{- if $rackLookup }}
         - name: rack
           emptyDir: {}
+        {{- end }}
+        {{- if .Values.tls.existingSecret }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.tls.existingSecret }}
+        {{- end }}
+        {{- if $clientTlsSecret }}
+        - name: tls-client
+          secret:
+            secretName: {{ $clientTlsSecret }}
         {{- end }}
         {{- if not .Values.broker.persistence.enabled }}
         - name: data

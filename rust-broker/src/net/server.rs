@@ -9,8 +9,6 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::server::TlsStream;
-use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::TlsAcceptor;
 use tracing::{info, error, debug, warn};
 
@@ -29,7 +27,7 @@ impl DataServer {
         Self { addr, log_manager, shard_handle, cfg }
     }
 
-    pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let std_listener = std::net::TcpListener::bind(self.addr)?;
         std_listener.set_nonblocking(true)?;
         #[cfg(target_os = "linux")]
@@ -98,8 +96,9 @@ impl DataServer {
     }
 }
 
-/// Build a TLS acceptor from the broker's configured cert/key.
-fn build_tls_acceptor(cfg: &BrokerConfig) -> Result<TlsAcceptor, Box<dyn std::error::Error>> {
+/// Build a TLS acceptor from the broker's configured cert/key. When `tls.require_client_cert` is
+/// set, this is mutual TLS: peer brokers must present a certificate signed by `tls.ca_file`.
+fn build_tls_acceptor(cfg: &BrokerConfig) -> Result<TlsAcceptor, Box<dyn std::error::Error + Send + Sync>> {
     let cert_path = cfg
         .tls
         .cert_file
@@ -111,22 +110,12 @@ fn build_tls_acceptor(cfg: &BrokerConfig) -> Result<TlsAcceptor, Box<dyn std::er
         .as_ref()
         .ok_or("tls.enabled is true but tls.key_file is not set")?;
 
-    let cert_bytes = std::fs::read(cert_path)?;
-    let certs: Vec<CertificateDer<'static>> = rustls_pemfile::certs(&mut &cert_bytes[..])
-        .collect::<Result<Vec<_>, _>>()?;
-    if certs.is_empty() {
-        return Err(format!("no certificates found in {:?}", cert_path).into());
-    }
-
-    let key_bytes = std::fs::read(key_path)?;
-    let key: PrivateKeyDer<'static> = rustls_pemfile::private_key(&mut &key_bytes[..])?
-        .ok_or_else(|| format!("no private key found in {:?}", key_path))?;
-
-    let config = ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(certs, key)?;
-
-    Ok(TlsAcceptor::from(Arc::new(config)))
+    crate::net::tls::build_acceptor(
+        cert_path,
+        key_path,
+        cfg.tls.ca_file.as_deref(),
+        cfg.tls.require_client_cert,
+    )
 }
 
 /// A client connection that is either plaintext (supports `sendfile` zero-copy)

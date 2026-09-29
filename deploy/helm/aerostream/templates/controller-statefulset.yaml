@@ -154,6 +154,9 @@ spec:
           volumeMounts:
             - {name: data, mountPath: /data}
             - {name: config, mountPath: /etc/aerostream, readOnly: true}
+            {{- if .Values.tls.existingSecret }}
+            - {name: tls, mountPath: /etc/aerostream/tls, readOnly: true}
+            {{- end }}
       {{- $aff := .Values.controller.affinity }}
       {{- if or $aff .Values.controller.podAntiAffinityPreset }}
       affinity:
@@ -179,6 +182,11 @@ spec:
         - name: config
           secret:
             secretName: {{ include "aerostream.configSecret" . }}
+        {{- if .Values.tls.existingSecret }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.tls.existingSecret }}
+        {{- end }}
         {{- if not .Values.controller.persistence.enabled }}
         - name: data
           emptyDir: {}

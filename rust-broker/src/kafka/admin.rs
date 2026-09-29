@@ -1144,7 +1144,17 @@ async fn list_offsets(st: &Arc<AdminState>, v: i16, rd: &mut Rd<'_>) -> CodecRes
                     Err(_) => code = E_UNKNOWN_TOPIC_OR_PARTITION,
                     Ok(log) => {
                         let (earliest, mut latest) = {
-                            let g = log.lock().await;
+                            let mut g = log.lock().await;
+                            if let Some(i) = &info {
+                                if i.leader == st.my_id() {
+                                    let other_isr = i.isr.iter().any(|&r| r != st.my_id());
+                                    if !other_isr {
+                                        g.high_watermark = g.next_offset;
+                                    } else if i.high_watermark > 0 {
+                                        g.high_watermark = g.high_watermark.max(i.high_watermark as u64);
+                                    }
+                                }
+                            }
                             (
                                 g.segments.first().map_or(0, |s| s.base_offset),
                                 // read_committed reports the last stable offset (KIP-98) instead of the high watermark.

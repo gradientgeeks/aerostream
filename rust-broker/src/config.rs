@@ -69,6 +69,11 @@ pub struct StorageConfig {
     /// After a range has been written back, drop it from the page cache. Caps page-cache use and paces the writer
     /// to the disk, at the cost of serving very recent reads from disk.
     pub drop_cache_after_writeback: bool,
+    /// Max active-segment file descriptors kept open by the LRU pool (Phase 10). Idle partitions beyond this are
+    /// closed and reopened on demand, so partition count is not bound by `ulimit -n`.
+    pub max_open_segment_files: usize,
+    /// Seconds without traffic before a partition goes dormant (fds closed, L1 index dropped). 0 disables.
+    pub partition_idle_secs: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -77,13 +82,31 @@ pub struct TlsConfig {
     /// Enable TLS on the TCP data plane. NOTE: enabling this disables the
     /// `sendfile` zero-copy fast path (encryption must happen in userspace).
     pub enabled: bool,
-    /// Server certificate (PEM) for the data plane.
+    /// Server certificate (PEM), used for both the data plane (`enabled`) and the Kafka
+    /// wire-protocol listener (`kafka_enabled`).
     pub cert_file: Option<PathBuf>,
-    /// Server private key (PEM) for the data plane.
+    /// Server private key (PEM), paired with `cert_file`.
     pub key_file: Option<PathBuf>,
-    /// CA certificate (PEM) used to verify the controller's TLS cert when the
-    /// controller endpoint is `https://`.
+    /// CA certificate (PEM) used to verify the controller's TLS cert when the controller
+    /// endpoint is `https://`, and (when `require_client_cert` is set) to verify client
+    /// certificates presented to the data-plane / Kafka listeners.
     pub ca_file: Option<PathBuf>,
+    /// Enable TLS on the Kafka wire-protocol listener (`kafka_port`). Independent of
+    /// `enabled`, which only gates the internal data-plane listener.
+    pub kafka_enabled: bool,
+    /// Require and verify a client certificate (mTLS) on whichever of the listeners above
+    /// have TLS enabled. Requires `ca_file` to be set as the trusted client-cert root.
+    pub require_client_cert: bool,
+    /// When set together with `require_client_cert`, the verified client certificate's
+    /// Subject CN is used directly as the Kafka principal for that connection, bypassing
+    /// SASL entirely (mutual-TLS authentication).
+    pub client_cert_principal: bool,
+    /// Client certificate (PEM) this broker presents when it is itself a TLS client: its
+    /// gRPC connection to the controller, and outbound data-plane connections to peer
+    /// brokers. Needed to authenticate against a controller/peer that enforces mTLS.
+    pub client_cert_file: Option<PathBuf>,
+    /// Client private key (PEM), paired with `client_cert_file`.
+    pub client_key_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -135,6 +158,8 @@ impl Default for StorageConfig {
             tombstone_retention_secs: 86400,
             writeback_bytes: 8 * 1024 * 1024,
             drop_cache_after_writeback: false,
+            max_open_segment_files: crate::log::fd_pool::DEFAULT_CAPACITY,
+            partition_idle_secs: 300,
         }
     }
 }
@@ -146,6 +171,11 @@ impl Default for TlsConfig {
             cert_file: None,
             key_file: None,
             ca_file: None,
+            kafka_enabled: false,
+            require_client_cert: false,
+            client_cert_principal: false,
+            client_cert_file: None,
+            client_key_file: None,
         }
     }
 }

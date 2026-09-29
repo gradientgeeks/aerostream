@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use tonic::transport::{Channel, ClientTlsConfig, Certificate};
+use tonic::transport::{Channel, ClientTlsConfig, Certificate, Identity};
 use tonic::{Request, metadata::MetadataValue};
 use tracing::{info, error, warn, debug};
 
@@ -70,6 +70,21 @@ pub async fn run_control_plane_loop(
                         error!("[AeroMQ Broker] Failed to read controller CA {:?}: {}. Retrying...", ca_path, e);
                         sleep(backoff).await;
                 backoff = (backoff * 2).min(Duration::from_secs(3));
+                        continue;
+                    }
+                }
+            }
+            // Present our own client certificate (mTLS) when configured, so a controller that
+            // enforces `RequireAndVerifyClientCert` can authenticate this broker.
+            if let (Some(cert_path), Some(key_path)) = (&cfg.tls.client_cert_file, &cfg.tls.client_key_file) {
+                match (std::fs::read(cert_path), std::fs::read(key_path)) {
+                    (Ok(cert_pem), Ok(key_pem)) => {
+                        tls = tls.identity(Identity::from_pem(cert_pem, key_pem));
+                    }
+                    (Err(e), _) | (_, Err(e)) => {
+                        error!("[AeroMQ Broker] Failed to read client cert/key ({:?}, {:?}): {}. Retrying...", cert_path, key_path, e);
+                        sleep(backoff).await;
+                        backoff = (backoff * 2).min(Duration::from_secs(3));
                         continue;
                     }
                 }
@@ -165,6 +180,12 @@ pub async fn run_control_plane_loop(
                                 debug!("[AeroMQ Broker] Leader partition active: {}/{}", leader.topic, leader.partition);
                                 let mut guard = part_log.lock().await;
                                 guard.replica_ids = leader.replica_ids.clone();
+                                if let Some(info) = crate::topology::TopologyCache::global().partition(&leader.topic, leader.partition as i32) {
+                                    let other_isr = info.isr.iter().any(|&r| r != broker_id as i32);
+                                    if !other_isr {
+                                        guard.replica_ids = vec![broker_id];
+                                    }
+                                }
                                 guard.recompute_high_watermark();
                             }
                             Err(e) => {

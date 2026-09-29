@@ -73,12 +73,23 @@ impl PartitionTxnIndex {
                 }
             }
         }
-        idx.journal = OpenOptions::new().create(true).append(true).open(&path).ok();
+        // The journal fd is opened lazily on the first transactional write (most partitions never see one) and
+        // released by `close_journal` when the partition goes dormant: no fd per partition (Phase 10).
         idx.journal_path = Some(path);
         idx
     }
 
+    /// Releases the journal fd; it reopens on the next write.
+    pub fn close_journal(&mut self) {
+        self.journal = None;
+    }
+
     fn log(&mut self, line: String) {
+        if self.journal.is_none() {
+            if let Some(path) = &self.journal_path {
+                self.journal = OpenOptions::new().create(true).append(true).open(path).ok();
+            }
+        }
         if let Some(f) = self.journal.as_mut() {
             let _ = writeln!(f, "{}", line);
         }

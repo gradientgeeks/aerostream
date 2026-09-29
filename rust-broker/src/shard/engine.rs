@@ -92,7 +92,19 @@ impl ShardEngine {
     }
 
     pub fn run(&mut self) {
-        while let Ok(req) = self.rx.recv() {
+        const SWEEP: std::time::Duration = std::time::Duration::from_secs(5);
+        let mut last_sweep = std::time::Instant::now();
+        loop {
+            // Sweep for dormant partitions on a timer, both when idle (recv timeout) and under steady load.
+            if last_sweep.elapsed() >= SWEEP {
+                self.sweep_idle();
+                last_sweep = std::time::Instant::now();
+            }
+            let req = match self.rx.recv_timeout(SWEEP) {
+                Ok(r) => r,
+                Err(flume::RecvTimeoutError::Timeout) => continue,
+                Err(flume::RecvTimeoutError::Disconnected) => break,
+            };
             match req {
                 ShardRequest::Append { topic, partition, data, reply } => {
                     let mut log = self.get_or_create_partition(&topic, partition);
@@ -162,6 +174,13 @@ impl ShardEngine {
                     break;
                 }
             }
+        }
+    }
+
+    /// Releases fds and derived index state of partitions with no recent traffic (Phase 10 dormant state).
+    fn sweep_idle(&mut self) {
+        for log in self.partitions.values_mut() {
+            log.evict_if_idle();
         }
     }
 

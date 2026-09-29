@@ -37,12 +37,16 @@ hashbrown = "0.15"
 ring = "0.17"
 base64 = "0.21"
 flume = "0.11"
+# Parses a verified mTLS client certificate's Subject CN into a Kafka principal.
+x509-parser = "0.16"
 
 [build-dependencies]
 tonic-build = "0.11"
 
 [dev-dependencies]
 tempfile = "3"
+# Self-signed cert/CA generation for TLS/mTLS tests.
+rcgen = "0.13"
 
 [profile.release]
 opt-level = 3

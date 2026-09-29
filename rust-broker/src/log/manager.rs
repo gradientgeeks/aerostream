@@ -1,5 +1,5 @@
 use hashbrown::HashMap;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -41,7 +41,16 @@ pub struct LogSegment {
     pub idx_path: PathBuf,
 }
 
+use crate::log::fd_pool::{FdPool, PooledFile};
 use crate::log::producer_state::{ProducerStateTracker, SequenceCheckResult};
+use crate::log::sparse_index::SparseIndex;
+
+/// Partitions idle this long are made dormant (0 disables). Set from `storage.partition_idle_secs`.
+static IDLE_EVICT_SECS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(300);
+
+pub fn set_idle_evict_secs(secs: u64) {
+    IDLE_EVICT_SECS.store(secs, std::sync::atomic::Ordering::Relaxed);
+}
 
 // Configurations
 pub struct PartitionLog {
@@ -49,8 +58,13 @@ pub struct PartitionLog {
     pub partition: u32,
     pub partition_dir: PathBuf,
     pub segments: Vec<LogSegment>,
-    pub active_log_file: File,
-    pub active_idx_file: File,
+    /// Active segment handles live in the shared LRU `FdPool` (Phase 10): no fd is pinned per partition.
+    active_log: PooledFile,
+    active_idx: PooledFile,
+    /// L1 sparse indexes keyed by idx path, built lazily from the on-disk L2 index (see `sparse_index`).
+    l1: HashMap<PathBuf, SparseIndex>,
+    /// Last append/fetch; drives dormant-partition eviction.
+    last_access: std::time::Instant,
     pub next_offset: u64,
     // Tracked sizes of the active segment files (avoid a metadata()/lseek syscall per append).
     active_len: u64,
@@ -174,31 +188,26 @@ impl PartitionLog {
         }
 
         let active_seg = segments.last().unwrap();
-        let active_log_file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(&active_seg.log_path)?;
+        let pool = FdPool::global().clone();
+        let active_log = PooledFile::new(pool.clone(), active_seg.log_path.clone());
+        let active_idx = PooledFile::new(pool, active_seg.idx_path.clone());
 
-        let mut active_idx_file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(&active_seg.idx_path)?;
-
-        // Determine next offset from the last index entry of active segment
-        let index_len = active_idx_file.metadata()?.len();
+        // Determine next offset from the last index entry of active segment. The handles are opened through the
+        // pool, so recovering thousands of partitions at startup never holds more than the pool cap.
+        let idx_file = active_idx.get()?;
+        let index_len = idx_file.metadata()?.len();
         let next_offset = if index_len >= 16 {
-            active_idx_file.seek(SeekFrom::Start(index_len - 16))?;
+            use std::os::unix::fs::FileExt;
             let mut buf = [0u8; 16];
-            active_idx_file.read_exact(&mut buf)?;
+            idx_file.read_exact_at(&mut buf, index_len - 16)?;
             u64::from_be_bytes(buf[0..8].try_into().unwrap()) + 1
         } else {
             active_seg.base_offset
         };
+        drop(idx_file);
 
         // Appends use positioned writes at the tracked lengths
-        let active_len = active_log_file.metadata()?.len();
+        let active_len = active_log.get()?.metadata()?.len();
         let active_idx_len = index_len;
 
         let partition_dir_for_txn = partition_dir.clone();
@@ -207,8 +216,10 @@ impl PartitionLog {
             partition,
             partition_dir,
             segments,
-            active_log_file,
-            active_idx_file,
+            active_log,
+            active_idx,
+            l1: HashMap::new(),
+            last_access: std::time::Instant::now(),
             next_offset,
             active_len,
             active_idx_len,
@@ -358,7 +369,8 @@ impl PartitionLog {
 
         // Positioned writes at the tracked lengths: no metadata(), lseek or split index writes per record.
         let pos = self.active_len;
-        self.active_log_file.write_all_at(data, pos)?;
+        self.last_access = std::time::Instant::now();
+        self.active_log.get()?.write_all_at(data, pos)?;
         self.active_len += data.len() as u64;
         self.write_back_progress();
 
@@ -366,7 +378,7 @@ impl PartitionLog {
         let mut entry = [0u8; 16];
         entry[..8].copy_from_slice(&offset.to_be_bytes());
         entry[8..].copy_from_slice(&pos.to_be_bytes());
-        self.active_idx_file.write_all_at(&entry, self.active_idx_len)?;
+        self.active_idx.get()?.write_all_at(&entry, self.active_idx_len)?;
         self.active_idx_len += 16;
 
         self.next_offset += 1;
@@ -406,9 +418,11 @@ impl PartitionLog {
         let pos = self.active_len;
         // In-place base offset patching directly at disk position without cloning the batch:
         let off_bytes = base_offset.to_be_bytes();
-        self.active_log_file.write_all_at(&off_bytes, pos)?;
+        self.last_access = std::time::Instant::now();
+        let log_file = self.active_log.get()?;
+        log_file.write_all_at(&off_bytes, pos)?;
         if batch.len() > 8 {
-            self.active_log_file.write_all_at(&batch[8..], pos + 8)?;
+            log_file.write_all_at(&batch[8..], pos + 8)?;
         }
         self.active_len += batch.len() as u64;
         self.write_back_progress();
@@ -417,7 +431,7 @@ impl PartitionLog {
         let mut entry = [0u8; 16];
         entry[..8].copy_from_slice(&offset.to_be_bytes());
         entry[8..].copy_from_slice(&pos.to_be_bytes());
-        self.active_idx_file.write_all_at(&entry, self.active_idx_len)?;
+        self.active_idx.get()?.write_all_at(&entry, self.active_idx_len)?;
         self.active_idx_len += 16;
 
         self.next_offset += record_count.max(1);
@@ -444,6 +458,8 @@ impl PartitionLog {
         let res = crate::log::compactor::compact_segments(&self.partition_dir, &mut closed, self.tombstone_retention);
         closed.push(active_seg);
         self.segments = closed;
+        // Compaction rewrites closed idx files: cached L1 samples may no longer match.
+        self.l1.retain(|p, _| Some(p) == self.segments.last().map(|s| &s.idx_path));
         res
     }
 
@@ -476,7 +492,8 @@ impl PartitionLog {
         #[cfg(target_os = "linux")]
         {
             use std::os::unix::io::AsRawFd;
-            let fd = self.active_log_file.as_raw_fd();
+            let Ok(log_file) = self.active_log.get() else { return };
+            let fd = log_file.as_raw_fd();
             let (start, len) = (self.writeback_start, self.active_len - self.writeback_start);
             // SAFETY: plain syscalls on a valid, open file descriptor; failures are only advisory.
             unsafe {
@@ -568,23 +585,44 @@ impl PartitionLog {
         Ok(())
     }
 
-    fn roll_over(&mut self) -> io::Result<()> {
-        self.active_log_file.flush()?;
-        self.active_idx_file.flush()?;
+    /// Time since the last append or fetch.
+    pub fn idle_for(&self) -> std::time::Duration {
+        self.last_access.elapsed()
+    }
 
+    /// Puts an idle partition into its dormant state: closes the active segment's fds and drops the derived L1
+    /// indexes. Everything is reopened/rebuilt transparently by the next append or fetch, so only the small
+    /// bookkeeping struct stays resident. Returns true if anything was released.
+    pub fn make_dormant(&mut self) -> bool {
+        let had_state = !self.l1.is_empty();
+        self.active_log.close();
+        self.active_idx.close();
+        self.l1 = HashMap::new();
+        self.txn_index.close_journal();
+        had_state
+    }
+
+    /// Dormant-eviction hook: call periodically; releases resources of partitions idle past the configured timeout.
+    pub fn evict_if_idle(&mut self) -> bool {
+        let secs = IDLE_EVICT_SECS.load(std::sync::atomic::Ordering::Relaxed);
+        secs > 0 && self.idle_for() >= std::time::Duration::from_secs(secs) && self.make_dormant()
+    }
+
+    fn roll_over(&mut self) -> io::Result<()> {
         let old_active_seg = self.segments.last().unwrap().clone();
 
         // Start writeback of the unflushed tail of the sealed segment, then archive it (link, no data copy).
         if self.writeback_bytes > 0 && self.active_len > self.writeback_start {
             #[cfg(target_os = "linux")]
-            unsafe {
+            if let Ok(log_file) = self.active_log.get() {
                 use std::os::unix::io::AsRawFd;
-                libc::sync_file_range(
-                    self.active_log_file.as_raw_fd(),
+                // SAFETY: plain syscall on a valid, open file descriptor; failure is only advisory.
+                unsafe { libc::sync_file_range(
+                    log_file.as_raw_fd(),
                     self.writeback_start as libc::off64_t,
                     (self.active_len - self.writeback_start) as libc::off64_t,
                     libc::SYNC_FILE_RANGE_WRITE,
-                );
+                ); }
             }
         }
         self.archive_sealed_segment(&old_active_seg)?;
@@ -594,20 +632,12 @@ impl PartitionLog {
         let new_log_path = self.partition_dir.join(format!("{:020}.log", new_base_offset));
         let new_idx_path = self.partition_dir.join(format!("{:020}.idx", new_base_offset));
 
-        let new_log_file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(&new_log_path)?;
-
-        let new_idx_file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(&new_idx_path)?;
-
-        self.active_log_file = new_log_file;
-        self.active_idx_file = new_idx_file;
+        // Retarget the pooled handles at the new segment (drops the sealed segment's fds) and create the files now
+        // so a failure surfaces at roll time rather than on the next append.
+        self.active_log.retarget(new_log_path.clone());
+        self.active_idx.retarget(new_idx_path.clone());
+        self.active_log.get()?;
+        self.active_idx.get()?;
         self.active_len = 0;
         self.active_idx_len = 0;
         self.writeback_start = 0;
@@ -640,6 +670,7 @@ impl PartitionLog {
                 }
 
                 let oldest = self.segments.remove(0);
+                self.l1.remove(&oldest.idx_path);
                 let _ = fs::remove_file(&oldest.log_path);
                 let _ = fs::remove_file(&oldest.idx_path);
                 info!(
@@ -672,6 +703,7 @@ impl PartitionLog {
                 }
 
                 let oldest = self.segments.remove(0);
+                self.l1.remove(&oldest.idx_path);
                 let _ = fs::remove_file(&oldest.log_path);
                 let _ = fs::remove_file(&oldest.idx_path);
                 info!(
@@ -920,6 +952,7 @@ impl PartitionLog {
         if start_offset >= end_offset || start_offset >= self.next_offset {
             return Ok(None);
         }
+        self.last_access = std::time::Instant::now();
         let seg = match self.segment_for_offset(start_offset)? {
             Some(s) => s,
             None => return Ok(None),
@@ -929,6 +962,15 @@ impl PartitionLog {
         if n == 0 {
             return Ok(None);
         }
+        // L1 sparse index for this segment (built lazily, extended as the index grows). Bounded so a scan across
+        // thousands of cold segments cannot accumulate unbounded metadata.
+        if !self.l1.contains_key(&seg.idx_path) {
+            if self.l1.len() >= 256 {
+                self.l1.clear();
+            }
+            self.l1.insert(seg.idx_path.clone(), SparseIndex::new(seg.base_offset));
+        }
+        let l1 = self.l1.get_mut(&seg.idx_path).unwrap();
         let entry = |i: u64| -> io::Result<(u64, u64)> {
             let mut b = [0u8; 16];
             idx.read_exact_at(&mut b, i * 16)?;
@@ -940,11 +982,8 @@ impl PartitionLog {
         // ">= start_offset" search would have — it only matters once a batch stores multiple records as one entry
         // (see `append_batch_slice`'s `record_count`), where a ">= start_offset" search would skip past the
         // containing entry to the next one and silently miss data for any offset that isn't the batch's base.
-        let (mut lo, mut hi) = (0u64, n);
-        while lo < hi {
-            let mid = lo + (hi - lo) / 2;
-            if entry(mid)?.0 > start_offset { hi = mid; } else { lo = mid + 1; }
-        }
+        // (First entry with offset > start_offset, found via L1 window + one pread of L2.)
+        let mut lo = l1.first_at_or_after(&idx, n, start_offset.saturating_add(1))?;
         if lo == 0 {
             // start_offset is before the earliest entry in this segment: nothing to clamp to, fall back to the
             // first entry (matches the previous behavior for an out-of-range-low start_offset).
@@ -964,12 +1003,7 @@ impl PartitionLog {
         // replicas, high_watermark == next_offset exactly (see recompute_high_watermark); with replicas, a
         // follower's reported offset is always one it computed from whole entries read_range/read_range_entries
         // handed it (they never return a partial entry), so it always lands on an entry boundary too.
-        let (mut lo, mut hi) = (first + 1, n);
-        while lo < hi {
-            let mid = lo + (hi - lo) / 2;
-            if entry(mid)?.0 >= end_offset { hi = mid; } else { lo = mid + 1; }
-        }
-        let k_off = lo;
+        let k_off = l1.first_at_or_after(&idx, n, end_offset)?.max(first + 1);
         // largest k in (first, k_off] whose end position fits in max_bytes; at least first + 1
         let limit = pos + max_bytes as u64;
         let (mut lo, mut hi) = (first + 1, k_off);
@@ -1153,6 +1187,7 @@ impl LogManager {
         let mut compacted = 0;
         for part_arc in eligible {
             let mut part = part_arc.lock().await;
+            part.evict_if_idle();
             if !part.compaction_enabled {
                 continue;
             }
@@ -1284,6 +1319,83 @@ impl PartitionStore for LogManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Manual density probe: `cargo test --release density_probe -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn density_probe() {
+        let rss_kb = || -> u64 {
+            std::fs::read_to_string("/proc/self/status").unwrap().lines()
+                .find(|l| l.starts_with("VmRSS")).unwrap()
+                .split_whitespace().nth(1).unwrap().parse().unwrap()
+        };
+        let fds = || std::fs::read_dir("/proc/self/fd").unwrap().count();
+        let dir = tempfile::tempdir().unwrap();
+        let (n, r0) = (10_000u32, rss_kb());
+        let t = std::time::Instant::now();
+        let mut logs: Vec<PartitionLog> = (0..n)
+            .map(|p| PartitionLog::new(dir.path(), "probe", p, 1, 1 << 20, None, None).unwrap())
+            .collect();
+        println!("create {n} partitions: {:?}, fds={}, rssΔ={} MB", t.elapsed(), fds(), (rss_kb() - r0) / 1024);
+        let t = std::time::Instant::now();
+        for round in 0..5 {
+            for l in logs.iter_mut() { l.append(&[round; 100]).unwrap(); }
+        }
+        println!("{} appends round-robin: {:?} ({:.0}/s), fds={}, pool={:?}", n * 5, t.elapsed(),
+            (n * 5) as f64 / t.elapsed().as_secs_f64(), fds(), FdPool::global().stats());
+        let t = std::time::Instant::now();
+        for l in logs.iter_mut() { l.read_range(2, 5, 1 << 20).unwrap().unwrap(); }
+        println!("{n} cold fetches: {:?}", t.elapsed());
+        for l in logs.iter_mut() { l.make_dormant(); }
+        println!("all dormant: fds={}, rssΔ={} MB", fds(), (rss_kb() - r0) / 1024);
+    }
+
+    /// Phase 10: many partitions with a tiny fd pool still append and fetch correctly, dormant eviction is
+    /// transparent, and fetches through the L1 sparse index return the right ranges across several windows.
+    #[test]
+    fn dense_partitions_share_bounded_fd_pool() {
+        let dir = tempfile::tempdir().unwrap();
+        FdPool::global().set_capacity(32);
+        let mut logs: Vec<PartitionLog> = (0..200)
+            .map(|p| PartitionLog::new(dir.path(), "dense", p, 1, 1 << 20, None, None).unwrap())
+            .collect();
+        for round in 0..3u8 {
+            for l in logs.iter_mut() {
+                l.append(&[round; 10]).unwrap();
+            }
+        }
+        assert!(FdPool::global().stats().open <= 32 + 16, "pool exceeded cap");
+        // Dormant everything, then keep using it.
+        for l in logs.iter_mut() {
+            l.make_dormant();
+        }
+        for l in logs.iter_mut() {
+            l.append(&[9; 10]).unwrap();
+        }
+        for l in logs.iter_mut() {
+            assert_eq!(l.next_offset, 4);
+            let (f, pos, len, first) = l.read_range(2, 4, 1 << 20).unwrap().unwrap();
+            assert_eq!((pos, len, first), (20, 20, 10));
+            let mut b = [0u8; 20];
+            std::os::unix::fs::FileExt::read_exact_at(&f, &mut b, pos).unwrap();
+            assert_eq!(&b[..10], &[2u8; 10]);
+            assert_eq!(&b[10..], &[9u8; 10]);
+        }
+        // > SAMPLE entries so lookups cross L1 windows and the index grows between fetches.
+        let l = &mut logs[0];
+        for i in 0..1000u32 {
+            l.append(&i.to_be_bytes()).unwrap();
+            if i % 97 == 0 {
+                let want = l.next_offset - 1;
+                let (f, pos, len, _) = l.read_range(want, want + 1, 1 << 20).unwrap().unwrap();
+                assert_eq!(len, 4);
+                let mut b = [0u8; 4];
+                std::os::unix::fs::FileExt::read_exact_at(&f, &mut b, pos).unwrap();
+                assert_eq!(u32::from_be_bytes(b), i);
+            }
+        }
+        FdPool::global().set_capacity(crate::log::fd_pool::DEFAULT_CAPACITY);
+    }
 
     /// Archiving into cold storage now happens on a spawned background thread (see `archive_sealed_segment`), not
     /// inline with `roll_over`, so tests that check for it must poll instead of asserting immediately.
