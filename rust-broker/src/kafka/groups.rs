@@ -678,6 +678,19 @@ impl GroupCoordinator {
         NONE
     }
 
+    /// Undoes a local commit that could not be made durable: puts back the previous entry (or removes the key).
+    pub fn restore_offsets(&self, group_id: &str, prev: Vec<(String, i32, Option<OffsetEntry>)>) {
+        let mut groups = self.groups.lock().unwrap();
+        if let Some(g) = groups.get_mut(group_id) {
+            for (t, p, e) in prev {
+                match e {
+                    Some(e) => { g.offsets.insert((t, p), e); }
+                    None => { g.offsets.remove(&(t, p)); }
+                }
+            }
+        }
+    }
+
     /// Cache offsets learned from the controller (does not override newer local commits).
     pub fn cache_offsets(&self, group_id: &str, offsets: Vec<(String, i32, i64)>) {
         let mut groups = self.groups.lock().unwrap();

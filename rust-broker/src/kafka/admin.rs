@@ -150,27 +150,40 @@ impl AdminState {
         self.coordinator_node(key).0 == self.my_id()
     }
 
-    pub async fn persist_offsets(&self, group: &str, offsets: Vec<(String, i32, i64)>) {
+    /// Writes committed offsets through to the controller (Raft). Returns false if that failed, so the caller can
+    /// answer COORDINATOR_NOT_AVAILABLE instead of acknowledging an offset that would be lost on restart.
+    pub async fn persist_offsets(&self, group: &str, offsets: Vec<(String, i32, i64)>) -> bool {
         if let Some(c) = &self.ctl {
             if let Err(e) = c.commit_offsets(group, offsets).await {
                 warn!("[AeroStream Kafka] offset write-through to controller failed for group {}: {}", group, e);
+                return false;
             }
         }
+        true
     }
 
     /// Load committed offsets of `topics` from the controller into the coordinator cache when unknown locally.
-    pub async fn hydrate_offsets(&self, group: &str, topics: Vec<String>) {
+    /// Returns false if the controller could not be reached (e.g. Raft leader not elected yet after a restart):
+    /// an empty cache is then not an answer, and OffsetFetch must report a retriable error instead of "no offset".
+    pub async fn hydrate_offsets(&self, group: &str, topics: Vec<String>) -> bool {
         let ctl = match &self.ctl {
             Some(c) => c,
-            None => return,
+            None => return true,
         };
         let known: std::collections::HashSet<String> = self.groups.all_offsets(group).into_iter().map(|(t, _, _)| t).collect();
         let missing: Vec<String> = topics.into_iter().filter(|t| !known.contains(t)).collect();
         if missing.is_empty() {
-            return;
+            return true;
         }
-        if let Ok(offs) = ctl.fetch_offsets(group, missing).await {
-            self.groups.cache_offsets(group, offs);
+        match ctl.fetch_offsets(group, missing).await {
+            Ok(offs) => {
+                self.groups.cache_offsets(group, offs);
+                true
+            }
+            Err(e) => {
+                warn!("[AeroStream Kafka] offset hydration from controller failed for group {}: {}", group, e);
+                false
+            }
         }
     }
 }

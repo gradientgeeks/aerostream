@@ -413,6 +413,50 @@ func TestCleanInactive_NoFailoverWhenNoActiveBrokersRemain(t *testing.T) {
 	}
 }
 
+// The new leader must be an in-sync replica (the most caught-up one), even when a lagging replica is listed first.
+func TestBrokerFailure_ElectsMostCaughtUpInSyncReplica(t *testing.T) {
+	f := NewFSM(time.Hour, 10)
+	registerBroker(t, f, 1, "h1", 9001)
+	registerBroker(t, f, 2, "h2", 9002)
+	registerBroker(t, f, 3, "h3", 9003)
+	createTopic(t, f, "t1", 1, 3)
+
+	p := f.state.Topics["t1"].Partitions[0]
+	p.ReplicaIDs = []uint32{1, 2, 3}
+	p.LeaderID = 1
+	p.ISR = []uint32{1, 3}                                    // 2 fell out of sync although it is listed before 3
+	p.ReplicaOffsets = map[uint32]int64{1: 100, 2: 40, 3: 99} // 2 is far behind
+	f.state.Brokers[1].Active = false
+	f.handleBrokerFailure(1)
+
+	if p.LeaderID != 3 {
+		t.Fatalf("expected in-sync replica 3 to be elected, got %d", p.LeaderID)
+	}
+}
+
+// A broker holding no copy of the partition must never be promoted; the partition stays leaderless until a
+// replica returns, then is re-elected.
+func TestBrokerFailure_NeverElectsNonReplicaAndReelectsWhenReplicaReturns(t *testing.T) {
+	f := NewFSM(time.Hour, 10)
+	registerBroker(t, f, 1, "h1", 9001)
+	registerBroker(t, f, 2, "h2", 9002)
+	createTopic(t, f, "t1", 1, 1)
+
+	p := f.state.Topics["t1"].Partitions[0]
+	p.ReplicaIDs = []uint32{1}
+	p.LeaderID = 1
+	f.state.Brokers[1].Active = false
+	f.handleBrokerFailure(1)
+	if p.LeaderID != 0 {
+		t.Fatalf("expected leaderless partition, broker %d without data was promoted", p.LeaderID)
+	}
+
+	registerBroker(t, f, 1, "h1", 9001) // the only replica comes back
+	if p.LeaderID != 1 {
+		t.Fatalf("expected replica 1 to be re-elected on registration, got %d", p.LeaderID)
+	}
+}
+
 // ---------------------------------------------------------------------
 // Snapshot / Restore
 // ---------------------------------------------------------------------
@@ -711,4 +755,3 @@ func TestDrainBroker_ReassignsLeadersAndReplicas(t *testing.T) {
 		}
 	}
 }
-

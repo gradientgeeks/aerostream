@@ -2,8 +2,8 @@ package grpcserver
 
 import (
 	"context"
-	"errors"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -125,7 +125,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 
 	// Read state to build the target assignments for this broker
 	meta := s.RaftNode.FSM.GetMetadata(nil)
-	
+
 	assignedLeaders := []*pb.PartitionAssignment{}
 	assignedFollowers := []*pb.PartitionAssignment{}
 
@@ -459,7 +459,26 @@ func (s *Server) CommitOffsets(ctx context.Context, req *pb.CommitOffsetsRequest
 	return &pb.CommitOffsetsResponse{Success: true}, nil
 }
 
+// ensureOffsetsReadable makes sure an empty FetchOffsets answer means "no committed offset" and not "state not
+// loaded yet". Right after a restart the FSM is empty until the Raft log is replayed: with no known leader the
+// cluster is not ready, and a fresh leader must apply everything committed before it serves reads (Barrier).
+// Followers with a known leader keep serving local state, as before.
+func (s *Server) ensureOffsetsReadable() error {
+	if s.RaftNode.Raft.Leader() == "" {
+		return status.Errorf(codes.Unavailable, "no cluster leader elected yet; committed offsets not available")
+	}
+	if s.RaftNode.Raft.State() == raft.Leader {
+		if err := s.RaftNode.Raft.Barrier(2 * time.Second).Error(); err != nil {
+			return status.Errorf(codes.Unavailable, "controller state not caught up: %v", err)
+		}
+	}
+	return nil
+}
+
 func (s *Server) FetchOffsets(ctx context.Context, req *pb.FetchOffsetsRequest) (*pb.FetchOffsetsResponse, error) {
+	if err := s.ensureOffsetsReadable(); err != nil {
+		return nil, err
+	}
 	offsets := []*pb.TopicPartitionOffset{}
 
 	for _, topic := range req.Topics {
@@ -471,14 +490,10 @@ func (s *Server) FetchOffsets(ctx context.Context, req *pb.FetchOffsetsRequest) 
 		}
 
 		for pID := range tState.Partitions {
+			// Returned as committed. It must not be clamped to the controller's high-watermark: that value is 0
+			// after a restart until the broker reports replica offsets, which turned every committed offset into
+			// 0 (a full reprocess). An out-of-range offset is handled by the consumer's auto.offset.reset on Fetch.
 			offsetVal := s.RaftNode.FSM.GetOffset(req.GroupId, topic, pID)
-			if offsetVal >= 0 {
-				if pState, exists := tState.Partitions[pID]; exists {
-					if offsetVal > pState.HighWatermark {
-						offsetVal = pState.HighWatermark
-					}
-				}
-			}
 			offsets = append(offsets, &pb.TopicPartitionOffset{
 				Topic:     topic,
 				Partition: pID,

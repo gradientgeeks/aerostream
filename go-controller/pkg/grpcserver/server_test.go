@@ -110,9 +110,20 @@ func TestCommitOffsets_RejectsNonLeader(t *testing.T) {
 	assertUnavailableNonLeaderError(t, err)
 }
 
-// GetMetadata and FetchOffsets deliberately serve from local FSM state
-// without requiring leadership, so a non-leader node should still answer
-// (with empty results, since nothing has been proposed yet).
+// FetchOffsets must not answer "no committed offset" before a leader exists: the FSM is simply not loaded yet
+// (right after a restart), and an empty answer makes consumers reset and skip or reprocess data.
+func TestFetchOffsets_UnavailableUntilLeaderKnown(t *testing.T) {
+	rn := newUnstartedRaftNode(t)
+	srv := NewServer(rn, time.Hour)
+
+	_, err := srv.FetchOffsets(context.Background(), &pb.FetchOffsetsRequest{GroupId: "g1", Topics: []string{"t1"}})
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("expected Unavailable while no leader is elected, got: %v", err)
+	}
+}
+
+// GetMetadata deliberately serves from local FSM state without requiring leadership, so a non-leader node
+// should still answer (with empty results, since nothing has been proposed yet).
 func TestGetMetadata_DoesNotRequireLeader(t *testing.T) {
 	rn := newUnstartedRaftNode(t)
 	srv := NewServer(rn, time.Hour)

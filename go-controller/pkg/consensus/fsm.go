@@ -187,6 +187,7 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 				Rack:      payload.Rack,
 				KafkaPort: payload.KafkaPort,
 			}
+			f.reelectLeaderless(payload.ID)
 		}
 
 	case CmdBrokerHeartbeat:
@@ -202,6 +203,7 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 			if broker, exists := f.state.Brokers[payload.ID]; exists {
 				broker.LastSeen = time.Now()
 				broker.Active = true
+				f.reelectLeaderless(payload.ID)
 			}
 			// Update replica offsets
 			for _, ro := range payload.ReplicaOffsets {
@@ -589,6 +591,63 @@ func (f *FSM) getActiveBrokerIDs() []uint32 {
 	return ids
 }
 
+// electLeader picks a new leader for p, never `exclude`. Preference order:
+//  1. live in-sync replicas, the one with the highest replicated offset (no acknowledged data is lost);
+//  2. otherwise a live replica with the highest offset (an unclean election, still a replica that holds data).
+//
+// It returns 0 when no live replica exists. A broker outside the replica set is never chosen: it has none of the
+// partition's data, so promoting it would silently truncate the log to empty.
+func (f *FSM) electLeader(p *PartitionState, exclude uint32) uint32 {
+	live := func(id uint32) bool {
+		b, ok := f.state.Brokers[id]
+		return ok && b.Active && id != exclude
+	}
+	isReplica := func(id uint32) bool {
+		for _, r := range p.ReplicaIDs {
+			if r == id {
+				return true
+			}
+		}
+		return false
+	}
+	best, bestOff := uint32(0), int64(-1)
+	pick := func(ids []uint32, needReplica bool) {
+		for _, id := range ids {
+			if !live(id) || (needReplica && !isReplica(id)) {
+				continue
+			}
+			if off := p.ReplicaOffsets[id]; off > bestOff {
+				best, bestOff = id, off
+			}
+		}
+	}
+	pick(p.ISR, true)
+	if best == 0 {
+		pick(p.ReplicaIDs, false)
+	}
+	return best
+}
+
+// reelectLeaderless gives a leader to partitions that have none (or whose leader is down) once one of their
+// replicas is live again.
+func (f *FSM) reelectLeaderless(brokerID uint32) {
+	for _, topic := range f.state.Topics {
+		for _, p := range topic.Partitions {
+			if b, ok := f.state.Brokers[p.LeaderID]; p.LeaderID != 0 && ok && b.Active {
+				continue
+			}
+			for _, r := range p.ReplicaIDs {
+				if r == brokerID {
+					if l := f.electLeader(p, 0); l != 0 {
+						p.LeaderID = l
+					}
+					break
+				}
+			}
+		}
+	}
+}
+
 func (f *FSM) handleBrokerFailure(failedID uint32) {
 	// Find all partitions where this broker was leader, and assign a new leader
 	activeBrokers := f.getActiveBrokerIDs()
@@ -599,20 +658,9 @@ func (f *FSM) handleBrokerFailure(failedID uint32) {
 	for _, topic := range f.state.Topics {
 		for _, partition := range topic.Partitions {
 			if partition.LeaderID == failedID {
-				// Pick a new leader from replicas if possible, else round robin active
-				newLeader := uint32(0)
-				for _, repID := range partition.ReplicaIDs {
-					if repID != failedID {
-						if b, exists := f.state.Brokers[repID]; exists && b.Active {
-							newLeader = repID
-							break
-						}
-					}
-				}
-				if newLeader == 0 {
-					newLeader = activeBrokers[0] // Fallback
-				}
-				partition.LeaderID = newLeader
+				// Never a broker that holds no copy of the partition. With no live replica the partition is left
+				// leaderless (clients see LEADER_NOT_AVAILABLE) until a replica registers again.
+				partition.LeaderID = f.electLeader(partition, failedID)
 			}
 		}
 	}

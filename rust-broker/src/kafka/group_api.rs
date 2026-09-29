@@ -280,15 +280,24 @@ async fn offset_commit(st: &Arc<AdminState>, v: i16, rd: &mut Rd<'_>) -> CodecRe
         .iter()
         .flat_map(|(t, ps)| ps.iter().map(move |(p, e)| (t.clone(), *p, e.clone())))
         .collect();
+    let prev: Vec<(String, i32, Option<OffsetEntry>)> =
+        flat.iter().map(|(t, p, _)| (t.clone(), *p, st.groups.get_offset(&group, t, *p))).collect();
     let err = if !st.is_coordinator(&group) {
         NOT_COORD
     } else {
         st.groups.commit_offsets(&group, &member, generation, &flat)
     };
-    if err == NONE {
-        // write-through to the controller so offsets survive coordinator moves / restarts
-        st.persist_offsets(&group, flat.iter().map(|(t, p, e)| (t.clone(), *p, e.offset)).collect()).await;
-    }
+    let err = if err == NONE
+        // write-through to the controller so offsets survive coordinator moves / restarts; never ack an
+        // offset that could not be made durable (the client retries the commit)
+        && !st.persist_offsets(&group, flat.iter().map(|(t, p, e)| (t.clone(), *p, e.offset)).collect()).await
+    {
+        // Roll the local cache back too, so OffsetFetch never serves an offset that was never acknowledged.
+        st.groups.restore_offsets(&group, prev);
+        COORDINATOR_NOT_AVAILABLE
+    } else {
+        err
+    };
 
     let mut w = Wr::new(rd.flex);
     if v >= 3 {
@@ -333,14 +342,25 @@ async fn offset_fetch(st: &Arc<AdminState>, v: i16, rd: &mut Rd<'_>) -> CodecRes
     // rows: topic -> [(partition, offset, epoch, metadata, err)]
     let mut rows: Vec<(String, Vec<(i32, i64, i32, Option<String>, i16)>)> = Vec::new();
     let mut top_err = NONE;
+    // Set when the durable store (controller) was unreachable: answering "no committed offset" would make the
+    // consumer apply auto.offset.reset and silently skip or reprocess data, so report a retriable error instead.
+    let mut unavailable = false;
     if !coord {
         top_err = NOT_COORD;
     } else {
         // Hydrate the local cache from the controller for topics we do not know about yet.
         if let Some(rt) = &req_topics {
-            st.hydrate_offsets(&group, rt.iter().map(|(t, _)| t.clone()).collect()).await;
+            unavailable = !st.hydrate_offsets(&group, rt.iter().map(|(t, _)| t.clone()).collect()).await;
         }
-        match &req_topics {
+        if unavailable {
+            top_err = COORDINATOR_NOT_AVAILABLE;
+            // v0/v1 responses have no top-level error code: carry it on every partition.
+            if let Some(rt) = &req_topics {
+                for (t, ps) in rt {
+                    rows.push((t.clone(), ps.iter().map(|p| (*p, -1, -1, None, COORDINATOR_NOT_AVAILABLE)).collect()));
+                }
+            }
+        } else { match &req_topics {
             Some(rt) => {
                 for (t, ps) in rt {
                     let mut out = Vec::new();
@@ -360,7 +380,7 @@ async fn offset_fetch(st: &Arc<AdminState>, v: i16, rd: &mut Rd<'_>) -> CodecRes
                 }
                 rows = by_topic.into_iter().collect();
             }
-        }
+        } }
     }
 
     let mut w = Wr::new(rd.flex);

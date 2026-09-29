@@ -490,8 +490,8 @@ pub(crate) async fn handle_metadata_with_snapshot(
     let mut buf = BytesMut::new();
     buf.put_i32(correlation_id);
 
-    if api_version >= 1 {
-        buf.put_i32(0); // ThrottleTimeMs
+    if api_version >= 3 {
+        buf.put_i32(0); // ThrottleTimeMs (Metadata response v3+; v1/v2 have no such field)
     }
 
     // Brokers array (all live brokers when the controller view is available)
@@ -1955,13 +1955,46 @@ mod topology_tests {
         let mut cur = io::Cursor::new(req.as_ref());
         let resp = handle_metadata_with_snapshot(1, 1, &mut cur, &log_mgr, &cfg, Arc::new(Snapshot::default())).await.unwrap();
         let mut c = io::Cursor::new(resp.as_slice());
-        c.get_i32();
-        c.get_i32();
-        assert_eq!(c.get_i32(), 1);
+        c.get_i32(); // correlation id (v1 has no throttle_time_ms)
+        assert_eq!(c.get_i32(), 1); // brokers count
         assert_eq!(c.get_i32(), 1);
         read_kafka_string(&mut c).unwrap();
         assert_eq!(c.get_i32(), 9092);
         assert_eq!(read_kafka_string(&mut c).unwrap().as_deref(), Some("rack-x"), "own broker.rack advertised");
+    }
+
+    /// Strict clients (kafka-python uses Metadata v1) reject a v1/v2 response carrying the v3+ `throttle_time_ms`.
+    /// Walks the whole response for each version and requires it to be consumed exactly.
+    #[tokio::test]
+    async fn metadata_response_layout_matches_spec_for_every_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_mgr = Arc::new(LogManager::new(dir.path(), 1));
+        let cfg = cfg_for(1);
+        for v in 0i16..=5 {
+            let mut req = BytesMut::new();
+            req.put_i32(1);
+            put_kafka_string(&mut req, Some("adhoc"));
+            let mut cur = io::Cursor::new(req.as_ref());
+            let resp = handle_metadata_with_snapshot(7, v, &mut cur, &log_mgr, &cfg, Arc::new(Snapshot::default())).await.unwrap();
+            let mut c = io::Cursor::new(resp.as_slice());
+            assert_eq!(c.get_i32(), 7);
+            if v >= 3 { assert_eq!(c.get_i32(), 0, "v{v} throttle_time_ms"); }
+            assert_eq!(c.get_i32(), 1, "v{v} brokers");
+            c.get_i32(); read_kafka_string(&mut c).unwrap(); c.get_i32();
+            if v >= 1 { read_kafka_string(&mut c).unwrap(); } // rack
+            if v >= 2 { assert_eq!(read_kafka_string(&mut c).unwrap().as_deref(), Some("aerostream-cluster")); }
+            if v >= 1 { assert_eq!(c.get_i32(), 1, "v{v} controller_id"); }
+            assert_eq!(c.get_i32(), 1, "v{v} topics");
+            assert_eq!(c.get_i16(), 0);
+            assert_eq!(read_kafka_string(&mut c).unwrap().as_deref(), Some("adhoc"));
+            if v >= 1 { c.get_u8(); } // is_internal
+            assert_eq!(c.get_i32(), 1, "v{v} partitions");
+            c.get_i16(); c.get_i32(); c.get_i32(); // error, partition, leader
+            let n = c.get_i32(); for _ in 0..n { c.get_i32(); } // replicas
+            let n = c.get_i32(); for _ in 0..n { c.get_i32(); } // isr
+            if v >= 5 { let n = c.get_i32(); for _ in 0..n { c.get_i32(); } } // offline
+            assert_eq!(c.remaining(), 0, "v{v}: trailing/misaligned bytes");
+        }
     }
 
     fn fetch_v11(rack: &str, replica_id: i32, topic: &str, partition: i32, offset: i64) -> Vec<u8> {

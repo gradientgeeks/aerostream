@@ -12,6 +12,8 @@ struct Mock {
     snap: Mutex<Snapshot>,
     offsets: Mutex<HashMap<(String, String, i32), i64>>,
     commits: Mutex<usize>,
+    /// Simulates an unreachable controller (e.g. Raft leader not yet elected after a restart).
+    down: std::sync::atomic::AtomicBool,
 }
 
 impl Mock {
@@ -23,7 +25,7 @@ impl Mock {
                 BrokerNode { id: *id, host: format!("host{id}"), kafka_port: 9000 + *id, rack: rack.map(String::from) },
             );
         }
-        Arc::new(Mock { snap: Mutex::new(s), offsets: Mutex::new(HashMap::new()), commits: Mutex::new(0) })
+        Arc::new(Mock { snap: Mutex::new(s), offsets: Mutex::new(HashMap::new()), commits: Mutex::new(0), down: std::sync::atomic::AtomicBool::new(false) })
     }
 
     fn assign(&self, start: i32, count: i32, rf: i32) -> Vec<Vec<i32>> {
@@ -117,6 +119,9 @@ impl Controller for Mock {
         Ok(resp(true, 0, ""))
     }
     async fn commit_offsets(&self, group: &str, offsets: Vec<(String, i32, i64)>) -> Result<(), String> {
+        if self.down.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err("node is not the cluster leader".into());
+        }
         *self.commits.lock().unwrap() += 1;
         for (t, p, o) in offsets {
             self.offsets.lock().unwrap().insert((group.to_string(), t, p), o);
@@ -124,6 +129,9 @@ impl Controller for Mock {
         Ok(())
     }
     async fn fetch_offsets(&self, group: &str, topics: Vec<String>) -> Result<Vec<(String, i32, i64)>, String> {
+        if self.down.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err("node is not the cluster leader".into());
+        }
         let o = self.offsets.lock().unwrap();
         Ok(o.iter().filter(|((g, t, _), _)| g == group && topics.contains(t)).map(|((_, t, p), v)| (t.clone(), *p, *v)).collect())
     }
@@ -1052,6 +1060,54 @@ async fn offsets_survive_coordinator_move_via_controller() {
     r.arr().unwrap();
     r.i32().unwrap();
     assert_eq!(r.i64().unwrap(), 99);
+}
+
+/// After a restart the controller has no Raft leader for a few seconds. OffsetFetch must not answer "no committed
+/// offset" then (the consumer would apply auto.offset.reset and skip/reprocess data), and OffsetCommit must not ack
+/// an offset that was not made durable.
+#[tokio::test]
+async fn offset_requests_fail_retriably_while_controller_unavailable() {
+    use std::sync::atomic::Ordering::Relaxed;
+    let e = env_with(&[(1, None)], 1);
+    e.mock.offsets.lock().unwrap().insert(("g".into(), "t".into(), 0), 50);
+    e.mock.down.store(true, Relaxed);
+
+    // v1: no top-level error field, so the error rides on the partition.
+    let out = call(&e.st, 9, 1, |w| { w.str("g").arr(1).str("t").arr(1).i32(0); }).await;
+    let mut r = Rd::new(&out, false);
+    assert_eq!(r.arr().unwrap(), 1);
+    r.str().unwrap();
+    assert_eq!(r.arr().unwrap(), 1);
+    r.i32().unwrap();
+    assert_eq!(r.i64().unwrap(), -1);
+    r.nstr().unwrap();
+    assert_eq!(r.i16().unwrap(), 15, "v1 partition error COORDINATOR_NOT_AVAILABLE");
+
+    // v3: top-level error code after the topics array.
+    let out = call(&e.st, 9, 3, |w| { w.str("g").arr(1).str("t").arr(1).i32(0); }).await;
+    let mut r = Rd::new(&out, false);
+    r.i32().unwrap(); // throttle
+    for _ in 0..r.arr().unwrap() {
+        r.str().unwrap();
+        for _ in 0..r.arr().unwrap() { r.i32().unwrap(); r.i64().unwrap(); r.nstr().unwrap(); r.i16().unwrap(); }
+    }
+    assert_eq!(r.i16().unwrap(), 15, "v3 top-level error COORDINATOR_NOT_AVAILABLE");
+
+    // OffsetCommit (v2, standalone commit) is not acknowledged while the write-through fails.
+    let out = call(&e.st, 8, 2, |w| {
+        w.str("g").i32(-1).str("").i64(-1).arr(1).str("t").arr(1).i32(0).i64(60).nstr(None);
+    })
+    .await;
+    let mut r = Rd::new(&out, false);
+    r.arr().unwrap(); r.str().unwrap(); r.arr().unwrap(); r.i32().unwrap();
+    assert_eq!(r.i16().unwrap(), 15, "commit must not be acked when not durable");
+
+    // Once the controller is back, the durable offset is served.
+    e.mock.down.store(false, Relaxed);
+    let out = call(&e.st, 9, 1, |w| { w.str("g").arr(1).str("t").arr(1).i32(0); }).await;
+    let mut r = Rd::new(&out, false);
+    r.arr().unwrap(); r.str().unwrap(); r.arr().unwrap(); r.i32().unwrap();
+    assert_eq!(r.i64().unwrap(), 50);
 }
 
 #[tokio::test]
