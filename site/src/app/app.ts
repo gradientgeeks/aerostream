@@ -1,6 +1,6 @@
 import { Component, inject, signal, ChangeDetectionStrategy, HostListener, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
+import { RouterOutlet, RouterLink, Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatIconModule } from '@angular/material/icon';
@@ -16,7 +16,6 @@ import { ThemeService } from './services/theme.service';
     CommonModule,
     RouterOutlet,
     RouterLink,
-    RouterLinkActive,
     MatIconModule,
     MatButtonModule,
     MatTooltipModule,

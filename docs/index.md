@@ -1,0 +1,131 @@
+# AeroStream Documentation Portal
+
+Welcome to the **AeroStream** documentation suite. AeroStream is a next-generation distributed event-streaming engine built on a **Dual-Engine Architecture**—pairing a resilient **Go-based Raft control plane** with a zero-copy **Rust-based storage and networking data plane**.
+
+This directory serves as the centralized technical knowledge base for application developers, system architects, and platform operators.
+
+---
+
+## 🗺️ Documentation Directory & Reading Paths
+
+Choose your path based on your role:
+
+```
+                           ┌─────────────────────────────────┐
+                           │   AeroStream Documentation Hub  │
+                           └────────────────┬────────────────┘
+                                            │
+         ┌──────────────────────────────────┼──────────────────────────────────┐
+         ▼                                  ▼                                  ▼
+┌──────────────────┐               ┌──────────────────┐               ┌──────────────────┐
+│   Architects     │               │    Developers    │               │    Operators     │
+│   & Evaluators   │               │   & Integrators  │               │    & SRE Teams   │
+└────────┬─────────┘               └────────┬─────────┘               └────────┬─────────┘
+         │                                  │                                  │
+         ├► Architecture Deep-Dive          ├► REST & Wire API Reference       ├► Operator & Deployment
+         ├► Benchmarks vs Kafka/Redpanda    ├► Python FastAPI Example App      ├► Kubernetes StatefulSets
+         └► Strategic Roadmap (Phases 9-14) └► Schema Registry & Transforms    └► Cluster Scale-Down & Drain
+```
+
+### 1. 🏛️ System Architects & Technical Evaluators
+* **[Shard-per-Core Architecture Whitepaper](SHARD_PER_CORE.md)**: Technical whitepaper on AeroStream's Shared-Nothing Thread-per-Core architecture, hardware core pinning (`libc::sched_setaffinity`), lock-free actor model via `flume` channels, in-place base offset patching, paced page-cache writeback (`sync_file_range`), and NUMA affinity.
+* **[Distributed Systems Engineering & High-Efficiency Systems Programming Guide](DISTRIBUTED_SYSTEMS_DESIGN.md)**: Publication-grade engineering treatise covering dual-engine separation, mechanical sympathy (L1/L2/L3 cache lines, false sharing, page faults), Go runtime patterns (`sync.Pool`, Raft FSM snapshotting, lock-free RCU registry), Rust high-performance patterns (`hashbrown::Equivalent`, scoped locking, `write_all_at`, hardware SSE4.2 CRC32C, 2PC WAL), and 4-way container benchmark analysis.
+* **[Architecture Deep-Dive](ARCHITECTURE.md)**: Exhaustive technical analysis of the dual-engine design, HashiCorp Raft consensus, Rust zero-copy `sendfile(2)` kernel dispatch, memory-mapped (`mmap`) append-only logs, Shard-per-Core engine, and controller-broker orchestration.
+* **[Feature Comparison & Evolution Roadmap](FEATURE_COMPARISON_AND_ROADMAP.md)**: Head-to-head comparison against **Apache Kafka** and **Redpanda**, detailing implemented capabilities (Phases 1–8) and the Next-Generation Enterprise Horizon (Phases 9–14).
+* **[Benchmark Results & Process](https://github.com/gradientgeeks/aerostream/blob/main/benchmarks/BENCHMARK.md)**: Kafka / Redpanda / AeroStream under strict container limits (`2 vCPU, 2 GB RAM`), with scripts, methodology and caveats, highlighting the 13x throughput advantage at 50 MB payloads and write stall elimination.
+* **[OpenMessaging Benchmark (OMB) Execution Guide](OPENMESSAGING_BENCHMARK_GUIDE.md)**: Step-by-step procedure for compiling, configuring, and running the official Linux Foundation OpenMessaging Benchmark against AeroStream's Kafka port (16 partitions, 1 KB payloads, sub-4ms p99 tail latency).
+
+### 2. 🚀 Application Developers & Integrators
+* **[Docker Quickstart Guide](DOCKER_QUICKSTART.md)**: 30-second local setup with single all-in-one container (`quay.io/gradientgeeks/aerostream:latest`), port mapping, and client samples.
+* **[Kubernetes Quickstart Guide](K8S_QUICKSTART.md)**: Production deployment using standard `kubectl` manifests, headless services, StatefulSets, and automated zero-downtime draining.
+* **[Helm Quickstart Guide](HELM_QUICKSTART.md)**: Official Helm v3 chart installation, values customization, S3 tiered storage, and rack-aware zone placement.
+* **[REST & Wire Protocol API Reference](API_REFERENCE.md)**: Complete HTTP REST API schemas, request/response payloads, and binary Kafka Wire Protocol frame structures (`Produce`, `Fetch`, `Metadata`, `ApiVersions`, `InitProducerId`).
+* **[Python FastAPI Microservice Example](https://github.com/gradientgeeks/aerostream/tree/main/examples/fastapi-app)**: Production-ready sample backend demonstrating asynchronous dual-protocol streaming (Kafka wire framing over TCP + HTTP REST) and background consumer workers.
+* **Schema Governance & Built-in Registry**: Confluent-compatible schema evolution for Avro, Protobuf, and JSON Schema contracts (see [API Reference](API_REFERENCE.md)).
+* **In-Broker Stream Transforms**: Inline WASM, PII data masking, and real-time JSON filtering (see [API Reference](API_REFERENCE.md)).
+
+### 3. 🛠️ Platform Engineers & DevOps (SRE)
+* **[Operator & Deployment Guide](OPERATOR_GUIDE.md)**: Production deployment on bare-metal / VMs, systemd unit templates, kernel tuning (`sysctl`), and multi-node cluster configuration.
+* **[Kubernetes StatefulSets Manifests](https://github.com/gradientgeeks/aerostream/tree/main/deploy/k8s)** & **[K8s Quickstart](K8S_QUICKSTART.md)**: Helm-free, production-ready StatefulSet manifests with headless services, persistent volume claims, and automated `preStop` scale-down hooks.
+* **[Helm Chart](https://github.com/gradientgeeks/aerostream/tree/main/deploy/helm/aerostream)** & **[Helm Quickstart](HELM_QUICKSTART.md)**: Multi-replica HA deployments with automated testing and value profiles.
+* **Cluster Lifecycle & Zero-Downtime Operations**: Step-by-step procedures for bootstrapping, graceful broker partition draining (`POST /api/brokers/{id}/drain`), and Raft consensus node removal (`/leave`) (see [Operator Guide](OPERATOR_GUIDE.md)).
+* **[Troubleshooting & Operational Diagnostics](OPERATOR_GUIDE.md)**: Common error signatures (e.g. `Invalid protocol magic bytes`), dual-listener port routing, and socket connection isolation.
+
+---
+
+## 🖼️ Architecture & Dataflow Gallery
+
+All architecture diagrams are rendered in high-resolution (3200 × 2160) using clean Excalidraw-style hand-drawn typography:
+
+### 1. Dual-Engine Core Architecture
+Visualizes the decoupled Go control plane and zero-copy Rust storage engine with unified client ingress.
+
+![Dual Engine Core Architecture](images/dual_engine_architecture.png)
+
+---
+
+### 2. Zero-Copy Produce & Fetch Pipeline
+Shows how write requests bypass heap allocations via memory-mapped buffers, while consumer fetch requests leverage Linux `sendfile(2)` for direct pagecache-to-socket DMA transfers.
+
+![Produce and Fetch Zero-Copy Pipeline](images/produce_fetch_pipeline.png)
+
+---
+
+### 3. Multi-Cloud Tiered Storage Pipeline
+Details the lifecycle of partition logs from fast local NVMe segments through automated rolling to asynchronous multi-cloud offloading (AWS S3, MinIO, GCS, Azure Blob).
+
+![Multi-Cloud Tiered Storage Pipeline](images/tiered_storage_pipeline.png)
+
+---
+
+### 4. Cluster Topology, Quorum & Graceful Scale-Down
+Illustrates the 3-node Raft controller quorum, broker replication sets, and automated zero-downtime broker draining.
+
+![Cluster Topology and Scale Down](images/cluster_topology_scale_down.png)
+
+---
+
+### 5. Shard-per-Core Architecture
+Visualizes the hardware core pinning (`libc::sched_setaffinity`), lock-free actor model via `flume` channels, zero-contention PartitionLog maps, in-place base offset patching, and paced page-cache writeback.
+
+![Shard-per-Core Architecture](images/shard_per_core_architecture.png)
+
+---
+
+### 6. Controller-Broker Control Plane Orchestration
+Shows the bidirectional gRPC control stream between Go Controller and Rust Broker, 2s heartbeats with LEO progress, piggybacked dynamic configs (`client_quotas`, `topic_compression`), 8s failure detection, and graceful broker draining.
+
+![Controller-Broker Orchestration](images/controller_broker_orchestration.png)
+
+---
+
+## ⚡ Default Ports & Protocol Cheat-Sheet
+
+| Port | Protocol / Transport | Component | Purpose |
+|---|---|---|---|
+| **`9001`** | `HTTP / REST` | Go Controller | Web Console UI (`/aerostream/console`), REST Management API, Schema Registry, Stream Transforms, and ACLs |
+| **`8001`** | `gRPC` | Go Controller | Internal cluster metadata synchronization and broker heartbeat registration |
+| **`7001`** | `TCP (Raft)` | Go Controller | HashiCorp Raft consensus quorum communication between controllers |
+| **`9093`** | `TCP (Kafka Wire)` | Rust Broker | Standard Kafka binary wire protocol listener (supports `kafka-python`, `librdkafka`, `kafka-clients`) |
+| **`9091`** | `TCP (Native)` | Rust Broker | Native binary zero-copy stream ingestion and high-throughput fetch protocol |
+
+---
+
+## 📚 Complete Document Catalog
+
+| Document | Description |
+|---|---|
+| **[`README.md`](https://github.com/gradientgeeks/aerostream/blob/main/README.md)** | Root repository overview, quickstart, Docker run instructions, and benchmark highlights |
+| **[`docs/index.md`](index.md)** | *This document* — Central documentation portal and index |
+| **[`docs/SHARD_PER_CORE.md`](SHARD_PER_CORE.md)** | Complete technical whitepaper on the Shard-per-Core architecture & I/O optimizations |
+| **[`docs/ARCHITECTURE.md`](ARCHITECTURE.md)** | Comprehensive technical architecture deep-dive (74 KB) |
+| **[`docs/OPERATOR_GUIDE.md`](OPERATOR_GUIDE.md)** | Bare-metal, Docker, and Kubernetes deployment & operational runbook |
+| **[`docs/API_REFERENCE.md`](API_REFERENCE.md)** | Complete REST API schemas and Kafka wire protocol specification |
+| **[`docs/FEATURE_COMPARISON_AND_ROADMAP.md`](FEATURE_COMPARISON_AND_ROADMAP.md)** | Kafka/Redpanda comparative analysis & Next-Gen Enterprise Roadmap (Phases 9–14) |
+| **[`benchmarks/BENCHMARK.md`](https://github.com/gradientgeeks/aerostream/blob/main/benchmarks/BENCHMARK.md)** | Host and container performance benchmarks across 100B, 1KB, 1MB, 10MB, and 50MB messages |
+| **[`benchmarks/KAFKA_PORT_PERFORMANCE.md`](https://github.com/gradientgeeks/aerostream/blob/main/benchmarks/KAFKA_PORT_PERFORMANCE.md)** | Kafka-port profiling, fixes and sources; isolated 3-way container benchmark data tables (`--cpus=2.0 --memory=2g`) |
+| **[`examples/fastapi-app/README.md`](https://github.com/gradientgeeks/aerostream/tree/main/examples/fastapi-app)** | Python FastAPI microservice integration guide and automated test suite |
+| **[`docs/DOCKER_QUICKSTART.md`](DOCKER_QUICKSTART.md)** | Developer Docker container guide with multi-language code snippets and Compose |
+| **[`deploy/k8s/`](https://github.com/gradientgeeks/aerostream/tree/main/deploy/k8s)** | Kubernetes StatefulSet manifests and headless service configurations |
+
+

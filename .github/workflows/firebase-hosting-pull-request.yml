@@ -6,7 +6,13 @@
 
 name: Build and Preview AeroStream v0.1.0 on Pull Request
 
-on: pull_request
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'site/**'
+      - 'docs/**'
+      - 'mkdocs.yml'
 
 permissions:
   checks: write
@@ -35,6 +41,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: site/package-lock.json
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: docs/requirements.txt
+
       - name: Verify Semantic Versioning (SemVer 2.0.0)
         run: |
           echo "================================================================"
@@ -54,8 +67,14 @@ jobs:
       - name: Install Site Dependencies
         run: cd site && npm ci
 
-      - name: Build Angular Documentation & Showcase Site
+      - name: Install MkDocs Material Dependencies
+        run: pip install -r docs/requirements.txt
+
+      - name: Build Angular Showcase Site
         run: cd site && npm run build
+
+      - name: Build MkDocs Material Documentation
+        run: mkdocs build
 
       - name: Ensure Firebase Hosting Site Exists (On-Demand Provisioning)
         env:
@@ -79,4 +98,3 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AEROSTREAM_GG }}
           projectId: aerostream-gg
           entryPoint: site
-

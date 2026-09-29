@@ -10,6 +10,11 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '.github/workflows/**'
+      - 'site/**'
+      - 'docs/**'
+      - 'mkdocs.yml'
 
 env:
   AEROSTREAM_VERSION: v0.1.0
@@ -32,6 +37,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: site/package-lock.json
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: docs/requirements.txt
+
       - name: Verify Semantic Versioning (SemVer 2.0.0)
         run: |
           echo "================================================================"
@@ -51,8 +63,14 @@ jobs:
       - name: Install Site Dependencies
         run: cd site && npm ci
 
-      - name: Build Angular Documentation & Showcase Site
+      - name: Install MkDocs Material Dependencies
+        run: pip install -r docs/requirements.txt
+
+      - name: Build Angular Showcase Site
         run: cd site && npm run build
+
+      - name: Build MkDocs Material Documentation
+        run: mkdocs build
 
       - name: Ensure Firebase Hosting Site Exists (On-Demand Provisioning)
         env:
@@ -77,4 +95,3 @@ jobs:
           channelId: live
           projectId: aerostream-gg
           entryPoint: site
-
