@@ -9,6 +9,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::config::BrokerConfig;
 use crate::kafka::quota::{self, RequestCtx};
+use crate::kafka::codec::{Rd, Wr};
 use crate::log::LogManager;
 
 /// Per-connection cache of resolved partitions, avoiding a `LogManager::get_partition` (async RwLock + hashmap
@@ -392,7 +393,7 @@ fn handle_api_versions(
 
     let mut apis: Vec<(i16, i16, i16)> = vec![
         (0, 0, 7),  // Produce: v0 - v7
-        (1, 0, 11), // Fetch: v0 - v11 (v11 = KIP-392 rack_id / preferred_read_replica)
+        (1, 0, 12), // Fetch: v0 - v12 (v11 = KIP-392 rack_id / preferred_read_replica, v12 = flexible / KIP-482)
         (3, 0, 5),  // Metadata: v0 - v5
         (18, 0, 3), // ApiVersions: v0 - v3
     ];
@@ -778,66 +779,112 @@ pub(crate) async fn handle_fetch_with_topo(
     topo: &crate::topology::TopologyCache,
     partition_cache: &mut PartitionCache,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    if cursor.remaining() < 12 {
-        return Err("Fetch request truncated".into());
-    }
-
-    let replica_id = cursor.get_i32();
-    let max_wait_ms = cursor.get_i32();
-    let min_bytes = cursor.get_i32();
-
+    let flex = api_version >= 12;
+    let replica_id: i32;
+    let max_wait_ms: i32;
+    let min_bytes: i32;
     let mut max_bytes = i32::MAX;
-    if api_version >= 3 && cursor.remaining() >= 4 {
-        max_bytes = cursor.get_i32();
-    }
     let mut isolation_level = 0i8;
-    if api_version >= 4 && cursor.remaining() >= 1 {
-        isolation_level = cursor.get_i8();
-    }
-    if api_version >= 7 && cursor.remaining() >= 8 {
-        let _session_id = cursor.get_i32();
-        let _session_epoch = cursor.get_i32();
-    }
-
-    let topics_count = cursor.get_i32();
-    // Requested partitions are parsed first; rack_id (v11) trails the topics/forgotten-topics arrays.
     let mut requested: Vec<(String, Vec<(i32, i64, i32)>)> = Vec::new();
+    let client_rack: Option<String>;
 
-    for _ in 0..topics_count {
-        let topic_name = read_kafka_string(cursor)?.unwrap_or_default();
-        let partitions_count = cursor.get_i32();
-        let mut parts = Vec::new();
+    if flex {
+        let remaining_slice = &cursor.get_ref()[cursor.position() as usize..];
+        let mut rd = Rd::new(remaining_slice, true);
+        rd.tagged().map_err(|e| format!("Fetch v12 header tag error: {e}"))?;
+        replica_id = rd.i32().map_err(|e| format!("Fetch v12 replica_id: {e}"))?;
+        max_wait_ms = rd.i32().map_err(|e| format!("Fetch v12 max_wait_ms: {e}"))?;
+        min_bytes = rd.i32().map_err(|e| format!("Fetch v12 min_bytes: {e}"))?;
+        max_bytes = rd.i32().map_err(|e| format!("Fetch v12 max_bytes: {e}"))?;
+        isolation_level = rd.i8().map_err(|e| format!("Fetch v12 isolation_level: {e}"))?;
+        let _session_id = rd.i32().map_err(|e| format!("Fetch v12 session_id: {e}"))?;
+        let _session_epoch = rd.i32().map_err(|e| format!("Fetch v12 session_epoch: {e}"))?;
 
-        for _ in 0..partitions_count {
-            let partition_index = cursor.get_i32();
-            if api_version >= 9 && cursor.remaining() >= 4 {
-                let _current_leader_epoch = cursor.get_i32();
+        let topics_count = rd.arr().map_err(|e| format!("Fetch v12 topics_count: {e}"))?;
+        for _ in 0..topics_count {
+            let topic_name = rd.str().map_err(|e| format!("Fetch v12 topic_name: {e}"))?;
+            let partitions_count = rd.arr().map_err(|e| format!("Fetch v12 partitions_count: {e}"))?;
+            let mut parts = Vec::new();
+            for _ in 0..partitions_count {
+                let partition_index = rd.i32().map_err(|e| format!("Fetch v12 partition_index: {e}"))?;
+                let _current_leader_epoch = rd.i32().map_err(|e| format!("Fetch v12 current_leader_epoch: {e}"))?;
+                let fetch_offset = rd.i64().map_err(|e| format!("Fetch v12 fetch_offset: {e}"))?;
+                let _last_fetched_epoch = rd.i32().map_err(|e| format!("Fetch v12 last_fetched_epoch: {e}"))?;
+                let _log_start_offset = rd.i64().map_err(|e| format!("Fetch v12 log_start_offset: {e}"))?;
+                let partition_max_bytes = rd.i32().map_err(|e| format!("Fetch v12 partition_max_bytes: {e}"))?;
+                rd.tagged().map_err(|e| format!("Fetch v12 partition tagged: {e}"))?;
+                parts.push((partition_index, fetch_offset, partition_max_bytes));
             }
-            let fetch_offset = cursor.get_i64();
-            if api_version >= 5 && cursor.remaining() >= 8 {
-                let _log_start_offset = cursor.get_i64();
-            }
-            let partition_max_bytes = cursor.get_i32();
-            parts.push((partition_index, fetch_offset, partition_max_bytes));
+            rd.tagged().map_err(|e| format!("Fetch v12 topic tagged: {e}"))?;
+            requested.push((topic_name, parts));
         }
-        requested.push((topic_name, parts));
-    }
 
-    // forgotten_topics_data (v7+): incremental fetch sessions are not used, so just skip it.
-    if api_version >= 7 && cursor.remaining() >= 4 {
-        let forgotten = cursor.get_i32();
-        for _ in 0..forgotten.max(0) {
-            let _ = read_kafka_string(cursor)?;
-            let n = cursor.get_i32();
-            for _ in 0..n.max(0) {
-                if cursor.remaining() >= 4 {
-                    let _ = cursor.get_i32();
+        let forgotten = rd.arr().map_err(|e| format!("Fetch v12 forgotten: {e}"))?;
+        for _ in 0..forgotten {
+            let _ = rd.str().map_err(|e| format!("Fetch v12 forgotten topic: {e}"))?;
+            let n = rd.arr().map_err(|e| format!("Fetch v12 forgotten partitions: {e}"))?;
+            for _ in 0..n {
+                let _ = rd.i32().map_err(|e| format!("Fetch v12 forgotten partition: {e}"))?;
+            }
+            rd.tagged().map_err(|e| format!("Fetch v12 forgotten tagged: {e}"))?;
+        }
+        client_rack = rd.nstr().map_err(|e| format!("Fetch v12 rack_id: {e}"))?;
+        rd.tagged().map_err(|e| format!("Fetch v12 request tagged: {e}"))?;
+    } else {
+        if cursor.remaining() < 12 {
+            return Err("Fetch request truncated".into());
+        }
+
+        replica_id = cursor.get_i32();
+        max_wait_ms = cursor.get_i32();
+        min_bytes = cursor.get_i32();
+
+        if api_version >= 3 && cursor.remaining() >= 4 {
+            max_bytes = cursor.get_i32();
+        }
+        if api_version >= 4 && cursor.remaining() >= 1 {
+            isolation_level = cursor.get_i8();
+        }
+        if api_version >= 7 && cursor.remaining() >= 8 {
+            let _session_id = cursor.get_i32();
+            let _session_epoch = cursor.get_i32();
+        }
+
+        let topics_count = cursor.get_i32();
+        for _ in 0..topics_count {
+            let topic_name = read_kafka_string(cursor)?.unwrap_or_default();
+            let partitions_count = cursor.get_i32();
+            let mut parts = Vec::new();
+
+            for _ in 0..partitions_count {
+                let partition_index = cursor.get_i32();
+                if api_version >= 9 && cursor.remaining() >= 4 {
+                    let _current_leader_epoch = cursor.get_i32();
+                }
+                let fetch_offset = cursor.get_i64();
+                if api_version >= 5 && cursor.remaining() >= 8 {
+                    let _log_start_offset = cursor.get_i64();
+                }
+                let partition_max_bytes = cursor.get_i32();
+                parts.push((partition_index, fetch_offset, partition_max_bytes));
+            }
+            requested.push((topic_name, parts));
+        }
+
+        if api_version >= 7 && cursor.remaining() >= 4 {
+            let forgotten = cursor.get_i32();
+            for _ in 0..forgotten.max(0) {
+                let _ = read_kafka_string(cursor)?;
+                let n = cursor.get_i32();
+                for _ in 0..n.max(0) {
+                    if cursor.remaining() >= 4 {
+                        let _ = cursor.get_i32();
+                    }
                 }
             }
         }
+        client_rack = if api_version >= 11 { read_kafka_string(cursor)? } else { None };
     }
-    // rack_id (v11, KIP-392): the client's rack, used to pick the closest replica.
-    let client_rack = if api_version >= 11 { read_kafka_string(cursor)? } else { None };
 
     let my_id = cfg.id as i32;
     let selector = crate::topology::ReplicaSelector::parse(&cfg.replica_selector);
@@ -1017,6 +1064,9 @@ pub(crate) async fn handle_fetch_with_topo(
 
     let mut buf = BytesMut::new();
     buf.put_i32(correlation_id);
+    if flex {
+        buf.put_u8(0); // ResponseHeader v1 tagged fields
+    }
 
     if api_version >= 1 {
         buf.put_i32(throttle_ms as i32); // ThrottleTimeMs
@@ -1027,38 +1077,73 @@ pub(crate) async fn handle_fetch_with_topo(
         buf.put_i32(0); // SessionId
     }
 
-    buf.put_i32(topic_results.len() as i32);
-    for (topic, parts) in topic_results {
-        put_kafka_string(&mut buf, Some(&topic));
-        buf.put_i32(parts.len() as i32);
-        for (part_idx, err_code, hw, lso, aborted, records, preferred) in parts {
-            buf.put_i32(part_idx);
-            buf.put_i16(err_code);
-            buf.put_i64(hw);
-            if api_version >= 4 {
-                buf.put_i64(lso); // LastStableOffset
-            }
-            if api_version >= 5 {
-                buf.put_i64(0); // LogStartOffset
-            }
-            if api_version >= 4 {
+    if flex {
+        let mut w = Wr::new(true);
+        w.arr(topic_results.len());
+        for (topic, parts) in topic_results {
+            w.str(&topic);
+            w.arr(parts.len());
+            for (part_idx, err_code, hw, lso, aborted, records, preferred) in parts {
+                w.i32(part_idx);
+                w.i16(err_code);
+                w.i64(hw);
+                w.i64(lso);
+                w.i64(0); // LogStartOffset
                 match aborted {
-                    // read_uncommitted: null array
-                    None => buf.put_i32(-1),
+                    None => {
+                        w.null_arr();
+                    }
                     Some(list) => {
-                        buf.put_i32(list.len() as i32);
+                        w.arr(list.len());
                         for (pid, first_offset) in list {
-                            buf.put_i64(pid);
-                            buf.put_i64(first_offset);
+                            w.i64(pid);
+                            w.i64(first_offset);
+                            w.tagged();
                         }
                     }
                 }
+                w.i32(preferred);
+                w.bytes(&records);
+                w.tagged();
             }
-            if api_version >= 11 {
-                buf.put_i32(preferred); // PreferredReadReplica (-1 = none)
+            w.tagged();
+        }
+        w.tagged();
+        buf.put_slice(&w.finish());
+    } else {
+        buf.put_i32(topic_results.len() as i32);
+        for (topic, parts) in topic_results {
+            put_kafka_string(&mut buf, Some(&topic));
+            buf.put_i32(parts.len() as i32);
+            for (part_idx, err_code, hw, lso, aborted, records, preferred) in parts {
+                buf.put_i32(part_idx);
+                buf.put_i16(err_code);
+                buf.put_i64(hw);
+                if api_version >= 4 {
+                    buf.put_i64(lso); // LastStableOffset
+                }
+                if api_version >= 5 {
+                    buf.put_i64(0); // LogStartOffset
+                }
+                if api_version >= 4 {
+                    match aborted {
+                        // read_uncommitted: null array
+                        None => buf.put_i32(-1),
+                        Some(list) => {
+                            buf.put_i32(list.len() as i32);
+                            for (pid, first_offset) in list {
+                                buf.put_i64(pid);
+                                buf.put_i64(first_offset);
+                            }
+                        }
+                    }
+                }
+                if api_version >= 11 {
+                    buf.put_i32(preferred); // PreferredReadReplica (-1 = none)
+                }
+                buf.put_i32(records.len() as i32);
+                buf.put_slice(&records);
             }
-            buf.put_i32(records.len() as i32);
-            buf.put_slice(&records);
         }
     }
 
@@ -1857,7 +1942,7 @@ mod topology_tests {
         for (k, lo, hi) in ADMIN_APIS {
             assert_eq!(got.get(k), Some(&(*lo, *hi)), "api {k}");
         }
-        assert_eq!(got[&1], (0, 11), "Fetch v11 advertised for KIP-392");
+        assert_eq!(got[&1], (0, 12), "Fetch v12 advertised for KIP-392 and KIP-482");
         assert_eq!(c.remaining(), 0, "v0 has no throttle/tagged trailer");
     }
 
