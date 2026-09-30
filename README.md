@@ -28,10 +28,9 @@ AeroStream was measured with the vendor-neutral **[Linux Foundation OpenMessagin
 Latency stays under 2 ms at $p_{99}$ up to at least 200,000 msg/s; the saturation point is about 271,000 msg/s, where latency reflects queueing. The two rounds agree within 0.1% on throughput.
 
 > 📊 **Explore Full Benchmark Reports & Reproduction**:
-> * 📈 **[Website Benchmark Page](docs/benchmarks.md)** ([Online Portal](https://aerostream.gradientgeeks.com/docs/benchmarks/)): per-run results, CPU use, test environment and caveats.
-> * 📑 **[OMB Benchmark Execution Guide](core/docs/OPENMESSAGING_BENCHMARK_GUIDE.md)**: Step-by-step reproduction instructions using the official OpenMessaging Benchmark suite.
-> * 🔬 **[Benchmark Report](benchmarks/BENCHMARK.md)**: EC2 results, resource-capped container runs, design notes and partition-density measurements.
-> * ☁️ **[EC2 Benchmark Scripts](benchmarks/aws-ec2/README.md)**: one command creates the machine, runs OMB, copies the results back and destroys the machine.
+> * 📈 **[Website Benchmark Page](https://aerostream.gradientgeeks.com/docs/benchmarks/)**: Per-run results, CPU use, test environment, and caveats.
+> * 🔬 **[Benchmark Report](benchmarks/BENCHMARK.md)**: EC2 results, resource-capped container runs, design notes, and partition-density measurements.
+> * ☁️ **[EC2 Benchmark Scripts](benchmarks/aws-ec2/README.md)**: One command creates the machine, runs OMB, copies the results back, and destroys the machine.
 
 ---
 
@@ -85,9 +84,9 @@ docker run -d --name aerostream \
 ```
 
 > 📖 **Deployment Quickstart Guides**:
-> * 🐳 **[Docker Quickstart Guide](core/docs/DOCKER_QUICKSTART.md)** ([Web Guide](https://aerostream.gradientgeeks.com/docs/operations/#single-node-docker-deployment)): 30-second local setup with single all-in-one container, port mapping, and client samples.
-> * ☸️ **[Kubernetes Quickstart Guide](core/docs/K8S_QUICKSTART.md)** ([Web Guide](https://aerostream.gradientgeeks.com/docs/operations/#production-kubernetes-statefulset)): Production deployment using standard `kubectl` manifests, headless services, StatefulSets, and automated zero-downtime draining.
-> * ⎈ **[Helm Quickstart Guide](core/docs/HELM_QUICKSTART.md)** ([Web Guide](https://aerostream.gradientgeeks.com/docs/operations/#helm-chart-deployment)): Official Helm v3 chart installation, values customization, S3 tiered storage, and rack-aware zone placement.
+> * 🐳 **[Docker Quickstart Guide](https://aerostream.gradientgeeks.com/docs/operations/#single-node-docker-deployment)**: 30-second local setup with single all-in-one container, port mapping, and client samples.
+> * ☸️ **[Kubernetes Quickstart Guide](https://aerostream.gradientgeeks.com/docs/operations/#production-kubernetes-statefulset)**: Production deployment using standard `kubectl` manifests, headless services, StatefulSets, and automated zero-downtime draining.
+> * ⎈ **[Helm Quickstart Guide](https://aerostream.gradientgeeks.com/docs/operations/#helm-chart-deployment)**: Official Helm v3 chart installation, values customization, S3 tiered storage, and rack-aware zone placement.
 
 ### Accessing Endpoints:
 * **Web Console UI**: [http://localhost:9001/aerostream/console](http://localhost:9001/aerostream/console)
@@ -108,14 +107,12 @@ AeroStream achieves its performance through strict architectural decoupling and 
 * **Multi-Cloud Tiered Storage**: Automatically rolls sealed 128 MB log segments into an asynchronous offloader queue via zero-copy hard links (`fs::hard_link`), persisting them to AWS S3, MinIO, Google Cloud Storage, or Azure Blob without blocking producer ingestion.
 
 > 📖 **Deep-Dive Architecture Specifications & Diagrams**:
-> * ⚡ **[Shard-per-Core Architecture Whitepaper](core/docs/SHARD_PER_CORE.md)**: Thread-to-core pinning, lock-free actor messaging, paced writeback, and zero-allocation log append.
-> * 🏛️ **[Distributed Systems Design Whitepaper](core/docs/DISTRIBUTED_SYSTEMS_DESIGN.md)**: In-depth engineering treatise on dual-engine mechanics, lock-free RCU, and hardware acceleration.
-> * 📘 **[Architecture Web Portal](docs/architecture.md)** ([Online Docs](https://aerostream.gradientgeeks.com/docs/architecture/)): Interactive diagrams, Raft quorum consensus, and zero-copy pipeline details.
-> * 🧩 **[Shard-per-Core Architecture Diagram](docs/images/shard_per_core_architecture.png)**: Visual guide to core pinning, lock-free channels, and memory pacing.
-> * 🛰️ **[Controller-Broker Orchestration Diagram](docs/images/controller_broker_orchestration.png)**: Heartbeat piggybacking, Raft consensus, LEO reporting, and drain workflows.
-> * 🚀 **[Zero-Copy Produce & Fetch Pipelines](docs/images/produce_fetch_pipeline.png)**: Step-by-step kernel DMA and mmap write paths.
-> * ☁️ **[Multi-Cloud Tiered Storage Pipeline](docs/images/tiered_storage_pipeline.png)**: Non-blocking offloading and safe local eviction.
-> * 🔄 **[Cluster Topology & Scale-Down Protocol](docs/images/cluster_topology_scale_down.png)**: 3-Node Raft consensus and graceful broker draining.
+> * 📘 **[Architecture Web Portal](https://aerostream.gradientgeeks.com/docs/architecture/)**: Interactive diagrams, Raft quorum consensus, and zero-copy pipeline details.
+> * 🧩 **[Shard-per-Core Architecture](https://aerostream.gradientgeeks.com/docs/architecture/#shard-per-core-storage-engine)**: Visual guide to core pinning, lock-free channels, and memory pacing.
+> * 🛰️ **[Controller-Broker Orchestration](https://aerostream.gradientgeeks.com/docs/architecture/#dual-engine-decoupled-architecture)**: Heartbeat piggybacking, Raft consensus, LEO reporting, and drain workflows.
+> * 🚀 **[Zero-Copy Produce & Fetch Pipelines](https://aerostream.gradientgeeks.com/docs/architecture/#zero-copy-produce-fetch-pipeline)**: Step-by-step kernel DMA and mmap write paths.
+> * ☁️ **[Multi-Cloud Tiered Storage Pipeline](https://aerostream.gradientgeeks.com/docs/tiered-storage/)**: Non-blocking offloading and safe local eviction.
+> * 🔄 **[Cluster Operations & Failover](https://aerostream.gradientgeeks.com/docs/operations/)**: 3-Node Raft consensus and graceful broker draining.
 
 ---
 
@@ -215,29 +212,18 @@ cd client && go test -v ./...
 
 ## 📜 Documentation & Guides
 
-AeroStream provides dual documentation surfaces: interactive web documentation built with **MkDocs Material** (hosted at `https://aerostream.gradientgeeks.com/docs/`) and publication-grade technical whitepapers in `core/docs/`:
+AeroStream provides comprehensive, interactive web documentation built with **MkDocs Material** (hosted at [https://aerostream.gradientgeeks.com/docs/](https://aerostream.gradientgeeks.com/docs/)) and maintained in the [aerostream-docs](https://github.com/gradientgeeks/aerostream-docs) repository:
 
-### 🌐 Interactive Web Documentation (`docs/`)
-* **[Platform Overview & Quickstart](docs/index.md)** ([Web Portal](https://aerostream.gradientgeeks.com/docs/)): Architecture summary, 30-second Docker setup, and multi-language client examples.
-* **[Dual-Engine Architecture Deep-Dive](docs/architecture.md)** ([Web Page](https://aerostream.gradientgeeks.com/docs/architecture/)): Raft quorum, Shard-per-Core storage, memory-mapped indexes, and hardware CRC32C.
-* **[Apache Kafka Compatibility (Port 9092)](docs/kafka-protocol.md)** ([Web Page](https://aerostream.gradientgeeks.com/docs/kafka-protocol/)): Complete API key mapping (ApiKey 0–36), High Watermark semantics, and in-place base offset patching.
-* **[Built-in Schema Registry](docs/schema-registry.md)** ([Web Page](https://aerostream.gradientgeeks.com/docs/schema-registry/)): Confluent REST compatibility, Avro/Protobuf/JSON Schema validation, and compatibility rules.
-* **[In-Broker Stream Transforms](docs/transforms.md)** ([Web Page](https://aerostream.gradientgeeks.com/docs/transforms/)): Inline event routing, PII data masking, JSON filtering, and WASM runtime.
-* **[Enterprise Security & RBAC](docs/security-rbac.md)** ([Web Page](https://aerostream.gradientgeeks.com/docs/security-rbac/)): Role-based access control, SASL authentication (`PLAIN`, `SCRAM`), and fine-grained ACLs.
-* **[Multi-Cloud Tiered Storage](docs/tiered-storage.md)** ([Web Page](https://aerostream.gradientgeeks.com/docs/tiered-storage/)): Hot NVMe caching, transparent cloud offloading to S3/GCS/Azure, and historical replay.
-* **[Cluster Operations & Lifecycle](docs/operations.md)** ([Web Page](https://aerostream.gradientgeeks.com/docs/operations/)): Production Kubernetes StatefulSets, automated broker draining, and scale-down procedures.
-* **[Performance Benchmarks](docs/benchmarks.md)** ([Web Page](https://aerostream.gradientgeeks.com/docs/benchmarks/)): OpenMessaging Benchmark results, mathematical speedup derivations, and CPU efficiency charts.
-
-### 🏛️ Core Technical Whitepapers (`core/docs/`)
-* **[Shard-per-Core Architecture Whitepaper](core/docs/SHARD_PER_CORE.md)**: Hardware CPU core affinity, lock-free actor channels, paced writeback, and zero-allocation log append.
-* **[Distributed Systems Engineering Treatise](core/docs/DISTRIBUTED_SYSTEMS_DESIGN.md)**: High-efficiency systems programming in Go and Rust, cache line mechanical sympathy, and 2PC WAL.
-* **[Architecture Deep-Dive Specification](core/docs/ARCHITECTURE.md)**: Exhaustive 75 KB engineering specification of the dual-engine platform.
-* **[REST & Wire Protocol API Reference](core/docs/API_REFERENCE.md)**: Exhaustive endpoint schemas, binary Kafka frame structures, and payload specifications.
-* **[Features & Evolution Roadmap](core/docs/FEATURES_AND_ROADMAP.md)**: Feature status matrix, implemented capabilities (Phases 1–8) and the Next-Gen Enterprise Roadmap (Phases 9–14).
-* **[OpenMessaging Benchmark Execution Guide](core/docs/OPENMESSAGING_BENCHMARK_GUIDE.md)**: Official OMB benchmark compilation, driver configuration, and test execution runbook.
-* **[Host & Multi-Payload Benchmark Report](benchmarks/BENCHMARK.md)**: Comprehensive host benchmarks across 100B, 1KB, 1MB, 10MB, and 50MB message sizes.
-* **[Kafka Port Optimization Research](core/docs/KAFKA_PORT_OPTIMIZATION_RESEARCH.md)**: Low-level profiling, system call tracing, and optimization notes on Kafka protocol handling.
-* **[Operator & Production Runbook](core/docs/OPERATOR_GUIDE.md)**: Bare-metal, Docker, and Kubernetes deployment runbook with systemd templates and sysctl tuning.
+* **[Platform Overview & Quickstart](https://aerostream.gradientgeeks.com/docs/)**: Architecture summary, 30-second Docker setup, and multi-language client examples.
+* **[Dual-Engine Architecture Deep-Dive](https://aerostream.gradientgeeks.com/docs/architecture/)**: Raft quorum, Shard-per-Core storage, memory-mapped indexes, and hardware CRC32C.
+* **[Apache Kafka Compatibility (Port 9092)](https://aerostream.gradientgeeks.com/docs/kafka-protocol/)**: Complete API key mapping (ApiKey 0–36), High Watermark semantics, and in-place base offset patching.
+* **[Native Client SDKs (Port 9091)](https://aerostream.gradientgeeks.com/docs/sdks/)**: Official SDK guides for Go, Rust, Java, .NET, and Node.js.
+* **[Built-in Schema Registry](https://aerostream.gradientgeeks.com/docs/schema-registry/)**: Confluent REST compatibility, Avro/Protobuf/JSON Schema validation, and compatibility rules.
+* **[In-Broker Stream Transforms](https://aerostream.gradientgeeks.com/docs/transforms/)**: Inline event routing, PII data masking, JSON filtering, and WASM runtime.
+* **[Enterprise Security & RBAC](https://aerostream.gradientgeeks.com/docs/security-rbac/)**: Role-based access control, SASL authentication (`PLAIN`, `SCRAM`), and fine-grained ACLs.
+* **[Multi-Cloud Tiered Storage](https://aerostream.gradientgeeks.com/docs/tiered-storage/)**: Hot NVMe caching, transparent cloud offloading to S3/GCS/Azure, and historical replay.
+* **[Cluster Operations & Lifecycle](https://aerostream.gradientgeeks.com/docs/operations/)**: Production Kubernetes StatefulSets, automated broker draining, and scale-down procedures.
+* **[Performance Benchmarks](https://aerostream.gradientgeeks.com/docs/benchmarks/)**: OpenMessaging Benchmark results, mathematical speedup derivations, and CPU efficiency charts.
 
 ---
 
