@@ -34,7 +34,7 @@ export class ShowcaseComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   readonly copiedCommand = signal<boolean>(false);
   readonly selectedNodeId = signal<string>('rust-storage');
-  readonly selectedQuickstartTab = signal<'docker' | 'python' | 'go' | 'java' | 'rest'>('docker');
+  readonly selectedQuickstartTab = signal<'docker' | 'python' | 'go' | 'rust' | 'java' | 'dotnet' | 'nodejs' | 'rest'>('docker');
   readonly copiedSnippet = signal<string | null>(null);
 
   ngOnInit(): void {
@@ -84,18 +84,84 @@ print(f"Delivered to {record_metadata.topic} partition {record_metadata.partitio
   readonly goSnippet = `package main
 
 import (
+    "context"
     "fmt"
-    "github.com/gradientgeeks/aerostream/client"
+    "log"
+
+    "github.com/gradientgeeks/aerostream-sdk/go/client"
 )
 
 func main() {
-    c, err := client.NewClient("127.0.0.1:9091")
-    if err != nil { panic(err) }
+    c, err := client.NewClient("127.0.0.1:9091",
+        client.WithAuthToken("secret-token"),
+    )
+    if err != nil { log.Fatal(err) }
     defer c.Close()
 
-    offset, err := c.Produce("orders", 0, []byte("order_payload_bytes"))
-    fmt.Printf("Produced at offset %d with microsecond latency!\\n", offset)
+    producer := c.NewProducer()
+    offset, err := producer.Produce(context.Background(), "telemetry", 0, []byte("sensor-payload"))
+    if err != nil { log.Fatal(err) }
+    fmt.Printf("Produced at offset %d\\n", offset)
 }`;
+
+  readonly rustSnippet = `use aerostream_client::{AeroClient, ClientConfig};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = AeroClient::connect(
+        ClientConfig::new("127.0.0.1:9091")
+            .with_auth_token("secret-token")
+    ).await?;
+
+    let producer = client.producer();
+    let offset = producer.send("telemetry", 0, b"sensor-payload").await?;
+    println!("Produced at offset {offset}");
+
+    let consumer = client.consumer();
+    let mut stream = consumer.stream("telemetry", 0, 0).await?;
+    while let Some(record) = stream.next().await {
+        let r = record?;
+        println!("offset={} payload={:?}", r.offset, r.payload);
+    }
+    Ok(())
+}`;
+
+  readonly dotnetSnippet = `using System.Text;
+using GradientGeeks.AeroStream.Client;
+
+await using var client = await AeroClient.ConnectAsync(new AeroClientOptions {
+    BootstrapServers = ["127.0.0.1:9091"],
+    AuthToken = "secret-token"
+});
+
+var producer = client.CreateProducer();
+long offset = await producer.SendAsync(
+    "telemetry", 0,
+    Encoding.UTF8.GetBytes("sensor-payload"));
+Console.WriteLine($"Produced at offset {offset}");
+
+var consumer = client.CreateConsumer();
+await foreach (var record in consumer.StreamAsync("telemetry", 0, startOffset: 0))
+{
+    Console.WriteLine($"offset={record.Offset}");
+}`;
+
+  readonly nodejsSnippet = `import { AeroClient } from '@gradientgeeks/aerostream-client';
+
+const client = await AeroClient.connect('127.0.0.1:9091', 'secret-token');
+
+// Produce
+const producer = client.producer();
+const offset = await producer.send('telemetry', 0, Buffer.from('sensor-payload'));
+console.log(\`Produced at offset \${offset}\`);
+
+// Consume (streaming)
+const consumer = client.consumer();
+for await (const record of consumer.stream('telemetry', 0, 0n)) {
+    console.log(\`offset=\${record.offset} payload=\${record.payload.toString()}\`);
+}
+
+await client.close();`;
 
   readonly javaSnippet = `spring:
   kafka:
@@ -215,7 +281,7 @@ curl -X POST http://localhost:9001/subjects/orders-value/versions \\
     this.selectedNodeId.set(id);
   }
 
-  selectTab(tab: 'docker' | 'python' | 'go' | 'java' | 'rest'): void {
+  selectTab(tab: 'docker' | 'python' | 'go' | 'rust' | 'java' | 'dotnet' | 'nodejs' | 'rest'): void {
     this.selectedQuickstartTab.set(tab);
   }
 }

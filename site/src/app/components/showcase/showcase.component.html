@@ -342,9 +342,27 @@
         </button>
         <button
           class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'rust'"
+          (click)="selectTab('rust')">
+          <mat-icon>memory</mat-icon> Rust Native SDK
+        </button>
+        <button
+          class="tab-btn"
           [class.active]="selectedQuickstartTab() === 'java'"
           (click)="selectTab('java')">
           <mat-icon>coffee</mat-icon> Java / Spring
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'dotnet'"
+          (click)="selectTab('dotnet')">
+          <mat-icon>lens</mat-icon> .NET SDK
+        </button>
+        <button
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'nodejs'"
+          (click)="selectTab('nodejs')">
+          <mat-icon>javascript</mat-icon> Node.js SDK
         </button>
         <button
           class="tab-btn"
@@ -390,6 +408,18 @@
         <pre class="code-content"><code [textContent]="goSnippet"></code></pre>
       </div>
 
+      <!-- Rust Native Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'rust'">
+        <div class="code-header">
+          <span>main.rs (AeroStream Rust Native SDK)</span>
+          <button class="snippet-copy" (click)="copySnippet(rustSnippet, 'rust')">
+            <mat-icon>{{ copiedSnippet() === 'rust' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'rust' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="rustSnippet"></code></pre>
+      </div>
+
       <!-- Java / Spring Snippet -->
       <div class="code-container" *ngIf="selectedQuickstartTab() === 'java'">
         <div class="code-header">
@@ -400,6 +430,30 @@
           </button>
         </div>
         <pre class="code-content"><code [textContent]="javaSnippet"></code></pre>
+      </div>
+
+      <!-- .NET SDK Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'dotnet'">
+        <div class="code-header">
+          <span>Program.cs (AeroStream .NET SDK)</span>
+          <button class="snippet-copy" (click)="copySnippet(dotnetSnippet, 'dotnet')">
+            <mat-icon>{{ copiedSnippet() === 'dotnet' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'dotnet' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="dotnetSnippet"></code></pre>
+      </div>
+
+      <!-- Node.js SDK Snippet -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'nodejs'">
+        <div class="code-header">
+          <span>client.ts (AeroStream Node.js SDK)</span>
+          <button class="snippet-copy" (click)="copySnippet(nodejsSnippet, 'nodejs')">
+            <mat-icon>{{ copiedSnippet() === 'nodejs' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'nodejs' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="nodejsSnippet"></code></pre>
       </div>
 
       <!-- REST API Snippet -->
@@ -416,7 +470,71 @@
     </div>
   </section>
 
-  <!-- 6. CALL TO ACTION & FOOTER -->
+  <!-- 6. SDK ECOSYSTEM SECTION -->
+  <section class="section sdk-section" id="sdks">
+    <div class="section-header">
+      <span class="section-tag">CLIENT SDKs</span>
+      <h2 class="section-title">Official Native SDKs</h2>
+      <p class="section-desc">
+        Ultra-low-latency client SDKs for AeroStream's native binary protocol (<code>0xAE 0x01</code> on port 9091).
+        Sub-millisecond tail latency with zero Kafka envelope overhead.
+      </p>
+    </div>
+    <div class="sdk-grid">
+      <a class="sdk-card" href="/docs/sdks/" target="_blank">
+        <div class="sdk-card-icon go-icon">🦫</div>
+        <div class="sdk-card-body">
+          <h4>Go SDK</h4>
+          <code>go get github.com/gradientgeeks/aerostream-sdk/go</code>
+          <span class="sdk-badge">v0.1.0-preview</span>
+        </div>
+      </a>
+      <a class="sdk-card" href="/docs/sdks/" target="_blank">
+        <div class="sdk-card-icon rust-icon">🦀</div>
+        <div class="sdk-card-body">
+          <h4>Rust SDK</h4>
+          <code>cargo add aerostream-client</code>
+          <span class="sdk-badge">v0.1.0-preview</span>
+        </div>
+      </a>
+      <a class="sdk-card" href="/docs/sdks/" target="_blank">
+        <div class="sdk-card-icon java-icon">☕</div>
+        <div class="sdk-card-body">
+          <h4>Java SDK</h4>
+          <code>org.gradientgeeks.aerostream:aerostream-client</code>
+          <span class="sdk-badge">v0.1.0-preview</span>
+        </div>
+      </a>
+      <a class="sdk-card" href="/docs/sdks/" target="_blank">
+        <div class="sdk-card-icon dotnet-icon">🔷</div>
+        <div class="sdk-card-body">
+          <h4>.NET SDK</h4>
+          <code>dotnet add package GradientGeeks.AeroStream.Client</code>
+          <span class="sdk-badge">v0.1.0-preview</span>
+        </div>
+      </a>
+      <a class="sdk-card" href="/docs/sdks/" target="_blank">
+        <div class="sdk-card-icon nodejs-icon">🟩</div>
+        <div class="sdk-card-body">
+          <h4>Node.js SDK</h4>
+          <code>npm install @gradientgeeks/aerostream-client</code>
+          <span class="sdk-badge">v0.1.0-preview</span>
+        </div>
+      </a>
+    </div>
+    <div class="sdk-repo-link">
+      <a href="https://github.com/gradientgeeks/aerostream-sdk" target="_blank" rel="noopener" class="btn-secondary">
+        <mat-icon>open_in_new</mat-icon>
+        SDK Repository: github.com/gradientgeeks/aerostream-sdk
+      </a>
+      <a href="/docs/sdks/" class="btn-primary">
+        <mat-icon>menu_book</mat-icon>
+        SDK API Reference
+      </a>
+    </div>
+  </section>
+
+  <!-- 7. CALL TO ACTION & FOOTER -->
   <footer class="site-footer">
     <div class="footer-container">
       <div class="footer-cta-card">
@@ -447,6 +565,7 @@
           <a href="#architecture">Architecture</a>
           <a href="#features">Features</a>
           <a href="#quickstart">Quickstart</a>
+          <a href="#sdks">SDKs</a>
           <a href="https://gradientgeeks.com" target="_blank" rel="noopener">Gradient Geeks</a>
         </div>
       </div>
