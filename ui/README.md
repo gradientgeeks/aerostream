@@ -1,59 +1,53 @@
-# Ui
+# AeroStream Web Console
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.24.
+[![GitHub Repository](https://img.shields.io/badge/GitHub-gradientgeeks%2Faerostream-blue?logo=github)](https://github.com/gradientgeeks/aerostream)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## Development server
+Enterprise Web Administration Console for **AeroStream** ([gradientgeeks/aerostream](https://github.com/gradientgeeks/aerostream)) — the high-performance, distributed event streaming platform built with a dual-engine architecture:
+- **Go**: Raft metadata consensus, controller coordination, Kafka protocol negotiation, and HTTP management APIs.
+- **Rust**: Zero-copy partition commit log, lockless I/O ring buffers, and high-throughput TCP socket server.
 
-To start a local development server, run:
+---
 
-```bash
-ng serve
-```
+## Features
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+- **Cluster Overview**: Live node topology, Raft consensus state (Leader/Follower/Candidate), broker heartbeat telemetry, and log storage volume.
+- **Topics & Partition Management**: Topic CRUD, partition distributions, ISR health, high-watermark metrics, and cleanup policies (`compact` vs `delete`).
+- **Message Explorer**: Real-time partition log viewer with offset seeking, timestamp decoding, hex dump preview, and structured JSON payloads.
+- **Web Producer**: Interactive message publishing console with single or burst event simulation and latency tracking.
+- **Schema Registry**: Full governance with Avro, JSON Schema, and Protobuf contracts, version evolution, and compatibility verification.
+- **Stream Transforms**: In-broker WASM filters, PII data masking, and JSON enrichment pipelines.
+- **Connectors Ecosystem**: Native Kafka Connect interface for S3 archival sinks, HTTP webhooks, and database CDC sources.
+- **Consumer Groups & Lag Monitor**: KIP-848 cooperative sticky rebalancing status, active member partition allocations, and committed lag telemetry.
+- **Security & RBAC ACLs**: Role-based access control policies (Allow/Deny) and live policy evaluation simulator.
 
-## Code scaffolding
+---
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## Development Server
 
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
+To start a local development server on port 4200:
 
 ```bash
-ng build
+npm install
+npm run start
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+Navigate to `http://localhost:4200/`. The console connects to the AeroStream Controller REST API at `http://localhost:9001` by default.
 
-## Running unit tests
+## Production Build
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+To build the production-ready distribution:
 
 ```bash
-ng test
+npm run build
 ```
 
-## Running end-to-end tests
+Compiled assets will be output to `dist/ui/browser/`.
 
-For end-to-end (e2e) testing, run:
+---
 
-```bash
-ng e2e
-```
+## Repository & Community
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+- **Project Repository**: [https://github.com/gradientgeeks/aerostream](https://github.com/gradientgeeks/aerostream)
+- **Issue Tracker**: [https://github.com/gradientgeeks/aerostream/issues](https://github.com/gradientgeeks/aerostream/issues)
+- **Organization**: [Gradient Geeks](https://github.com/gradientgeeks)

@@ -31,7 +31,7 @@ export interface PublishedRecord {
   error?: string;
 }
 
-const STORAGE_KEY_PRODUCER_HISTORY = 'aeromq_producer_history';
+const STORAGE_KEY_PRODUCER_HISTORY = 'aerostream_producer_history';
 
 @Component({
   selector: 'app-producer',
@@ -363,7 +363,7 @@ export class ProducerComponent implements OnInit {
 
   private loadHistory(): void {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY_PRODUCER_HISTORY);
+      const raw = localStorage.getItem(STORAGE_KEY_PRODUCER_HISTORY) || localStorage.getItem('aeromq_producer_history');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {

@@ -18,6 +18,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject, Subscription, catchError, forkJoin, of, timer } from 'rxjs';
 import { AeroMQService } from '../../services/aeromq.service';
 import { ConsumerGroup, ConsumerGroupMember, PartitionLag } from '../../models/aeromq.models';
+import { PaginationComponent } from '../common/pagination.component';
 
 export interface GroupDisplayInfo {
   groupId: string;
@@ -66,6 +67,7 @@ export interface MemberAssignmentDisplay {
     MatBadgeModule,
     MatTabsModule,
     MatSnackBarModule,
+    PaginationComponent,
   ],
   templateUrl: './consumer-groups.component.html',
   styleUrl: './consumer-groups.component.scss',
@@ -193,6 +195,18 @@ export class ConsumerGroupsComponent implements OnInit, OnDestroy {
     }
 
     return list;
+  });
+
+  // Pagination for Consumer Groups Table
+  readonly groupPageIndex = signal<number>(0);
+  readonly groupPageSize = signal<number>(10);
+  readonly groupPageSizeOptions = [10, 25, 50, 100];
+
+  readonly paginatedGroups = computed<GroupDisplayInfo[]>(() => {
+    const list = this.filteredGroups();
+    const page = this.groupPageIndex();
+    const size = this.groupPageSize();
+    return list.slice(page * size, (page + 1) * size);
   });
 
   // Active selected group object

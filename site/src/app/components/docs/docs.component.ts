@@ -61,7 +61,7 @@ export class DocsComponent {
       summary: 'In-depth analysis of the Go Raft control plane and Rust zero-copy storage kernel.',
       anchors: [
         { id: 'control-plane-kernel', label: 'Control Plane (Go 1.26)' },
-        { id: 'storage-data-plane', label: 'Data Plane (Rust 1.98.1)' },
+        { id: 'storage-data-plane', label: 'Data Plane (Rust Shard-per-Core)' },
         { id: 'zero-copy-pipeline', label: 'Zero-Copy sendfile(2) Pipeline' },
         { id: 'hardware-crc', label: 'Hardware CRC32C Acceleration' },
       ]

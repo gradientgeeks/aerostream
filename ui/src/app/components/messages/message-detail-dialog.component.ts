@@ -17,6 +17,8 @@ export interface MessageDetailData {
   headers?: Record<string, string>;
 }
 
+export type MessagePayloadViewMode = 'hex' | 'base64' | 'text';
+
 @Component({
   selector: 'app-message-detail-dialog',
   standalone: true,
@@ -39,10 +41,11 @@ export class MessageDetailDialogComponent implements OnInit {
 
   isJson = false;
   isBinary = false;
-  showHexView = false;
+  viewMode: MessagePayloadViewMode = 'text';
   sanitizedKey = '';
   formattedContent = '';
   hexContent = '';
+  base64Content = '';
   lineCount = 1;
 
   ngOnInit(): void {
@@ -55,40 +58,78 @@ export class MessageDetailDialogComponent implements OnInit {
     }
 
     const raw = this.data.payload || '';
-    const hasBinaryBytes = /[\x00-\x08\x0E-\x1F]/.test(raw);
+    const hasBinaryBytes = /[\x00-\x08\x0E-\x1F\x7F-\xFF]/.test(raw);
 
     if (hasBinaryBytes) {
-      const jsonMatch = raw.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-      if (jsonMatch) {
+      // Check if it's actually valid JSON first (without loose substring regex)
+      const trimmed = raw.trim();
+      let parsedJson: any = null;
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
         try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          this.isJson = true;
-          this.formattedContent = JSON.stringify(parsed, null, 2);
+          parsedJson = JSON.parse(trimmed);
         } catch {
-          this.isBinary = true;
-          this.formattedContent = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '.');
+          parsedJson = null;
         }
+      }
+
+      if (parsedJson) {
+        this.isJson = true;
+        this.formattedContent = JSON.stringify(parsedJson, null, 2);
+        this.viewMode = 'text';
       } else {
         this.isBinary = true;
-        this.formattedContent = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '.');
+        this.viewMode = 'hex';
+        // Clean text representation with dots for non-printables
+        this.formattedContent = raw.replace(/[\x00-\x1F\x7F-\xFF]/g, (ch) => {
+          if (ch === '\n' || ch === '\r' || ch === '\t') return ch;
+          return '·';
+        });
       }
     } else {
       try {
         const parsed = JSON.parse(raw);
         this.isJson = true;
         this.formattedContent = JSON.stringify(parsed, null, 2);
+        this.viewMode = 'text';
       } catch {
         this.isJson = false;
         this.formattedContent = raw;
+        this.viewMode = 'text';
       }
     }
 
     this.hexContent = this.generateHexDump(raw);
-    this.lineCount = this.formattedContent.split('\n').length;
+    this.base64Content = this.generateBase64(raw);
+    this.lineCount = (this.viewMode === 'hex' ? this.hexContent : this.formattedContent).split('\n').length;
   }
 
-  toggleHexView(): void {
-    this.showHexView = !this.showHexView;
+  setViewMode(mode: MessagePayloadViewMode): void {
+    this.viewMode = mode;
+  }
+
+  getActiveDisplayContent(): string {
+    switch (this.viewMode) {
+      case 'hex':
+        return this.hexContent;
+      case 'base64':
+        return this.base64Content;
+      case 'text':
+      default:
+        return this.formattedContent;
+    }
+  }
+
+  generateBase64(input: string): string {
+    if (!input) return '';
+    try {
+      let binary = '';
+      for (let i = 0; i < input.length; i++) {
+        binary += String.fromCharCode(input.charCodeAt(i) & 0xff);
+      }
+      return btoa(binary);
+    } catch {
+      return '(Base64 encoding unavailable)';
+    }
   }
 
   generateHexDump(input: string): string {
@@ -102,7 +143,7 @@ export class MessageDetailDialogComponent implements OnInit {
       const chunk = bytes.slice(i, i + 16);
       const offsetHex = i.toString(16).padStart(8, '0');
       const hexPart = chunk.map(b => b.toString(16).padStart(2, '0')).join(' ').padEnd(48, ' ');
-      const asciiPart = chunk.map(b => (b >= 32 && b <= 126 ? String.fromCharCode(b) : '.')).join('');
+      const asciiPart = chunk.map(b => (b >= 32 && b <= 126 ? String.fromCharCode(b) : '·')).join('');
       lines.push(`${offsetHex}  ${hexPart}  |${asciiPart}|`);
     }
     return lines.join('\n');
@@ -117,16 +158,18 @@ export class MessageDetailDialogComponent implements OnInit {
   }
 
   copyPayload(): void {
-    const success = this.clipboard.copy(this.formattedContent);
+    const toCopy = this.getActiveDisplayContent();
+    const success = this.clipboard.copy(toCopy);
+    const modeLabel = this.viewMode.toUpperCase();
     if (success) {
-      this.snackBar.open('Message payload copied to clipboard!', 'Dismiss', {
+      this.snackBar.open(`Message payload (${modeLabel}) copied to clipboard!`, 'Dismiss', {
         duration: 3000,
         horizontalPosition: 'end',
         verticalPosition: 'bottom'
       });
     } else {
-      navigator.clipboard.writeText(this.formattedContent).then(() => {
-        this.snackBar.open('Message payload copied to clipboard!', 'Dismiss', {
+      navigator.clipboard.writeText(toCopy).then(() => {
+        this.snackBar.open(`Message payload (${modeLabel}) copied to clipboard!`, 'Dismiss', {
           duration: 3000,
           horizontalPosition: 'end',
           verticalPosition: 'bottom'

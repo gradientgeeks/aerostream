@@ -370,6 +370,15 @@
       ></tr>
       <tr mat-row *matRowDef="let row; columns: ['expandedDetail']" class="detail-row"></tr>
     </table>
+
+    <mat-paginator
+      [pageSize]="10"
+      [pageSizeOptions]="[10, 25, 50, 100]"
+      showFirstLastButtons
+      aria-label="Select page of topics"
+      class="border-t border-app bg-app-card"
+    >
+    </mat-paginator>
   </div>
 
   <!-- Empty State (when 0 topics and not loading and no error) -->

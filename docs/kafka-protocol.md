@@ -67,6 +67,20 @@ AeroStream currently implements full wire support for **API Keys 0 through 36**,
 
 ---
 
+## High Watermark ($HW$) & Offset Replication Semantics
+
+For Fetch requests (`ApiKey 1`), the broker guarantees linearizable, non-repeatable read safety by strictly enforcing High Watermark ($HW$) boundaries calculated across all In-Sync Replicas ($r \in \text{ISR}$):
+
+$$HW = \min_{r \in \text{ISR}} \text{LEO}_r$$
+
+Offset boundaries obey the strict monotonic relation:
+
+$$0 \le \text{StartOffset} \le \text{FetchOffset} \le HW \le \text{LEO}_{\text{leader}}$$
+
+Consumers can never read uncommitted records past $HW$. When follower replicas advance their Log End Offset ($\text{LEO}_r$), the partition leader recalculates $HW$ and awakens pending long-poll Fetch requests with zero mutex contention via `tokio::sync::Notify`.
+
+---
+
 ## In-Place Base-Offset Patching
 
 In Apache Kafka's **Magic v2 RecordBatch** format, records within a batch have delta offsets relative to the batch's `base_offset`. When a producer creates a batch, it sets `base_offset = 0`. The broker must assign a globally monotonic log offset to the batch upon ingestion.
@@ -75,8 +89,9 @@ In Apache Kafka's **Magic v2 RecordBatch** format, records within a batch have d
 
 Naive bridges and proxies decompress the entire record batch in userspace memory, iterate through each individual record, rewrite offsets, recalculate batch metadata, recompress using gzip/zstd, and re-encode. This causes:
 
-* **Massive CPU consumption** spent in compression/decompression libraries.
-* **Severe heap churn and memory allocations** (often allocating 10x the batch size).
+* **Massive CPU consumption** spent in compression/decompression libraries:
+  $$T_{\text{reencode}} = \mathcal{O}(B) + \mathcal{O}(K \cdot \text{decompress})$$
+* **Severe heap churn and memory allocations** (often allocating 10x the batch size $B$).
 * **High tail latency spikes** under load.
 
 ### AeroStream's Zero-Reallocation Solution
@@ -85,7 +100,13 @@ AeroStream exploits a critical property of the Kafka RecordBatch specification:
 
 > The 32-bit CRC32C checksum in a Kafka RecordBatch covers **only bytes 21 through end-of-batch**. Bytes 0 through 8 contain the 64-bit `base_offset`, and bytes 8 through 12 contain the 32-bit `batch_length`.
 
-Because the checksum **does not cover the base offset**, AeroStream:
+The checksum polynomial is the Castagnoli $P(x) = x^{32} + x^{28} + x^{27} + \dots + 1$:
+
+$$\text{CRC}_{\text{computed}} = \text{CRC32C}(\text{bytes}[21 \dots N]) \equiv M(x) \cdot x^{32} \pmod{P(x)}$$
+
+Because the checksum **does not cover the base offset**, AeroStream patches the offset in constant time $\mathcal{O}(1)$:
+
+$$T_{\text{patch}}(\text{AeroStream}) = \mathcal{O}(1) \ll T_{\text{naive}}(\text{Bridge}) = \mathcal{O}(B)$$
 
 1. Writes the raw network frame directly into the log segment using `FileExt::write_all_at`.
 2. Overwrites the 8 bytes at segment offset 0 with the assigned monotonic `base_offset` directly on disk:

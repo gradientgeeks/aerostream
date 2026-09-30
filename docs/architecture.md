@@ -52,6 +52,18 @@ flowchart TD
 * **Continuous Broker Heartbeats**: Storage brokers transmit UDP/gRPC heartbeats every 2 seconds to the active controller. If a broker fails to heartbeat within the grace threshold (default 6 seconds), the controller marks it unreachable and automatically promotes in-sync replicas (ISR) to partition leaders.
 * **Piggybacked Dynamic Configuration**: Controller responses to broker heartbeats piggyback partition assignment deltas, dynamically updating broker routing without restart.
 
+### Partition Consensus & High Watermark ($HW$) Tracking
+
+Replication safety across multi-node clusters is governed by the High Watermark ($HW$) consensus invariant. The controller and broker track the Log End Offset ($\text{LEO}$) for every in-sync replica ($r \in \text{ISR}$):
+
+$$HW = \min_{r \in \text{ISR}} \text{LEO}_r$$
+
+The High Watermark strictly bounds the offset visibility for consumer fetch requests:
+
+$$0 \le \text{CommittedOffset} \le HW \le \text{LEO}_{\text{leader}}$$
+
+When partition leaders append batches locally ($\text{LEO}_{\text{leader}} \gets \text{LEO}_{\text{leader}} + \Delta$), the updated base offset is committed and made available to consumers only after all followers in the active ISR acknowledge replication up to that offset.
+
 ### Green Tea Garbage Collector (Go 1.26)
 
 The Go 1.26 runtime defaults to the **Green Tea Garbage Collector**, which fundamentally restructures heap marking and generational scavenging. This brings:
@@ -78,8 +90,15 @@ The Storage Broker is built entirely in Rust (compiled with `rustc 1.98.1`, targ
 
 To eliminate cross-thread locking on high-throughput paths, AeroStream adopts a **Shard-per-Core** model:
 
-* **Deterministic Shard Assignment**: Topic partitions are deterministically hashed to CPU cores:
-  $$\text{shard\_id} = \text{partition\_id} \pmod{N_{\text{shards}}}$$
+* **Deterministic Shard Assignment**: Topic partitions are deterministically mapped to dedicated worker threads via the `ShardRouter` hash partition mapping function:
+
+    $$S = \text{hash}(\text{topic}, \text{partition}) \pmod N$$
+
+    where $N$ denotes the total number of pinned shard execution threads ($N = N_{\text{shards}}$). For a topic name $T$ and partition index $p$:
+
+    $$S = \left( \mathcal{H}_{\text{64}}(T) \oplus p \right) \pmod N$$
+
+    This ensures uniform partition spreading across available CPU execution units without global coordinator locks or thread migrations.
 * **Thread-to-Core Affinity**: Worker threads are pinned to dedicated physical CPU cores using Linux `libc::sched_setaffinity`.
 * **Lock-Free Actor Channels**: Ingress network connections dispatch record batches to the designated core worker via `flume::unbounded` lock-free ring-buffers—eliminating cross-core mutexes, atomic CAS loops, and CPU cache-line bouncing.
 
@@ -125,7 +144,7 @@ When consumers request message batches via Port 9092 (Kafka Fetch) or Port 9091 
 | Feature | Standard JVM Streaming Broker | AeroStream Rust Data Plane |
 |---|---|---|
 | **Fetch Path** | Disk $\to$ Page Cache $\to$ JVM Heap $\to$ Socket Buffer | Disk $\to$ Page Cache $\to$ Network Socket (`sendfile(2)`) |
-| **Userspace Copies** | 2 copies (heap byte buffer alloc) | **0 copies** |
+| **Userspace Copies** | 2 copies ($2 \times \text{Size}(\text{Batch})$ heap allocations) | **0 copies** ($\text{Zero-Copy DMA}$) |
 | **CPU Cache Thrashing** | High (GC and object allocations) | **Zero** (Data never enters CPU L1/L2 cache) |
 | **Index Search** | JVM object deserialization | Binary search in memory-mapped (`mmap`) `.idx` |
 
@@ -139,9 +158,12 @@ The broker memory-maps these `.idx` files using `mmap(2)`. Finding an offset wit
 
 In memory-constrained container environments (e.g., Kubernetes limits of 2 GiB RAM), aggressive OS dirty page accumulation can trigger sudden, seconds-long Linux writeback pauses.
 
-AeroStream protects against this by actively pacing kernel writeback:
+AeroStream protects against writeback pauses by actively pacing kernel writeback, enforcing an upper bound on dirty buffer buildup:
 
-* Every **8 MiB** of appended data, the storage engine invokes `sync_file_range(2)` with `SYNC_FILE_RANGE_WRITE`.
+$$M_{\text{dirty}}(t) \le \Delta_{\text{pace}} = 8 \text{ MiB}$$
+
+* Every **8 MiB** of appended data, the storage engine invokes `sync_file_range(2)` with `SYNC_FILE_RANGE_WRITE`:
+  $$\text{sync\_file\_range}(fd, \text{offset} - 8\text{MB}, 8\text{MB}, \text{SYNC\_FILE\_RANGE\_WRITE})$$
 * It advises the kernel with `posix_fadvise(POSIX_FADV_DONTNEED)` for historical segments, preventing cold consumer reads from evicting hot active ingestion buffers.
 
 ---
@@ -149,6 +171,14 @@ AeroStream protects against this by actively pacing kernel writeback:
 ## Hardware CRC32C Acceleration
 
 Every Kafka RecordBatch framing standard mandates a 32-bit Castagnoli polynomial checksum (`CRC32C`) covering the record batch header and payload.
+
+The Castagnoli generator polynomial is defined as:
+
+$$P(x) = x^{32} + x^{28} + x^{27} + x^{26} + x^{25} + x^{23} + x^{22} + x^{20} + x^{19} + x^{18} + x^{14} + x^{13} + x^{11} + x^{10} + x^9 + x^8 + x^6 + 1$$
+
+Represented in hexadecimal notation as `0x1EDC6F41`. For a binary message polynomial $M(x)$ of length $k$, the 32-bit CRC checksum $R(x)$ is computed as the polynomial remainder:
+
+$$R(x) = M(x) \cdot x^{32} \pmod{P(x)}$$
 
 AeroStream leverages specialized CPU hardware instructions:
 
@@ -164,4 +194,6 @@ pub fn compute_crc32c_hardware(data: &[u8]) -> u32 {
 }
 ```
 
-This hardware pipeline delivers **10.9 GB/s checksum throughput** on modern CPUs, removing checksum verification as a bottleneck on 100 Gbps network interfaces.
+This hardware pipeline delivers **10.9 GB/s checksum throughput** on modern CPUs, removing checksum verification as a bottleneck on 100 Gbps network interfaces:
+
+$$\text{Latency}_{\text{CRC}} = \frac{\text{BatchSize}}{10.9 \times 10^9 \text{ B/s}} \approx 91.7 \text{ ns per 1 KB batch}$$

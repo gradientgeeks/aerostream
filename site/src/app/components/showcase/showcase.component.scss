@@ -2,9 +2,11 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
   background-color: var(--app-bg);
   color: var(--app-text);
-  overflow-x: clip;
+  overflow-x: hidden;
 }
 
 /* ==========================================================================
@@ -235,6 +237,15 @@
   overflow-x: auto;
   white-space: nowrap;
   -webkit-overflow-scrolling: touch;
+  min-width: 0;
+  max-width: 100%;
+  scrollbar-width: thin;
+
+  .command-text {
+    overflow-x: auto;
+    white-space: nowrap;
+    min-width: 0;
+  }
 }
 
 .terminal-icon {
@@ -476,9 +487,11 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  max-width: 100%;
 
   @media (max-width: 900px) {
     flex-direction: row;
+    flex-wrap: wrap;
     padding: 0.5rem 0;
   }
 }
@@ -505,13 +518,21 @@
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--app-text-muted);
-  white-space: nowrap;
+  max-width: 100%;
+  text-align: center;
+
+  @media (max-width: 640px) {
+    font-size: 0.68rem;
+    padding: 0.25rem 0.5rem;
+    white-space: normal;
+  }
 
   mat-icon {
     font-size: 1rem;
     width: 1rem;
     height: 1rem;
     color: var(--app-primary);
+    flex-shrink: 0;
   }
 }
 
@@ -521,12 +542,20 @@
   border-radius: 14px;
   padding: 2rem;
   transition: all 0.2s ease;
+  max-width: 100%;
+  min-width: 0;
+
+  @media (max-width: 640px) {
+    padding: 1.25rem 1rem;
+  }
 }
 
 .inspector-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   margin-bottom: 1rem;
 }
 
@@ -726,6 +755,12 @@
 .code-container {
   padding: 1.5rem;
   background: var(--app-code-bg);
+  max-width: 100%;
+  overflow-x: hidden;
+
+  @media (max-width: 640px) {
+    padding: 1rem 0.75rem;
+  }
 }
 
 .code-header {
@@ -736,6 +771,8 @@
   font-size: 0.8rem;
   color: var(--app-text-muted);
   font-family: var(--app-font-mono);
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .snippet-copy {
@@ -768,6 +805,10 @@
   line-height: 1.5;
   color: var(--app-code-text);
   overflow-x: auto;
+  max-width: 100%;
+  white-space: pre;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 /* ==========================================================================

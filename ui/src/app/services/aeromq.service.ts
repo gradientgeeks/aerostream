@@ -13,7 +13,7 @@ import {
   Topic,
 } from '../models/aeromq.models';
 
-const STORAGE_KEY_BASE_URL = 'aeromq_api_base_url';
+const STORAGE_KEY_BASE_URL = 'aerostream_api_base_url';
 function getDefaultApiBase(): string {
   if (typeof window !== 'undefined' && window.location && window.location.origin) {
     if (window.location.port !== '4200') {
@@ -31,7 +31,7 @@ export class AeroMQService {
 
   // Configuration Signals
   readonly apiBaseUrl = signal<string>(
-    (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY_BASE_URL)) || getDefaultApiBase()
+    (typeof localStorage !== 'undefined' && (localStorage.getItem(STORAGE_KEY_BASE_URL) || localStorage.getItem('aeromq_api_base_url'))) || getDefaultApiBase()
   );
   readonly autoRefreshEnabled = signal<boolean>(true);
   readonly refreshIntervalSeconds = signal<number>(3);

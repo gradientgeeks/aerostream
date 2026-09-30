@@ -3,7 +3,7 @@
   <div class="dialog-header flex items-center justify-between gap-3 p-4 border-b border-app">
     <div class="header-left flex items-center gap-3 min-w-0">
       <div class="header-icon shrink-0">
-        <mat-icon>{{ isJson ? 'data_object' : 'notes' }}</mat-icon>
+        <mat-icon>{{ isJson ? 'data_object' : (isBinary ? 'memory' : 'notes') }}</mat-icon>
       </div>
       <div class="min-w-0">
         <h2 mat-dialog-title class="truncate text-base sm:text-lg font-semibold m-0 text-app">Message Details</h2>
@@ -65,22 +65,52 @@
 
     <!-- Payload Content Box -->
     <div class="content-box w-full max-w-full min-w-0 rounded-lg border border-app bg-[var(--app-code-bg)] overflow-hidden">
-      <div class="content-toolbar flex items-center justify-between px-3 py-2 bg-app-surface border-b border-app">
+      <div class="content-toolbar flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-app-surface border-b border-app">
         <span class="toolbar-title text-xs font-semibold uppercase tracking-wider text-app-muted">
-          {{ showHexView ? 'Hex Dump' : 'Payload Content' }}
+          {{ viewMode === 'hex' ? 'Hex Dump (16-Byte Grid)' : (viewMode === 'base64' ? 'Base64 Encoded' : 'Payload Content') }}
         </span>
-        <div class="flex items-center gap-2">
-          <button mat-stroked-button class="view-mode-btn h-7 text-xs px-2" (click)="toggleHexView()">
-            <mat-icon class="!text-sm !w-3.5 !h-3.5 mr-1">{{ showHexView ? 'text_snippet' : 'memory' }}</mat-icon>
-            <span>{{ showHexView ? 'Text View' : 'Hex Dump' }}</span>
-          </button>
+        <div class="flex items-center gap-2 flex-wrap">
+          <!-- 3-Way Mode Toggle -->
+          <div class="view-mode-toggle flex items-center rounded-lg border border-app bg-app-nested p-0.5 text-xs">
+            <button
+              type="button"
+              class="px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors"
+              [class.bg-cyan-500]="viewMode === 'hex'"
+              [class.text-white]="viewMode === 'hex'"
+              [class.text-app-muted]="viewMode !== 'hex'"
+              (click)="setViewMode('hex')"
+            >
+              Hex Dump
+            </button>
+            <button
+              type="button"
+              class="px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors"
+              [class.bg-cyan-500]="viewMode === 'base64'"
+              [class.text-white]="viewMode === 'base64'"
+              [class.text-app-muted]="viewMode !== 'base64'"
+              (click)="setViewMode('base64')"
+            >
+              Base64
+            </button>
+            <button
+              type="button"
+              class="px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors"
+              [class.bg-cyan-500]="viewMode === 'text'"
+              [class.text-white]="viewMode === 'text'"
+              [class.text-app-muted]="viewMode !== 'text'"
+              (click)="setViewMode('text')"
+            >
+              Text
+            </button>
+          </div>
+
           <button mat-stroked-button class="copy-btn h-7 text-xs px-2" (click)="copyPayload()">
             <mat-icon class="!text-sm !w-3.5 !h-3.5 mr-1">content_copy</mat-icon>
             <span>Copy</span>
           </button>
         </div>
       </div>
-      <pre class="code-preview break-all whitespace-pre-wrap max-w-full overflow-x-auto p-4 m-0 font-mono text-xs sm:text-sm leading-relaxed max-h-[440px]" [class.json-code]="isJson && !showHexView"><code>{{ showHexView ? hexContent : formattedContent }}</code></pre>
+      <pre class="code-preview break-all whitespace-pre-wrap max-w-full overflow-x-auto p-4 m-0 font-mono text-xs sm:text-sm leading-relaxed max-h-[440px]" [class.json-code]="isJson && viewMode === 'text'"><code>{{ getActiveDisplayContent() }}</code></pre>
     </div>
   </mat-dialog-content>
 
@@ -88,7 +118,7 @@
     <button mat-button (click)="onClose()">Close</button>
     <button mat-flat-button color="primary" (click)="copyPayload()">
       <mat-icon class="mr-1">content_copy</mat-icon>
-      <span>Copy to Clipboard</span>
+      <span>Copy Current View</span>
     </button>
   </mat-dialog-actions>
 </div>

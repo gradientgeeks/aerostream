@@ -20,6 +20,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Connector, ConnectorPlugin, ConnectorState, ConnectorType } from '../../models/connector.model';
 import { ConnectorService } from '../../services/connector.service';
 import { DeployConnectorDialogComponent } from './deploy-connector-dialog.component';
+import { PaginationComponent } from '../common/pagination.component';
 
 @Component({
   selector: 'app-connectors',
@@ -42,6 +43,7 @@ import { DeployConnectorDialogComponent } from './deploy-connector-dialog.compon
     MatMenuModule,
     MatProgressBarModule,
     MatProgressSpinnerModule,
+    PaginationComponent,
   ],
   templateUrl: './connectors.component.html',
   styleUrl: './connectors.component.scss',
@@ -56,6 +58,8 @@ export class ConnectorsComponent implements OnInit {
   readonly stateFilter = signal<string>('ALL');
   readonly selectedConnector = signal<Connector | null>(null);
   readonly selectedTab = signal<number>(0);
+  readonly pageIndex = signal<number>(0);
+  readonly pageSize = signal<number>(10);
 
   // Filtered connectors
   readonly filteredConnectors = computed(() => {
@@ -76,6 +80,13 @@ export class ConnectorsComponent implements OnInit {
 
       return matchesQuery && matchesType && matchesState;
     });
+  });
+
+  // Paginated slice
+  readonly paginatedConnectors = computed(() => {
+    const list = this.filteredConnectors();
+    const start = this.pageIndex() * this.pageSize();
+    return list.slice(start, start + this.pageSize());
   });
 
   ngOnInit(): void {

@@ -120,8 +120,8 @@
               <tr>
                 <td><strong>Data Plane</strong></td>
                 <td>Rust 1.98.1 (Edition 2024)</td>
-                <td>TCP Listeners (Ports 9091/9092), Zero-Copy Segmented Commit Log, Tiered Storage</td>
-                <td>Zero-copy sendfile(2) I/O, microsecond commit latency, lean memory footprint, and lock-free execution</td>
+                <td>Shard-per-Core Storage Kernel, TCP Listeners (Ports 9091/9092), Zero-Copy Commit Log, Tiered Storage</td>
+                <td>Zero-copy sendfile(2) I/O, microsecond commit latency, lock-free Shard-per-Core concurrency, lean memory footprint</td>
               </tr>
             </tbody>
           </table>
@@ -187,11 +187,15 @@
           <li><strong>Swiss Tables Maps</strong>: Go 1.24/1.26 runtime hash maps utilize 16-way SIMD vector probing, accelerating topic partition routing and ACL rule lookups by 30%.</li>
         </ul>
 
-        <h2 id="storage-data-plane">Data Plane Kernel (Rust 1.98.1 & Tokio)</h2>
+        <h2 id="storage-data-plane">Data Plane Kernel (Rust 1.98.1 & Shard-per-Core)</h2>
         <p>
           The Storage Broker is built entirely in Rust (compiled with <code>rustc 1.98.1</code>, targeting Edition 2024).
-          It operates directly against Linux kernel APIs for maximum mechanical sympathy:
+          It operates a <strong>Shard-per-Core</strong> lock-free architecture directly against Linux kernel APIs for maximum mechanical sympathy:
         </p>
+        <ul>
+          <li><strong>Shard-per-Core Partition Scheduling</strong>: Partition workloads map onto independent thread workers pinned to CPU cores, eliminating cross-core synchronization and atomic lock cache-line bouncing.</li>
+          <li><strong>Active-Segment Length Tracking</strong>: In-memory atomic length counters eliminate redundant <code>statx</code> and <code>lseek</code> system call overhead on every append operation.</li>
+        </ul>
         <div class="callout callout-note">
           <div class="callout-icon"><mat-icon>info</mat-icon></div>
           <div class="callout-body">
@@ -798,7 +802,7 @@
             <mat-icon>arrow_back</mat-icon>
             Back to Home
           </a>
-          <a href="https://github.com/gradientgeeks/AeroMQ" target="_blank" rel="noopener" class="repo-link">
+          <a href="https://github.com/gradientgeeks/aerostream" target="_blank" rel="noopener" class="repo-link">
             <mat-icon>code</mat-icon>
             View Source on GitHub
           </a>

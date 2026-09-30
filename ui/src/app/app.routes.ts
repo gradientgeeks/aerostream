@@ -73,6 +73,22 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'consumer-groups',
+    redirectTo: 'groups',
+  },
+  {
+    path: 'consumers',
+    redirectTo: 'groups',
+  },
+  {
+    path: 'brokers',
+    redirectTo: 'cluster',
+  },
+  {
+    path: 'quotas',
+    redirectTo: 'acls',
+  },
+  {
     path: 'aerostream/console/transforms',
     redirectTo: 'transforms',
   },

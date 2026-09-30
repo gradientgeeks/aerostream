@@ -1,9 +1,10 @@
-import { Component, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { Component, OnInit, AfterViewInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { animate, state, style, transition, trigger } from '@angular/animations';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { MatSort, MatSortModule } from '@angular/material/sort';
+import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
@@ -30,6 +31,7 @@ import { CreateTopicDialogComponent } from './create-topic-dialog.component';
     RouterModule,
     MatTableModule,
     MatSortModule,
+    MatPaginatorModule,
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
@@ -53,7 +55,7 @@ import { CreateTopicDialogComponent } from './create-topic-dialog.component';
     ])
   ]
 })
-export class TopicsComponent implements OnInit {
+export class TopicsComponent implements OnInit, AfterViewInit {
   private apiService = inject(ApiService);
   protected readonly schemaService = inject(SchemaService);
   private dialog = inject(MatDialog);
@@ -77,9 +79,15 @@ export class TopicsComponent implements OnInit {
   hasFilter = signal(false);
 
   @ViewChild(MatSort) sort!: MatSort;
+  @ViewChild(MatPaginator) paginator!: MatPaginator;
 
   ngOnInit(): void {
     this.loadTopics();
+  }
+
+  ngAfterViewInit(): void {
+    this.dataSource.sort = this.sort;
+    this.dataSource.paginator = this.paginator;
   }
 
   loadTopics(): void {
@@ -90,6 +98,7 @@ export class TopicsComponent implements OnInit {
       next: (topics) => {
         this.dataSource.data = topics;
         this.dataSource.sort = this.sort;
+        this.dataSource.paginator = this.paginator;
         this.dataSource.filterPredicate = (data: TopicInfo, filter: string) => {
           return data.name.toLowerCase().includes(filter.trim().toLowerCase());
         };

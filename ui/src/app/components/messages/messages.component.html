@@ -107,16 +107,16 @@
     </div>
 
     <!-- Quick Navigation Shortcuts -->
-    <div class="quick-nav-bar flex flex-wrap items-center gap-2 sm:gap-3 mt-4 pt-3.5 border-t border-[var(--app-divider)]">
-      <span class="nav-label text-xs font-semibold uppercase tracking-wider text-app-muted">Quick Jump:</span>
-      <button mat-stroked-button class="nav-shortcut" (click)="jumpToStart()" [disabled]="isFetchingMessages()">
+    <div class="quick-nav-bar flex flex-wrap items-center gap-2 sm:gap-3 mt-4 pt-3.5 border-t border-[var(--app-divider)] min-w-0">
+      <span class="nav-label text-xs font-semibold uppercase tracking-wider text-app-muted shrink-0">Quick Jump:</span>
+      <button mat-stroked-button class="nav-shortcut shrink-0" (click)="jumpToStart()" [disabled]="isFetchingMessages()">
         <mat-icon>first_page</mat-icon>
-        <span>Jump to Start (0)</span>
+        <span class="whitespace-nowrap">Jump to Start (0)</span>
       </button>
 
-      <button mat-stroked-button class="nav-shortcut" (click)="jumpToLatest()" [disabled]="isFetchingMessages()">
+      <button mat-stroked-button class="nav-shortcut shrink-0" (click)="jumpToLatest()" [disabled]="isFetchingMessages()">
         <mat-icon>last_page</mat-icon>
-        <span>Jump to Latest (HW: {{ currentPartitionInfo()?.high_watermark || 0 }})</span>
+        <span class="whitespace-nowrap">Jump to Latest (HW: {{ currentPartitionInfo()?.high_watermark || 0 }})</span>
       </button>
     </div>
   </div>
@@ -203,6 +203,83 @@
           <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
           <tr mat-row *matRowDef="let row; columns: displayedColumns" class="msg-row"></tr>
         </table>
+      </div>
+
+      <!-- Responsive Pagination Controls Footer -->
+      <div class="table-pagination-footer flex flex-wrap items-center justify-between gap-3 p-3.5 sm:px-5 border-t border-app bg-app-card text-xs text-app-muted min-w-0">
+        <!-- Range Information -->
+        <div class="pagination-info flex items-center gap-1.5 whitespace-nowrap min-w-0">
+          <span>Showing</span>
+          <span class="font-semibold text-app font-mono">{{ messagesDataSource.data.length }}</span>
+          <span>messages</span>
+          <span *ngIf="messagesDataSource.data.length > 0" class="text-app-muted">
+            (Offsets <strong class="text-app font-mono">{{ messagesDataSource.data[0].offset }}</strong> – <strong class="text-app font-mono">{{ messagesDataSource.data[messagesDataSource.data.length - 1].offset }}</strong>)
+          </span>
+        </div>
+
+        <!-- Controls: Limit Selector + Page Navigation -->
+        <div class="pagination-actions flex flex-wrap items-center gap-3 sm:gap-4">
+          <div class="page-size-picker flex items-center gap-1.5 whitespace-nowrap">
+            <span class="text-app-muted">Limit:</span>
+            <select
+              [ngModel]="limit()"
+              (ngModelChange)="onLimitChange($event)"
+              class="bg-app-nested text-app border border-app rounded px-2 py-1 text-xs outline-none cursor-pointer focus:border-cyan-500 font-mono"
+            >
+              <option *ngFor="let opt of limitOptions" [value]="opt">{{ opt }}</option>
+            </select>
+          </div>
+
+          <div class="page-count-tag font-mono text-xs whitespace-nowrap">
+            Page <strong class="text-app">{{ currentPage() }}</strong>
+          </div>
+
+          <div class="page-nav-btns flex items-center gap-1">
+            <button
+              mat-icon-button
+              (click)="jumpToStart()"
+              [disabled]="!hasPreviousPage() || isFetchingMessages()"
+              matTooltip="Jump to Start (Offset 0)"
+              class="pag-btn"
+              aria-label="First page"
+            >
+              <mat-icon class="!text-sm !w-4 !h-4">first_page</mat-icon>
+            </button>
+
+            <button
+              mat-icon-button
+              (click)="prevPage()"
+              [disabled]="!hasPreviousPage() || isFetchingMessages()"
+              matTooltip="Previous batch of messages"
+              class="pag-btn"
+              aria-label="Previous page"
+            >
+              <mat-icon class="!text-sm !w-4 !h-4">chevron_left</mat-icon>
+            </button>
+
+            <button
+              mat-icon-button
+              (click)="nextPage()"
+              [disabled]="!hasNextPage() || isFetchingMessages()"
+              matTooltip="Next batch of messages"
+              class="pag-btn"
+              aria-label="Next page"
+            >
+              <mat-icon class="!text-sm !w-4 !h-4">chevron_right</mat-icon>
+            </button>
+
+            <button
+              mat-icon-button
+              (click)="jumpToLatest()"
+              [disabled]="isFetchingMessages()"
+              matTooltip="Jump to Latest (High-Watermark)"
+              class="pag-btn"
+              aria-label="Latest messages"
+            >
+              <mat-icon class="!text-sm !w-4 !h-4">last_page</mat-icon>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   }

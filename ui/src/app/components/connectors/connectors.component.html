@@ -288,7 +288,7 @@
                     </thead>
                     <tbody>
                       <tr
-                        *ngFor="let c of filteredConnectors()"
+                        *ngFor="let c of paginatedConnectors()"
                         class="connector-row"
                         [class.selected]="selectedConnector()?.name === c.name"
                         (click)="selectConnector(c)"
@@ -427,6 +427,18 @@
                     </tbody>
                   </table>
                 </div>
+
+                <!-- Pagination Bar -->
+                <app-pagination
+                  *ngIf="filteredConnectors().length > 0"
+                  [totalItems]="filteredConnectors().length"
+                  [pageIndex]="pageIndex()"
+                  [pageSize]="pageSize()"
+                  [pageSizeOptions]="[5, 10, 25, 50]"
+                  itemLabel="connectors"
+                  (pageIndexChange)="pageIndex.set($event)"
+                  (pageSizeChange)="pageSize.set($event); pageIndex.set(0)"
+                ></app-pagination>
               </mat-card>
             </div>
 

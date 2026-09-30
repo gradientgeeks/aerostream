@@ -27,8 +27,35 @@ The benchmark workload was configured with 1 topic, 16 partitions, 1,024-byte me
 | **Publish latency max** | **565 ms** | 1,344 ms | **2.4x lower** |
 | **End-to-end latency $p_{50}$** | **4.0 ms** | 33.0 ms | **8x lower** |
 | **End-to-end latency $p_{99}$** | **485 ms** | 1,098 ms | **2.3x lower** |
-| **Benchmark Errors** | **0** | **0** | Clean execution |
 | **Peak broker container memory** | **533 MiB** | 1,247 MiB | **2.3x less RAM** |
+
+### Speedup & Efficiency Formulations
+
+To quantify the performance differential under identical 2-vCPU resource constraints, the speedup ratio and latency reduction factors are derived as follows:
+
+* **Throughput Speedup Ratio ($S_{\text{throughput}}$)**:
+
+    $$S_{\text{throughput}} = \frac{T_{\text{AeroStream}}}{T_{\text{Kafka}}} = \frac{202{,}395 \text{ msg/s}}{153{,}235 \text{ msg/s}} \approx 1.3208 \quad (+32.1\% \text{ higher throughput})$$
+
+* **Median Latency Speedup Factor ($R_{p50}$)**:
+
+    $$R_{p50} = \frac{L_{p50}^{\text{Kafka}}}{L_{p50}^{\text{AeroStream}}} = \frac{30.3 \text{ ms}}{1.5 \text{ ms}} = 20.2\times \quad (\text{latency speedup})$$
+
+    $$\Delta L_{p50} = \left( 1 - \frac{L_{p50}^{\text{AeroStream}}}{L_{p50}^{\text{Kafka}}} \right) \times 100\% = \left( 1 - \frac{1.5}{30.3} \right) \times 100\% \approx 95.05\% \text{ lower median latency}$$
+
+* **99th-Percentile Tail Latency Reduction ($R_{p99}$)**:
+
+    $$R_{p99} = \frac{L_{p99}^{\text{Kafka}}}{L_{p99}^{\text{AeroStream}}} = \frac{1{,}099 \text{ ms}}{452 \text{ ms}} \approx 2.4314\times \quad (\text{tail latency speedup})$$
+
+* **CPU Core Efficiency Factor ($\eta_{\text{CPU}}$)**:
+
+    $$\eta_{\text{CPU}} = \frac{\text{Throughput}}{\text{Active CPU Cores}}$$
+
+    $$\eta_{\text{AeroStream}} = \frac{202{,}395 \text{ msg/s}}{1.34 \text{ cores}} \approx 151{,}041 \text{ msg/s/core}$$
+
+    $$\eta_{\text{Kafka}} = \frac{153{,}235 \text{ msg/s}}{1.99 \text{ cores}} \approx 77{,}002 \text{ msg/s/core}$$
+
+    $$\text{Speedup}_{\eta} = \frac{\eta_{\text{AeroStream}}}{\eta_{\text{Kafka}}} = \frac{151{,}041}{77{,}002} \approx 1.9615\times \quad (+96.1\% \text{ throughput per CPU core})$$
 
 ---
 

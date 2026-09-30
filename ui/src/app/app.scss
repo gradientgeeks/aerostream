@@ -539,6 +539,36 @@
       white-space: nowrap;
     }
   }
+
+  .github-header-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    color: var(--app-text-muted);
+    border: 1px solid var(--app-border);
+    background: var(--app-surface-nested, rgba(255, 255, 255, 0.04));
+    transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+
+    &:hover {
+      color: var(--app-text);
+      background: var(--app-surface-hover);
+      border-color: var(--app-border-hover, #64748b);
+    }
+  }
+
+  .header-info-btn {
+    width: 32px !important;
+    height: 32px !important;
+    line-height: 32px !important;
+    color: var(--app-text-muted);
+
+    &:hover {
+      color: var(--app-text);
+    }
+  }
 }
 
 /* ==========================================================================

@@ -14,9 +14,11 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { AeroMQService } from './services/aeromq.service';
 import { ThemeService } from './services/theme.service';
 import { TurbineLogoComponent } from './components/logo/turbine-logo.component';
+import { AboutDialogComponent } from './components/about/about-dialog.component';
 
 export interface NavItem {
   path: string;
@@ -60,6 +62,7 @@ export interface SearchResultItem {
     MatSlideToggleModule,
     MatChipsModule,
     MatDividerModule,
+    MatDialogModule,
     TurbineLogoComponent,
   ],
   templateUrl: './app.html',
@@ -70,6 +73,7 @@ export class App implements OnInit {
   readonly themeService = inject(ThemeService);
   private breakpointObserver = inject(BreakpointObserver);
   private router = inject(Router);
+  private dialog = inject(MatDialog);
 
   @ViewChild('searchInput') searchInputElement?: ElementRef<HTMLInputElement>;
   @ViewChild('searchContainer') searchContainerElement?: ElementRef<HTMLElement>;
@@ -83,13 +87,7 @@ export class App implements OnInit {
   readonly searchQuery = signal<string>('');
   readonly isSearchOpen = signal<boolean>(false);
   readonly selectedResultIndex = signal<number>(0);
-  readonly liveTopics = signal<string[]>([
-    'orders',
-    'telemetry-events',
-    'alerts-critical',
-    'payment-transactions',
-    'orders-sanitized'
-  ]);
+  readonly liveTopics = signal<string[]>([]);
 
   readonly showApiUrlDialog = signal<boolean>(false);
   readonly editingUrl = signal<string>(this.service.apiBaseUrl());
@@ -202,6 +200,24 @@ export class App implements OnInit {
       icon: 'shield',
       path: '/acls',
       badge: 'Action'
+    },
+    {
+      id: 'action-about',
+      title: 'About AeroStream',
+      subtitle: 'View engine version, architecture & GitHub repository',
+      category: 'ACTION',
+      icon: 'info',
+      badge: 'System',
+      action: () => this.openAboutDialog()
+    },
+    {
+      id: 'action-github',
+      title: 'GitHub Repository',
+      subtitle: 'Open gradientgeeks/aerostream on GitHub',
+      category: 'ACTION',
+      icon: 'open_in_new',
+      badge: 'External',
+      action: () => window.open('https://github.com/gradientgeeks/aerostream', '_blank')
     }
   ];
 
@@ -240,7 +256,7 @@ export class App implements OnInit {
   ngOnInit(): void {
     // Restore collapsed preference on desktop
     try {
-      const saved = localStorage.getItem('aeromq_sidebar_collapsed');
+      const saved = localStorage.getItem('aerostream_sidebar_collapsed') ?? localStorage.getItem('aeromq_sidebar_collapsed');
       if (saved !== null) {
         this.isSidebarCollapsed.set(saved === 'true');
       }
@@ -393,13 +409,20 @@ export class App implements OnInit {
       this.isSidebarCollapsed.update((collapsed) => {
         const next = !collapsed;
         try {
-          localStorage.setItem('aeromq_sidebar_collapsed', String(next));
+          localStorage.setItem('aerostream_sidebar_collapsed', String(next));
         } catch {
           // Ignore storage errors
         }
         return next;
       });
     }
+  }
+
+  openAboutDialog(): void {
+    this.dialog.open(AboutDialogComponent, {
+      width: '520px',
+      maxWidth: '95vw',
+    });
   }
 
   closeMobileDrawer(): void {

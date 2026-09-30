@@ -166,7 +166,7 @@
 
     <!-- Active Groups Table -->
     <div class="overflow-x-auto w-full max-w-full" *ngIf="filteredGroups().length > 0; else noGroupsTemplate">
-      <table mat-table [dataSource]="filteredGroups()" class="groups-table w-full">
+      <table mat-table [dataSource]="paginatedGroups()" class="groups-table w-full">
         <!-- Group ID Column -->
         <ng-container matColumnDef="groupId">
           <th mat-header-cell *matHeaderCellDef class="whitespace-nowrap px-4 py-3">Group ID</th>
@@ -282,6 +282,18 @@
         </tr>
       </table>
     </div>
+
+    <!-- Pagination for Groups Table -->
+    <app-pagination
+      *ngIf="filteredGroups().length > 0"
+      [totalItems]="filteredGroups().length"
+      [pageSize]="groupPageSize()"
+      [pageIndex]="groupPageIndex()"
+      [pageSizeOptions]="groupPageSizeOptions"
+      itemLabel="consumer groups"
+      (pageIndexChange)="groupPageIndex.set($event)"
+      (pageSizeChange)="groupPageSize.set($event)"
+    ></app-pagination>
 
     <!-- Empty State for Groups Table -->
     <ng-template #noGroupsTemplate>

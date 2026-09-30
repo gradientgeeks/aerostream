@@ -6,7 +6,7 @@ export type ThemeMode = 'dark' | 'light';
   providedIn: 'root'
 })
 export class ThemeService {
-  private readonly THEME_STORAGE_KEY = 'aeromq-theme';
+  private readonly THEME_STORAGE_KEY = 'aerostream-theme';
 
   readonly theme = signal<ThemeMode>(this.getInitialTheme());
   readonly isDark = computed(() => this.theme() === 'dark');
@@ -17,7 +17,7 @@ export class ThemeService {
 
   private getInitialTheme(): ThemeMode {
     if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-      const savedTheme = localStorage.getItem(this.THEME_STORAGE_KEY) as ThemeMode | null;
+      const savedTheme = (localStorage.getItem(this.THEME_STORAGE_KEY) || localStorage.getItem('aeromq-theme')) as ThemeMode | null;
       if (savedTheme === 'dark' || savedTheme === 'light') {
         return savedTheme;
       }

@@ -59,7 +59,9 @@ export class StreamsService {
   readonly lastError = signal<string | null>(null);
 
   private url(path: string): string {
-    const custom = typeof localStorage !== 'undefined' ? localStorage.getItem('aeromq_api_url') : null;
+    const custom = typeof localStorage !== 'undefined'
+      ? (localStorage.getItem('aerostream_api_url') || localStorage.getItem('aeromq_api_url') || localStorage.getItem('aerostream_api_base_url') || localStorage.getItem('aeromq_api_base_url'))
+      : null;
     if (custom) {
       return `${custom.replace(/\/$/, '')}${path}`;
     }

@@ -110,7 +110,9 @@ html, body {
   font-family: var(--app-font-sans);
   background-color: var(--app-bg);
   color: var(--app-text);
-  overflow-x: clip;
+  overflow-x: hidden;
+  max-width: 100%;
+  width: 100%;
   scroll-behavior: smooth;
 }
 

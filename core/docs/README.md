@@ -106,7 +106,7 @@ Shows the bidirectional gRPC control stream between Go Controller and Rust Broke
 | **`9001`** | `HTTP / REST` | Go Controller | Web Console UI (`/aerostream/console`), REST Management API, Schema Registry, Stream Transforms, and ACLs |
 | **`8001`** | `gRPC` | Go Controller | Internal cluster metadata synchronization and broker heartbeat registration |
 | **`7001`** | `TCP (Raft)` | Go Controller | HashiCorp Raft consensus quorum communication between controllers |
-| **`9093`** | `TCP (Kafka Wire)` | Rust Broker | Standard Kafka binary wire protocol listener (supports `kafka-python`, `librdkafka`, `kafka-clients`) |
+| **`9092`** | `TCP (Kafka Wire)` | Rust Broker | Standard Kafka binary wire protocol listener (supports `kafka-python`, `librdkafka`, `kafka-clients`) |
 | **`9091`** | `TCP (Native)` | Rust Broker | Native binary zero-copy stream ingestion and high-throughput fetch protocol |
 
 ---

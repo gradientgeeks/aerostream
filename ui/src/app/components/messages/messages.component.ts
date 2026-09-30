@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -62,6 +62,23 @@ export class MessagesComponent implements OnInit {
   isFetchingMessages = signal(false);
   hasFetched = signal(false);
   errorMessage = signal<string | null>(null);
+  totalMessagesCount = signal<number>(0);
+
+  readonly currentPage = computed(() => {
+    const lim = this.limit();
+    if (lim <= 0) return 1;
+    return Math.floor(this.startOffset() / lim) + 1;
+  });
+
+  readonly hasPreviousPage = computed(() => {
+    return this.startOffset() > 0;
+  });
+
+  readonly hasNextPage = computed(() => {
+    const dataLen = this.totalMessagesCount();
+    const hw = this.currentPartitionInfo()?.high_watermark || 0;
+    return dataLen >= this.limit() && (this.startOffset() + dataLen) < hw;
+  });
 
   ngOnInit(): void {
     this.loadTopicsAndInitParams();
@@ -201,11 +218,13 @@ export class MessagesComponent implements OnInit {
       .subscribe({
         next: (res) => {
           this.messagesDataSource.data = res.messages || [];
+          this.totalMessagesCount.set(this.messagesDataSource.data.length);
           this.isFetchingMessages.set(false);
         },
         error: (err) => {
           this.isFetchingMessages.set(false);
           this.messagesDataSource.data = [];
+          this.totalMessagesCount.set(0);
           const msg =
             err.error?.message ||
             err.error ||
@@ -216,9 +235,38 @@ export class MessagesComponent implements OnInit {
       });
   }
 
+  prevPage(): void {
+    if (!this.hasPreviousPage() || this.isFetchingMessages()) return;
+    const nextOffset = Math.max(0, this.startOffset() - this.limit());
+    this.startOffset.set(nextOffset);
+    this.updateQueryParams();
+    this.fetchMessages();
+  }
+
+  nextPage(): void {
+    if (this.isFetchingMessages()) return;
+    const data = this.messagesDataSource.data;
+    let nextOffset = this.startOffset() + this.limit();
+    if (data.length > 0) {
+      const maxOffset = Math.max(...data.map(m => m.offset));
+      if (maxOffset >= this.startOffset()) {
+        nextOffset = maxOffset + 1;
+      }
+    }
+    this.startOffset.set(nextOffset);
+    this.updateQueryParams();
+    this.fetchMessages();
+  }
+
+  onLimitChange(newLimit: number): void {
+    this.limit.set(newLimit);
+    this.updateQueryParams();
+    this.fetchMessages();
+  }
+
   viewFullMessage(message: MessageRecord): void {
     this.dialog.open(MessageDetailDialogComponent, {
-      width: '720px',
+      width: '740px',
       maxWidth: '95vw',
       data: {
         topic: this.selectedTopic(),
@@ -235,16 +283,28 @@ export class MessagesComponent implements OnInit {
 
   getPayloadPreview(payload: string): string {
     if (!payload) return '<empty>';
-    let cleaned = payload;
-    if (/[\x00-\x08\x0E-\x1F]/.test(cleaned)) {
-      const jsonMatch = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-      if (jsonMatch) {
-        cleaned = jsonMatch[0];
-      } else {
-        cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+    const hasBinary = /[\x00-\x08\x0E-\x1F\x7F-\xFF]/.test(payload);
+    if (!hasBinary) {
+      const trimmed = payload.trim();
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          JSON.parse(trimmed);
+          const singleLine = trimmed.replace(/\r?\n|\r/g, ' ');
+          return singleLine.length > 80 ? singleLine.substring(0, 80) + '...' : singleLine;
+        } catch {
+          // Plain text fallback
+        }
       }
+      const singleLine = payload.replace(/\r?\n|\r/g, ' ');
+      return singleLine.length > 80 ? singleLine.substring(0, 80) + '...' : singleLine;
     }
-    cleaned = cleaned.replace(/\r?\n|\r/g, ' ');
-    return cleaned.length > 80 ? cleaned.substring(0, 80) + '...' : cleaned;
+
+    // Binary payload: show clean hex snippet without corrupted unicode chars
+    const byteCount = payload.length;
+    const hexSnippet: string[] = [];
+    for (let i = 0; i < Math.min(payload.length, 6); i++) {
+      hexSnippet.push((payload.charCodeAt(i) & 0xff).toString(16).padStart(2, '0'));
+    }
+    return `[Binary: ${hexSnippet.join(' ')}${byteCount > 6 ? '...' : ''} (${byteCount} B)]`;
   }
 }

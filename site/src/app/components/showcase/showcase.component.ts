@@ -121,12 +121,13 @@ curl -X POST http://localhost:9001/subjects/orders-value/versions \\
   readonly architectureNodes: ArchitectureNode[] = [
     {
       id: 'rust-storage',
-      title: 'Zero-Copy Commit Log Storage',
+      title: 'Rust Shard-per-Core Storage Kernel',
       engine: 'Rust Data Plane',
       icon: 'sd_storage',
       color: '#ff5722',
-      summary: 'High-throughput, crash-consistent append-only commit log with microsecond NVMe storage.',
+      summary: 'Lock-free Shard-per-Core partitioned architecture with microsecond NVMe commit log throughput.',
       details: [
+        'Shard-per-Core lock-free partition execution with CPU-pinned worker loops for maximum cache locality.',
         'Single-syscall writes using FileExt::write_all_at without file-pointer mutex lock contention.',
         'Active-segment in-memory length tracking eliminates statx and lseek syscall overhead.',
         'Binary search in memory-mapped .idx files provides O(log N) offset-to-position translation.',

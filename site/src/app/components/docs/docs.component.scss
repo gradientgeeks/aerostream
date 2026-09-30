@@ -7,18 +7,22 @@
 :host {
   display: block;
   width: 100%;
+  max-width: 100%;
   min-height: calc(100vh - 64px);
   background-color: var(--app-bg);
   color: var(--app-text);
+  overflow-x: hidden;
 }
 
 .docs-layout {
   display: flex;
   align-items: flex-start;
   min-height: calc(100vh - 64px);
+  width: 100%;
   max-width: 1600px;
   margin: 0 auto;
   position: relative;
+  overflow-x: hidden;
 }
 
 // -----------------------------------------------------------------------------
@@ -298,6 +302,8 @@
 .docs-content {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   display: flex;
   justify-content: space-between;
   padding: 2rem 2.5rem 4rem;
@@ -309,6 +315,7 @@
   .doc-article {
     flex: 1;
     max-width: 860px;
+    width: 100%;
     margin: 0 auto;
     min-width: 0;
   }
@@ -527,6 +534,7 @@
   border: 1px solid var(--app-border);
   border-radius: 8px;
   margin: 1.25rem 0;
+  max-width: 100%;
   overflow: hidden;
 
   .code-header,
@@ -587,6 +595,8 @@
     margin: 0;
     padding: 1rem 1.25rem;
     overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
     background: transparent;
     scrollbar-width: thin;
     scrollbar-color: var(--app-border) transparent;
@@ -622,6 +632,8 @@ pre.code-block-inner {
   border: 1px solid var(--app-border);
   border-radius: 8px;
   overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.8125rem;
   line-height: 1.6;
@@ -657,7 +669,9 @@ pre.code-block-inner {
 .table-responsive,
 .spec-table-wrapper {
   width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   margin: 1.5rem 0;
   border-radius: 8px;
   border: 1px solid var(--app-border);
