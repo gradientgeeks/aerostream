@@ -4,3 +4,6 @@
 [submodule "ui"]
 	path = ui
 	url = https://github.com/gradientgeeks/aerostream-ui.git
+[submodule "docs"]
+	path = docs
+	url = https://github.com/gradientgeeks/aerostream-docs.git

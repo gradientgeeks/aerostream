@@ -14,7 +14,6 @@ on:
       - '.github/workflows/**'
       - 'site/**'
       - 'docs/**'
-      - 'mkdocs.yml'
 
 env:
   AEROSTREAM_VERSION: v0.1.0
@@ -72,7 +71,7 @@ jobs:
         run: cd site && npm run build
 
       - name: Build MkDocs Material Documentation
-        run: mkdocs build
+        run: mkdocs build -f docs/mkdocs.yml -d ../site/dist/site/browser/docs
 
       - name: Ensure Firebase Hosting Site Exists (On-Demand Provisioning)
         env:
