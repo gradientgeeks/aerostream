@@ -1,0 +1,1 @@
+aerostream ready on 172.31.7.89:9092 (mode=parity, cpus=4 cpuset-cpus=0,1,4,5, mem=8g)

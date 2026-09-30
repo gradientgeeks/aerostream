@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>GradientGeeks.AeroStream.Client</PackageId>
+    <Version>0.1.0-preview</Version>
+    <Authors>Gradient Geeks / AeroMQ Authors</Authors>
+    <Description>Official high-performance .NET C# Client SDK for AeroStream native binary protocol (0xAE 0x01).</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/gradientgeeks/aerostream-sdk</RepositoryUrl>
+    <PackageTags>aeromq;aerostream;messaging;streaming;kafka;realtime;tcp</PackageTags>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+</Project>

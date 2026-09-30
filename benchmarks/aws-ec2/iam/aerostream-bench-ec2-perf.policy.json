@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LaunchBenchmarkInstanceTypesOnlyWhenTagged",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:us-east-1:397510227095:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:InstanceType": [
+            "c6i.xlarge",
+            "c6id.xlarge",
+            "c6i.2xlarge",
+            "c6id.2xlarge"
+          ],
+          "aws:RequestTag/Project": "aerostream-bench"
+        }
+      }
+    }
+  ]
+}

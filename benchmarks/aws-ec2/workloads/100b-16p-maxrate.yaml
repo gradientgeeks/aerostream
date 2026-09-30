@@ -1,0 +1,12 @@
+name: 100b-16p-maxrate
+topics: 1
+partitionsPerTopic: 16
+messageSize: 100
+payloadFile: "payload/payload-100b.data"
+subscriptionsPerTopic: 1
+consumerPerSubscription: 2
+producersPerTopic: 2
+producerRate: 0
+consumerBacklogSizeGB: 0
+testDurationMinutes: __TEST__
+warmupDurationMinutes: __WARM__

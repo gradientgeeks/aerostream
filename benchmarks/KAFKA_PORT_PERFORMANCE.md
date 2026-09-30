@@ -1,6 +1,6 @@
 # Kafka-port performance: what was wrong, what was fixed, what is left
 
-Investigation of why AeroStream's Kafka-protocol port was much slower than Kafka and Redpanda with the same producer tool.
+Investigation of why AeroStream's Kafka-protocol port had low throughput with a standard Kafka producer performance tool, and what was done about it.
 Numbers are from [BENCHMARK.md](BENCHMARK.md); OpenMessaging Benchmark (OMB) datasets are in [omb-results/](omb-results/).
 
 ## 1. Root causes found (with evidence)
@@ -15,7 +15,7 @@ Numbers are from [BENCHMARK.md](BENCHMARK.md); OpenMessaging Benchmark (OMB) dat
 | 6 | **Registration retried on a fixed 3 s sleep** | `grpc/mod.rs`; the broker retried 3 s after "not the cluster leader" | startup 3.4 s |
 
 ## 2. Fixes applied and measured
-Kafka port, messages per second, median of 3 (Kafka tool, same properties as Kafka/Redpanda):
+Kafka port, messages per second, median of 3 (standard Kafka producer performance tool):
 
 | Stage | 100 B | 1 KB |
 | :--- | ---: | ---: |
@@ -23,29 +23,29 @@ Kafka port, messages per second, median of 3 (Kafka tool, same properties as Kaf
 | 1: `TCP_NODELAY` + single write for responses <= 64 KiB | 128,205 | 51,546 |
 | 2-4, 6: hardware CRC32C (`crc32c` crate), tracked lengths + positioned writes (`write_all_at`) + timer-based retention, read frames into spare capacity, registration backoff 200 ms -> 3 s | 174,520 | 63,776 |
 
-For reference (same tool): Kafka 141,243 / 44,366, Redpanda 171,527 / 60,024. Interleaved A/B on the native port (which shares the append path): +47% at 100 B and +36% at 1 KB.
+An interleaved A/B on the native port (which shares the append path) measured +47% at 100 B and +36% at 1 KB.
 Startup improved from 3.4 s to 1.8-3.4 s (bimodal, see 3.3). Sizes from 1 MB up did not change.
 
 An attempt to also stop pinning worker threads under a CPU quota was **reverted**: the small-message results got worse and the run-to-run variance did not improve, so the hypothesis was not supported by the data.
 
 ## 2a. Write stalls under a memory limit (fixed September 27)
 Large-message noise and the collapse from 50 KB upward came from dirty page cache filling the container's memory limit plus a synchronous segment copy on every roll.
-Fixed with paced `sync_file_range` writeback and hard-linked cold archives; see [BENCHMARK.md](BENCHMARK.md) section 0 for evidence and before/after numbers.
+Fixed with paced `sync_file_range` writeback and hard-linked cold archives; see [BENCHMARK.md](BENCHMARK.md) sections 4.2 and 4.4 for the design and measurements.
 Kafka-port medians after the fix: 1 KB 67.7, 10 KB 160.5, 50 KB 215.5, 100 KB 246.0, 250 KB 380.6, 500 KB 380.0, 1 MB 346.3, 10 MB 203.8 MB/s.
 
 ## 3. Still open
 
 ### 3.1 Store the client batch as the unit (largest remaining item)
-Kafka's own documentation says a record batch is the unit of storage and offset assignment (`baseOffset` + `lastOffsetDelta`), that the broker does not recompute the CRC on append (the partition leader epoch
-is excluded from the CRC precisely for that), and that records are not individually re-encoded. AeroStream splits every batch into one entry per record. Following Kafka means: append the batch bytes after patching the base offset,
-assign `next_offset += record_count`, and locate offsets with a **sparse index** (Kafka adds one index entry per `log.index.interval.bytes`, default 4096, each entry 4 bytes relative offset + 4 bytes position, and finds an offset with a floor lookup
-then a short scan). This would remove most of the per-record CPU, allow compressed batches to stay compressed on disk, and is the likely fix for the remaining large-message gap. It touches the log, index, compaction, share groups, the transaction index,
+The Kafka record-batch format makes the batch the unit of storage and offset assignment (`baseOffset` + `lastOffsetDelta`); the CRC does not need recomputing on append (the partition leader epoch is excluded from the CRC for that reason), and records need not be re-encoded individually. AeroStream currently splits every batch into one entry per record so that every record has its own offset. Storing the batch as the unit means: append the batch bytes after patching the base offset,
+assign `next_offset += record_count`, and locate offsets with a **sparse index** (one entry per fixed amount of log data, found with a floor lookup followed by a short scan). This would remove most of the per-record CPU, allow compressed batches to stay compressed on disk, and is the likely fix for large-message throughput. It touches the log, index, compaction, share groups, the transaction index,
 replication and Iceberg, so it needs its own design and test pass.
 
-### 3.2 Large messages (1-50 MB) over the Kafka port
-**Update (September 27, quay image, 3 runs):** the Kafka port now measures 333 MB/s at 1 MB (Kafka 384, Redpanda 306) and 81 MB/s at 50 MB (Kafka 81, Redpanda 95); only 10 MB remains behind (166 vs 240-299). The earlier numbers below are kept for reference.
+**Progress:** the per-record write cost has been cut with batched appends (about 3.5x cheaper per record, see [BENCHMARK.md](BENCHMARK.md) section 4.5), and offset lookups now use a two-level sparse index (section 5). Storing whole batches as single entries is still open.
 
-1 MB 200 vs 321-375 MB/s, 10 MB 144 vs 171-219, 50 MB 29 vs 56-58. Profile at 50 MB: broker mostly idle, time in kernel page-cache copies; Kafka and Redpanda hit a ~55 MB/s wall with the same single-producer Java client, so part of it is client-bound.
+### 3.2 Large messages (1-50 MB) over the Kafka port
+**Update (September 27, published image, 3 runs):** the Kafka port measures 333 MB/s at 1 MB, 166 MB/s at 10 MB and 81 MB/s at 50 MB. The 10 MB size has the most room left. Earlier measurements, for reference: 1 MB 200 MB/s, 10 MB 144 MB/s, 50 MB 29 MB/s.
+
+Profile at 50 MB: the broker is mostly idle and time is spent in kernel page-cache copies; the single-producer Java client is itself a limit at this size.
 Ideas: reuse a per-connection frame buffer (avoid re-faulting fresh pages per request), `posix_fallocate` segments, one write per batch rather than per record (3.1).
 
 ### 3.3 Startup

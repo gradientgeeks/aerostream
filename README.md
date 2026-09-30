@@ -15,23 +15,23 @@ Built with a **Dual-Engine Architecture**—pairing a resilient **Go-based Raft 
 
 ---
 
-## ⚡ Benchmark Executive Summary (OpenMessaging Benchmark)
+## ⚡ Benchmark Summary (OpenMessaging Benchmark)
 
-AeroStream was evaluated using the vendor-neutral **[Linux Foundation OpenMessaging Benchmark (OMB)](https://github.com/openmessaging/benchmark)** framework under strict container resource constraints (`--cpus=2.0 --memory=2g`, 1 topic, 16 partitions, 1,024-byte payloads, saturated max-rate producers and consumers):
+AeroStream was measured with the vendor-neutral **[Linux Foundation OpenMessaging Benchmark (OMB)](https://github.com/openmessaging/benchmark)** framework through its Kafka wire port (`9092`), on an AWS `c6id.2xlarge` (8 vCPU, 16 GiB). One broker, 1 topic, 32 partitions, 1,024-byte messages, 8 producers, 8 consumers, `acks=1`, two rounds per workload:
 
-| Metric | AeroStream (Port 9092) | Apache Kafka 4.3.1 | Redpanda v26.2.3 | AeroStream Advantage |
-| :--- | :---: | :---: | :---: | :---: |
-| **Sustained Publish Rate** | **202,395 msg/s** (197.7 MB/s) | 153,235 msg/s (149.6 MB/s) | 145,649 msg/s (142.2 MB/s) | **+32% to +49% higher throughput** |
-| **Median Latency ($p_{50}$)** | **1.5 ms** | 30.3 ms | 5.3 ms | **Up to 20x lower latency** |
-| **Tail Latency ($p_{99}$)** | **452.0 ms** | 1,099.0 ms | 1,678.5 ms | **2.4x to 3.7x lower tail latency** |
-| **Peak Container RAM** | **513 MiB** | 1,247 MiB | 1,514 MiB | **58% to 66% lower RAM footprint** |
-| **CPU Message Efficiency** | **~151,000 msg/s/core** | ~77,000 msg/s/core | ~72,800 msg/s/core | **~2x work per CPU core** |
-| **Benchmark Errors** | **0** | **0** | **0** | Zero packet drops or errors |
+| Offered load | Publish rate | Publish $p_{50}$ | $p_{99}$ | $p_{99.9}$ | End-to-end $p_{99}$ | Errors |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **100,000 msg/s** (fixed) | 100,082 msg/s (97.7 MB/s) | 0.7 ms | 1.4 ms | 2.3 ms | 2.0 ms | 0 |
+| **200,000 msg/s** (fixed) | 200,175 msg/s (195.5 MB/s) | 0.7 ms | 1.7 ms | 3.0 ms | 2.0 ms | 0 |
+| **Maximum rate** | **271,350 msg/s** (265.0 MB/s) | 105 ms | 1,104 ms | 1,376 ms | 1,119 ms | 0 |
+
+Latency stays under 2 ms at $p_{99}$ up to at least 200,000 msg/s; the saturation point is about 271,000 msg/s, where latency reflects queueing. The two rounds agree within 0.1% on throughput.
 
 > 📊 **Explore Full Benchmark Reports & Reproduction**:
-> * 📈 **[Website Benchmark Analysis](docs/benchmarks.md)** ([Online Portal](https://aerostream.gradientgeeks.com/docs/benchmarks/)): Full mathematical speedup formulations, 10-second interval throughput curves, and CPU thermal analysis.
+> * 📈 **[Website Benchmark Page](docs/benchmarks.md)** ([Online Portal](https://aerostream.gradientgeeks.com/docs/benchmarks/)): per-run results, CPU use, test environment and caveats.
 > * 📑 **[OMB Benchmark Execution Guide](core/docs/OPENMESSAGING_BENCHMARK_GUIDE.md)**: Step-by-step reproduction instructions using the official OpenMessaging Benchmark suite.
-> * 🔬 **[Host & Multi-Payload Benchmark Report](benchmarks/BENCHMARK.md)**: Deep comparative data across 100B, 1KB, 1MB, 10MB, and 50MB message sizes.
+> * 🔬 **[Benchmark Report](benchmarks/BENCHMARK.md)**: EC2 results, resource-capped container runs, design notes and partition-density measurements.
+> * ☁️ **[EC2 Benchmark Scripts](benchmarks/aws-ec2/README.md)**: one command creates the machine, runs OMB, copies the results back and destroys the machine.
 
 ---
 

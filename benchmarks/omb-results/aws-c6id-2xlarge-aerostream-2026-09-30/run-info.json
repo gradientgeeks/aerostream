@@ -1,0 +1,22 @@
+{
+  "run_id": "20260930-124623",
+  "region": "us-east-1",
+  "az": "us-east-1a",
+  "topology": "single",
+  "broker_type": "c6id.2xlarge",
+  "client_type": "c6id.2xlarge",
+  "profile": "aero8",
+  "mode": "single machine, broker pinned to vCPUs 0,1,4,5 (8 GiB), OMB pinned to vCPUs 2,3,6,7",
+  "workloads": "1kb-32p-maxrate-8x8 1kb-32p-100k-8x8 1kb-32p-200k-8x8",
+  "rounds": 2,
+  "warmup_min": 2,
+  "test_min": 5,
+  "systems": "aerostream",
+  "aerostream_git": "99bbdbb + batched-append optimization (built as aerostream:append-entries)",
+  "omb_commit": "5b1fa70951a323da26bd587174b58bb2c65b0b5c",
+  "launched_at": "2026-09-30T12:48:33Z",
+  "collected_at": "2026-09-30T14:07:36Z",
+  "images": {
+    "aerostream": "quay.io/gradientgeeks/aerostream:latest@sha256:1fd1a44a7c8cb6b5c2b1ae036c891866d6996b5c31dfd2127109dd9c761cda70"
+  }
+}

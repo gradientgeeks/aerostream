@@ -10,12 +10,12 @@ Official production-grade client SDKs for **AeroStream**'s ultra-low-latency nat
 
 ## 📦 Supported Languages & Packages
 
-| Language | Directory / Package | Module / Crate | Status |
+| Language | Directory / Package | Module / Package Identifier | Status |
 | :--- | :--- | :--- | :---: |
 | 🦫 **Golang** | [`go/`](go/) | `github.com/gradientgeeks/aerostream-sdk/go` | ✅ **v0.1.0-preview** |
 | 🦀 **Rust** | [`rust/`](rust/) | `aerostream-client` | ✅ **v0.1.0-preview** |
-| ☕ **Java** | `java/` | `io.aerostream:aerostream-client` | 📋 *Specification Ready* |
-| 🔷 **.NET (C#)** | `dotnet/` | `AeroStream.Client` | 📋 *Specification Ready* |
+| ☕ **Java** | [`java/`](java/) | `org.gradientgeeks.aerostream:aerostream-client` | ✅ **v0.1.0-preview** |
+| 🔷 **.NET (C#)** | [`dotnet/`](dotnet/) | `GradientGeeks.AeroStream.Client` | ✅ **v0.1.0-preview** |
 | 🟩 **Node.js** | `nodejs/` | `@gradientgeeks/aerostream-client` | 📋 *Specification Ready* |
 
 ---
@@ -84,6 +84,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+```
+
+### Java
+```java
+import org.gradientgeeks.aerostream.client.AeroClient;
+import org.gradientgeeks.aerostream.client.AeroProducer;
+import java.nio.charset.StandardCharsets;
+
+public class Main {
+    public static void main(String[] args) {
+        try (AeroClient client = AeroClient.connect("127.0.0.1:9091", "secret-token");
+             AeroProducer producer = client.producer()) {
+            long offset = producer.send("telemetry", 0, "sensor-payload".getBytes(StandardCharsets.UTF_8));
+            System.out.printf("Produced record at offset %d%n", offset);
+        }
+    }
+}
+```
+
+### .NET (C#)
+```csharp
+using System.Text;
+using GradientGeeks.AeroStream.Client;
+
+await using var client = await AeroClient.ConnectAsync(new AeroClientOptions {
+    BootstrapServers = ["127.0.0.1:9091"],
+    AuthToken = "secret-token"
+});
+
+var producer = client.CreateProducer();
+long offset = await producer.SendAsync("telemetry", 0, Encoding.UTF_8.GetBytes("sensor-payload"));
+Console.WriteLine($"Produced record at offset {offset}");
 ```
 
 ---

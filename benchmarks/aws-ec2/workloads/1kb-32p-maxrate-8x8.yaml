@@ -1,0 +1,12 @@
+name: 1kb-32p-maxrate-8x8
+topics: 1
+partitionsPerTopic: 32
+messageSize: 1024
+payloadFile: "payload/payload-1Kb.data"
+subscriptionsPerTopic: 1
+consumerPerSubscription: 8
+producersPerTopic: 8
+producerRate: 0
+consumerBacklogSizeGB: 0
+testDurationMinutes: __TEST__
+warmupDurationMinutes: __WARM__

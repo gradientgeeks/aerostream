@@ -2,7 +2,7 @@
 
 This document details the exact, reproducible procedure for compiling, configuring, and executing the **OpenMessaging Benchmark (OMB)** against **AeroStream**'s Kafka wire protocol engine.
 
-The OpenMessaging Benchmark is the Linux Foundation’s vendor-neutral benchmarking framework used across distributed event streaming platforms (including Apache Kafka, Redpanda, and Apache Pulsar) to measure sustained throughput, end-to-end latency, and tail latencies ($p_{50}, p_{95}, p_{99}, p_{99.9}$).
+The OpenMessaging Benchmark is the Linux Foundation’s vendor-neutral benchmarking framework used to measure sustained throughput, end-to-end latency, and tail latencies ($p_{50}, p_{95}, p_{99}, p_{99.9}$).
 
 ---
 
@@ -192,22 +192,19 @@ print(f"  Max:    {d['aggregatedPublishLatencyMax']:.2f} ms")
 
 ---
 
-## 8. Verified Test Results & Benchmark Reference
+## 8. Verified Test Results
 
-On single-broker container testing (`quay.io/gradientgeeks/aerostream:latest`, 2 vCPU, 2 GB RAM):
+Latest measured results (30 September 2026): one AeroStream broker on an AWS `c6id.2xlarge` (8 vCPU, 16 GiB), broker pinned to two physical cores and the load generator to the other two, 1 topic with 32 partitions, 1 KB messages, 8 producers, 8 consumers, `acks=1`, 2-minute warm-up plus 5-minute measurement, two rounds per workload (median shown):
 
-| Metric | Measured Result | Redpanda (Published Reference) | Apache Kafka (Reference) |
-| :--- | :--- | :--- | :--- |
-| **Sustained Publish Rate** | **15,611 msg/s** (15.25 MB/s) | 12,000 – 16,000 msg/s | 10,000 – 14,000 msg/s |
-| **Peak Publish Rate** | **18,763 msg/s** (18.32 MB/s) | — | — |
-| **Publish Error Rate** | **0.00%** (0 errors) | 0.00% | 0.00% |
-| **p50 Latency (Median)** | **1.00 ms** | 1.5 – 3.0 ms | 2.5 – 5.0 ms |
-| **p95 Latency** | **1.84 ms** | 3.0 – 5.0 ms | 8.0 – 15.0 ms |
-| **p99 Tail Latency** | **3.78 ms** | 5.0 – 8.0 ms | 15.0 – 45.0 ms |
-| **p99.9 Tail Latency** | **9.97 ms** | 12.0 – 25.0 ms | 50.0 – 120.0 ms |
-| **Max Latency** | **29.32 ms** | 40.0 – 85.0 ms | 200+ ms |
-| **Container RAM Usage** | **214.6 MiB / 2 GiB (10.5%)** | 1.4 – 2.0 GiB (70-100%) | 1.2 – 1.8 GiB (60-90%) |
-| **OS Threads / PIDs** | **9 worker threads** | 16–32 threads | 120–140 threads |
+| Offered load | Publish rate | Publish $p_{50}$ | $p_{99}$ | $p_{99.9}$ | End-to-end $p_{99}$ | Errors |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| 100,000 msg/s (fixed) | 100,082 msg/s (97.7 MB/s) | 0.7 ms | 1.4 ms | 2.3 ms | 2.0 ms | 0 |
+| 200,000 msg/s (fixed) | 200,175 msg/s (195.5 MB/s) | 0.7 ms | 1.7 ms | 3.0 ms | 2.0 ms | 0 |
+| Maximum rate | 271,350 msg/s (265.0 MB/s) | 105 ms | 1,104 ms | 1,376 ms | 1,119 ms | 0 |
+
+Latency at the maximum rate reflects queueing at the saturation point; use the fixed-rate rows to judge latency. The full per-run results, method and raw data are in [`benchmarks/BENCHMARK.md`](../../benchmarks/BENCHMARK.md) and `benchmarks/omb-results/aws-c6id-2xlarge-aerostream-2026-09-30/`.
+
+To reproduce the EC2 run end to end (create the machine, run OMB, copy results back with `scp`, destroy the machine), use `benchmarks/aws-ec2/run-aerostream-8core.sh`; see [`benchmarks/aws-ec2/README.md`](../../benchmarks/aws-ec2/README.md).
 
 ---
 
@@ -217,4 +214,4 @@ On single-broker container testing (`quay.io/gradientgeeks/aerostream:latest`, 2
    In older driver configs where `enable.auto.commit=false` was paired with per-record `commitAsync()`, thousands of commits were submitted to the broker per second. When offsets are mirrored to a Raft control plane, synchronous consensus snapshots can throttle throughput. Using periodic auto-commit (`auto.commit.interval.ms=5000`) avoids synthetic consensus contention.
 
 2. **Zero-Copy Page Cache Retention**:
-   Because consumers read via Linux `sendfile(2)`, recent batches remain hot in the kernel page cache. As seen in the results, **consume rate tracked publish rate 1:1** with sub-50ms end-to-end median latency and zero disk read amplification.
+   Because consumers read via Linux `sendfile(2)`, recent batches remain hot in the kernel page cache. As seen in the results, **consume rate tracked publish rate 1:1** in every run, with an end-to-end median latency of about 1 ms at 100,000 to 200,000 msg/s.
