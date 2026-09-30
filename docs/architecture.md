@@ -139,14 +139,13 @@ When consumers request message batches via Port 9092 (Kafka Fetch) or Port 9091 
   (Zero Userspace Memory Copying / Zero CPU Cache Eviction!)
 ```
 
-### Contrast with Traditional JVM Brokers
+### Fetch Path
 
-| Feature | Standard JVM Streaming Broker | AeroStream Rust Data Plane |
-|---|---|---|
-| **Fetch Path** | Disk $\to$ Page Cache $\to$ JVM Heap $\to$ Socket Buffer | Disk $\to$ Page Cache $\to$ Network Socket (`sendfile(2)`) |
-| **Userspace Copies** | 2 copies ($2 \times \text{Size}(\text{Batch})$ heap allocations) | **0 copies** ($\text{Zero-Copy DMA}$) |
-| **CPU Cache Thrashing** | High (GC and object allocations) | **Zero** (Data never enters CPU L1/L2 cache) |
-| **Index Search** | JVM object deserialization | Binary search in memory-mapped (`mmap`) `.idx` |
+| Step | AeroStream Rust Data Plane |
+|---|---|
+| **Read path** | Disk $\to$ Page Cache $\to$ Network Socket (`sendfile(2)`) |
+| **Userspace copies of record data** | **0** (kernel zero-copy transfer) |
+| **Index search** | Binary search over the segment's `.idx` index |
 
 ### Memory-Mapped Indexing (`.idx`)
 

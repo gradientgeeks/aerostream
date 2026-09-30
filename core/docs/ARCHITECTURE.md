@@ -9,7 +9,7 @@
 
 ## 1. Executive Architectural Overview & Dual-Engine Rationale
 
-Traditional event streaming architectures often compromise between runtime simplicity, developer velocity, operational stability, and hardware utilization. Systems implemented entirely on the Java Virtual Machine (such as Apache Kafka) require hundreds of megabytes or gigabytes of heap memory, extensive garbage collection tuning, and hundreds of threads even under minimal workload. Systems implemented entirely in lower-level C++ or Rust often struggle with the complexity of maintaining stateful control plane services, dynamic REST endpoints, schema registries, and third-party connector ecosystems.
+Traditional event streaming architectures often compromise between runtime simplicity, developer velocity, operational stability, and hardware utilization. Systems implemented entirely on the Java Virtual Machine require hundreds of megabytes or gigabytes of heap memory, extensive garbage collection tuning, and hundreds of threads even under minimal workload. Systems implemented entirely in lower-level C++ or Rust often struggle with the complexity of maintaining stateful control plane services, dynamic REST endpoints, schema registries, and third-party connector ecosystems.
 
 AeroStream resolves this dichotomy through clean physical and architectural decoupling:
 
@@ -61,13 +61,24 @@ AeroStream resolves this dichotomy through clean physical and architectural deco
 3. **Strict Memory Mapping & Cache Management**: Index lookups leverage fixed-size 16-byte entries (`[offset: 8 bytes BE][position: 8 bytes BE]`), allowing sub-microsecond binary searches over memory-mapped files without heap allocations.
 4. **Hardware Affinity**: Tokio worker threads are pinned to isolated CPU cores using [`libc::sched_setaffinity`](file:///home/uttam/projects/AeroMQ/rust-broker/src/main.rs#L144), eliminating thread context switching and cache bouncing.
 
-### Measured comparison
+### Measured results
 
 Tested under strict container constraints (`--cpus=2.0 --memory=2g`), single node, median of 3 runs, host networking, image `quay.io/gradientgeeks/aerostream:latest`.
-Full methodology, per-run ranges and durability caveats are in [`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md).
+Full methodology, per-run ranges and durability caveats are in [`benchmarks/BENCHMARK.md`](../../benchmarks/BENCHMARK.md).
 
-| Metric | Apache Kafka (v4.3.1 KRaft) | Redpanda (C++20/Seastar) | AeroStream (native port) | AeroStream (Kafka port) |
-| :--- | ---: | ---: | ---: | ---: |
+| Metric | AeroStream (native port) | AeroStream (Kafka port) |
+| :--- | ---: | ---: |
+| **100 B messages (msgs/s)** | **186,727** | **188,324** |
+| **1 KB messages (msgs/s)** | **174,714** | 71,023 |
+| **1 MB messages (MB/s)** | 347 (277-1,233) | 333 |
+| **10 MB messages (MB/s)** | 276 (271-914) | 166 |
+| **50 MB messages (MB/s)** | **280** | 81 |
+| **Broker idle memory** | **1.3-5.4 MiB** | 1.3 MiB |
+| **Peak memory under load** | 320 MiB | 143 MiB |
+| **OS threads** | 3 | 3 |
+| **Time until usable** | 1.8-3.4 s | 1.8-3.4 s |
+
+--- | ---: | ---: | ---: | ---: |
 | **100 B messages (msgs/s)** | 146,199 | 178,253 | **186,727** | **188,324** |
 | **1 KB messages (msgs/s)** | 46,729 | 67,385 | **174,714** | 71,023 |
 | **1 MB messages (MB/s)** | **384** | 306 | 347 (277-1,233) | 333 |

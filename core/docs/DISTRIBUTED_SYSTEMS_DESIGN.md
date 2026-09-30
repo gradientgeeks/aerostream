@@ -7,7 +7,7 @@
 
 Modern distributed event streaming platforms are subjected to extreme throughput, microsecond-level tail latencies, and petabyte-scale storage demands. Traditional single-runtime systems force an engineering compromise:
 
-* **Managed/JVM Runtimes (e.g., Apache Kafka)**: Offer high developer velocity, modular plugin ecosystems, and rich distributed consensus frameworks. However, they incur severe hardware tax: non-deterministic Garbage Collection (GC) pauses, large object header overheads (16–24 bytes per reference), memory fragmentation, unpredictable cache line utilization, and bloated baseline footprints (often consuming 300+ MiB idle memory and over 100 OS threads).
+* **Managed/JVM Runtimes**: Offer high developer velocity, modular plugin ecosystems, and rich distributed consensus frameworks. However, they incur severe hardware tax: non-deterministic Garbage Collection (GC) pauses, large object header overheads (16–24 bytes per reference), memory fragmentation, unpredictable cache line utilization, and bloated baseline footprints.
 * **Homogeneous Systems Languages (e.g., C++ or Rust-only engines)**: Maximize raw I/O throughput and eliminate GC jitter, but introduce steep development complexity when maintaining dynamic user-facing control plane operations (such as dynamic REST endpoints, distributed Schema Registries, complex Raft consensus FSMs, connector runtimes, and user authentication state machines).
 
 AeroStream resolves this dichotomy through a **Dual-Engine Architecture**:
@@ -625,67 +625,51 @@ When transactions abort, their offset ranges are logged to `txn.index` and trans
 
 ## 4. Performance Benchmarks Analysis & Deep-Dive
 
-### 4.1 Benchmark Methodology & Controlled 4-Way Testbed
+Current headline results (AWS EC2 c6id.2xlarge, one broker, 32 partitions, 1 KB messages, 8 producers / 8 consumers) are a maximum rate of 271,350 msg/s, with publish p99 of 1.4 ms at a fixed 100,000 msg/s and 1.7 ms at 200,000 msg/s. The full reports live in [`benchmarks/BENCHMARK.md`](../../benchmarks/BENCHMARK.md). The sections below describe the container-constrained single-partition test bed.
 
-To eliminate benchmarking bias, tests were executed under identical container constraints and verified against official client tools:
+### 4.1 Benchmark Methodology & Testbed
+
+Tests were executed under container constraints and driven with official client tools:
 * **Hardware & Host Environment**: Intel Core i5-1235U (12 physical/logical cores, 12 MiB L3 Cache), Debian 13 / Linux 6.12, Docker 29.8.1.
 * **Cgroup Resource Constraints**: Strict `--cpus=2.0 --memory=2g` resource caps enforced per broker container.
 * **Network Topology**: `--network host` to bypass Docker bridge network proxy overheads.
-* **Replication & Durability**: Single partition, replication factor 1, `acks=1`. Kafka and AeroStream acknowledge when written to OS Page Cache; Redpanda acknowledges after fsync by default.
+* **Replication & Durability**: Single partition, replication factor 1, `acks=1`. AeroStream acknowledges when written to OS Page Cache.
 * **Workloads Tested**: 500 MB total volume per run across 5 message payloads (100 B, 1 KB, 1 MB, 10 MB, 50 MB).
 
-### 4.2 Comprehensive 4-Way Benchmark Matrix
+### 4.2 Throughput Benchmark Matrix
 
-Latest results (image `quay.io/gradientgeeks/aerostream:latest`, median of 3 runs, per-run ranges in [`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md)):
+Latest results (image `quay.io/gradientgeeks/aerostream:latest`, median of 3 runs, per-run ranges in [`benchmarks/BENCHMARK.md`](../../benchmarks/BENCHMARK.md)):
 
-| Workload | Apache Kafka (v4.3.1 KRaft) | Redpanda (v26.2.3) | AeroStream (Kafka Port) | AeroStream (Native Port) | Native vs best of Kafka / Redpanda |
-| :--- | ---: | ---: | ---: | ---: | :--- |
-| **100 B** (msgs/s) | 146,199 | 178,253 | **188,324** | **186,727** | +5% |
-| **1 KB** (msgs/s) | 46,729 | 67,385 | 71,023 | **174,714** | 2.6x |
-| **1 MB** (MB/s) | **384** | 306 | 333 | 347 (277-1,233) | level (within run-to-run range) |
-| **10 MB** (MB/s) | 240 | **299** | 166 | 276 (271-914) | level |
-| **50 MB** (MB/s) | 81 | 95 | 81 | **280** | ~3x |
+| Workload | AeroStream (Kafka Port) | AeroStream (Native Port) |
+| :--- | ---: | ---: |
+| **100 B** (msgs/s) | **188,324** | **186,727** |
+| **1 KB** (msgs/s) | 71,023 | **174,714** |
+| **1 MB** (MB/s) | 333 | 347 (277-1,233) |
+| **10 MB** (MB/s) | 166 | 276 (271-914) |
+| **50 MB** (MB/s) | 81 | **280** |
 
-The native port uses 10 closed-loop producers and AeroStream's own protocol; the other columns use one `kafka-producer-perf-test` producer. Earlier single-session figures
+The native port uses 10 closed-loop producers and AeroStream's own protocol; the Kafka port column uses one `kafka-producer-perf-test` producer. Earlier single-session figures
 (for example 855.6 MB/s at 50 MB and 592.4 MB/s at 10 MB) did not reproduce as medians of 3 runs.
 
 #### Latency Analysis (p50 / Median)
 
-```
-+────────────────────────────────────────────────────────────────────────────────────+
-|                     1 MB PAYLOAD MEDIAN LATENCY COMPARISON                         |
-+────────────────────────────────────────────────────────────────────────────────────+
-| Apache Kafka:   ████████████████████████████████████ 54.0 ms                       |
-| Redpanda:       ██████████████████ 28.0 ms                                         |
-| AeroStream:     ████ 5.8 ms  (up to 9.3x lower latency)                            |
-+────────────────────────────────────────────────────────────────────────────────────+
-```
-
-| Payload Size | Apache Kafka (p50) | Redpanda (p50) | AeroStream Native (p50) | AeroStream Latency Advantage |
-| :--- | ---: | ---: | ---: | :--- |
-| **1 KB** | 328.0 ms | 125.0 ms | **0.06 ms** | **2,083x lower latency** |
-| **1 MB** | 54.0 ms | 28.0 ms | **5.82 ms** | **9.3x lower latency** |
-| **50 MB** | 4,829.0 ms | 4,507.0 ms | **278.5 ms** | **17.3x lower latency** |
+| Payload Size | AeroStream Native (p50) |
+| :--- | ---: |
+| **1 KB** | **0.06 ms** |
+| **1 MB** | **5.82 ms** |
+| **50 MB** | **278.5 ms** |
 
 *Note on Latency Measurement Models*: The Go native benchmark client drives 10 concurrent closed-loop producers (measuring true round-trip server latency). The official `kafka-producer-perf-test.sh` tool pipelines requests asynchronously, meaning its latency metrics incorporate client-side queueing delays under saturation.
 
 ### 4.3 Resource Footprint Deep-Dive: Memory and Threading
 
-```
-+────────────────────────────────────────────────────────────────────────────────────+
-|                           BROKER IDLE MEMORY FOOTPRINT                             |
-+────────────────────────────────────────────────────────────────────────────────────+
-| Apache Kafka:   ██████████████████████████████████████████████ 304.5 MiB           |
-| Redpanda:       ████████████████████████ 140.9 MiB                                 |
-| AeroStream:     ▍ 1.46 MiB  (208x smaller than Kafka, 96x smaller than Redpanda)   |
-+────────────────────────────────────────────────────────────────────────────────────+
-```
-
-| System | Idle Memory | Peak Memory (500 MB Load) | Peak CPU % | Threads / PIDs | Usable Boot Time |
-| :--- | ---: | ---: | ---: | ---: | ---: |
-| **Apache Kafka (KRaft)** | 304.5 MiB | 1,454.1 MiB | 182% | 130 | 3.9 – 4.2 s |
-| **Redpanda** | 140.9 MiB | 1,385.5 MiB | 72% | 10 | **0.75 s** |
-| **AeroStream Broker** | **1.46 MiB** | **132.7 – 354.3 MiB** | 107% – 151% | **3** | 1.8 – 3.4 s |
+| Metric | AeroStream Broker |
+| :--- | ---: |
+| Idle Memory | **1.46 MiB** |
+| Peak Memory (500 MB Load) | **132.7 – 354.3 MiB** |
+| Peak CPU % | 107% – 151% |
+| Threads / PIDs | **3** |
+| Usable Boot Time | 1.8 – 3.4 s |
 
 #### Why AeroStream Achieves 1.46 MiB Idle Memory and 3 Threads
 1. **Zero Runtime Overhead**: No JVM heap pre-allocation, no garbage collector thread pools (ParallelGC, G1GC), and no JIT compilation bookkeeping threads.
@@ -702,10 +686,10 @@ The native port uses 10 closed-loop producers and AeroStream's own protocol; the
 
 ### 4.5 Remaining Kafka-Port Gaps & Optimization Roadmap
 
-While AeroStream’s Kafka port matches or exceeds Kafka at 100 B (174,520 msgs/s) and 1 KB (71,942 msgs/s), large-message workloads over the Kafka port (1 MB at 350 MB/s, 10 MB at 157 MB/s, 50 MB at 50 MB/s) lag behind native protocol performance:
+The AeroStream Kafka port reaches 174,520 msgs/s at 100 B and 71,942 msgs/s at 1 KB, but large-message workloads over the Kafka port (1 MB at 350 MB/s, 10 MB at 157 MB/s, 50 MB at 50 MB/s) lag behind native protocol performance:
 
 1. **Batch Splitting Overhead**: In the current Kafka compatibility layer, incoming Kafka RecordBatches are parsed and split into individual records for internal storage offset indexing, re-encoding records and re-computing CRCs.
-2. **Roadmap: Batch-as-Unit Storage**: Storing the raw client batch as the immutable unit of disk storage (matching Kafka's internal architecture), maintaining a **sparse index** (1 entry per 4 KiB), and patching only the `baseOffset` will eliminate record decoding overhead and allow compressed batches (ZSTD/Snappy/LZ4) to remain compressed on disk.
+2. **Roadmap: Batch-as-Unit Storage**: Storing the raw client batch as the immutable unit of disk storage, maintaining a **sparse index** (1 entry per 4 KiB), and patching only the `baseOffset` will eliminate record decoding overhead and allow compressed batches (ZSTD/Snappy/LZ4) to remain compressed on disk.
 
 ---
 
@@ -716,7 +700,7 @@ The engineering of AeroStream demonstrates that modern distributed streaming sys
 1. **Dual-Engine Synergy**: By decoupling consensus state machines (Go) from the high-throughput I/O commit log (Rust), systems achieve high operational reliability alongside microsecond-latency data distribution.
 2. **Hardware Realities Dictate Software Latency**: Aligning data structures with 64-byte CPU cache lines, eliminating intermediate zeroed allocations (`Vec::with_capacity`), and using hardware acceleration instructions (SSE4.2 CRC32C) deliver order-of-magnitude performance gains over purely algorithmic optimizations.
 3. **Kernel Sympathy**: Bypassing userspace data copies via `sendfile(2)`, eliminating file pointer races via `write_all_at`, and disabling TCP Nagle delays align the application directly with Linux kernel I/O pipelines.
-4. **Extreme Resource Efficiency**: Eliminating managed runtime bloat reduces baseline infrastructure costs, allowing hundreds of AeroStream broker instances to run in the resource footprint of a single legacy JVM broker.
+4. **Extreme Resource Efficiency**: Eliminating managed runtime bloat reduces baseline infrastructure costs.
 
 ---
 

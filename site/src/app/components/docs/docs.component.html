@@ -93,7 +93,7 @@
           Traditional streaming engines compromise either on developer velocity or low-level mechanical sympathy:
         </p>
         <ul>
-          <li><strong>JVM Runtimes (e.g. Apache Kafka)</strong>: Incur heavy memory fragmentation, large object headers (16–24 bytes per reference), non-deterministic Garbage Collection pauses, and high baseline memory and thread overhead.</li>
+          <li><strong>JVM-based runtimes</strong>: Incur heavy memory fragmentation, large object headers (16–24 bytes per reference), non-deterministic Garbage Collection pauses, and high baseline memory and thread overhead.</li>
           <li><strong>Homogeneous C++ or Rust Brokers</strong>: Deliver raw I/O throughput but suffer high development friction when orchestrating dynamic REST APIs, complex Raft consensus FSMs, schema validation engines, and user access control policies.</li>
         </ul>
         <p>
@@ -483,101 +483,323 @@
         </div>
       </section>
 
-      <!-- CHAPTER 9: PERFORMANCE MEASUREMENT -->
+      <!-- CHAPTER 9: PERFORMANCE BENCHMARKS -->
       <section *ngIf="activeSectionId() === 'performance'" class="chapter-body">
         <h2 id="perf-results">Results at a Glance</h2>
         <p>
-          Both brokers were driven through the Kafka wire protocol with the
-          <strong>OpenMessaging Benchmark (OMB)</strong>: one topic, 16 partitions, 1 KB messages, 2 producers and
-          2 consumers, at the maximum sustainable rate for 60 seconds. Each broker ran alone in a container limited to
-          <strong>2 CPUs and 2 GiB of memory</strong>.
+          AeroStream was benchmarked through its Kafka wire protocol port (<code>9092</code>) with the
+          <strong>Linux Foundation OpenMessaging Benchmark (OMB)</strong> framework, on a dedicated AWS EC2 machine.
+          This page reports what AeroStream delivers on that hardware: sustained throughput, latency percentiles, and resource use.
+        </p>
+        <p>
+          Test machine: AWS <code>c6id.2xlarge</code> (8 vCPU, 16 GiB). One AeroStream broker, 1 topic with 32 partitions,
+          1,024-byte messages, 8 producers, 8 consumers, <code>acks=1</code>, 30 ten-second samples per run (5-minute
+          measurement after a 2-minute warm-up), two rounds per workload.
+        </p>
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Offered load</th>
+                <th>Publish rate</th>
+                <th>Publish p50</th>
+                <th>p95</th>
+                <th>p99</th>
+                <th>p99.9</th>
+                <th>End-to-end p99</th>
+                <th>Broker cores busy</th>
+                <th>Errors</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>100,000 msg/s (fixed)</strong></td>
+                <td>100,082 msg/s (97.7 MB/s)</td>
+                <td><strong>0.7 ms</strong></td>
+                <td>1.2 ms</td>
+                <td><strong>1.4 ms</strong></td>
+                <td>2.3 ms</td>
+                <td>2.0 ms</td>
+                <td>14%</td>
+                <td>0</td>
+              </tr>
+              <tr>
+                <td><strong>200,000 msg/s (fixed)</strong></td>
+                <td>200,175 msg/s (195.5 MB/s)</td>
+                <td><strong>0.7 ms</strong></td>
+                <td>1.3 ms</td>
+                <td><strong>1.7 ms</strong></td>
+                <td>3.0 ms</td>
+                <td>2.0 ms</td>
+                <td>22%</td>
+                <td>0</td>
+              </tr>
+              <tr>
+                <td><strong>Maximum rate (unthrottled)</strong></td>
+                <td><strong>271,350 msg/s</strong> (265.0 MB/s)</td>
+                <td>105 ms</td>
+                <td>813 ms</td>
+                <td>1,104 ms</td>
+                <td>1,376 ms</td>
+                <td>1,119 ms</td>
+                <td>55%</td>
+                <td>0</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Values are the median of the two rounds. Consumers kept pace with producers in every run (consume rate equal to
+          publish rate, no growing backlog).
+        </p>
+        <div class="callout callout-note">
+          <div class="callout-icon"><mat-icon>info</mat-icon></div>
+          <div class="callout-body">
+            <strong>How to read this</strong>
+            <ul>
+              <li><strong>Up to at least 200,000 msg/s, latency stays flat.</strong> Publish p99 is under 2 ms and p99.9 under 3.1 ms, with the broker's cores at most 22% busy.</li>
+              <li><strong>The saturation point is about 271,000 msg/s</strong> (265 MB/s of 1 KB messages). Above it, requests queue, which is why latency at the maximum rate is measured in hundreds of milliseconds. Use the fixed-rate rows to judge latency and the maximum-rate row to judge capacity.</li>
+              <li><strong>Throughput is repeatable:</strong> the two maximum-rate rounds measured 271,231 and 271,469 msg/s (within 0.1%).</li>
+            </ul>
+          </div>
+        </div>
+
+        <h2 id="perf-runs">Every Run</h2>
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Workload</th>
+                <th>Round</th>
+                <th>Publish rate</th>
+                <th>p50</th>
+                <th>p95</th>
+                <th>p99</th>
+                <th>p99.9</th>
+                <th>End-to-end p99</th>
+                <th>Peak 10 s rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>100k msg/s</strong></td>
+                <td>1</td>
+                <td>100,084</td>
+                <td>0.69 ms</td>
+                <td>1.23 ms</td>
+                <td>1.43 ms</td>
+                <td>2.33 ms</td>
+                <td>2.00 ms</td>
+                <td>102,527</td>
+              </tr>
+              <tr>
+                <td><strong>100k msg/s</strong></td>
+                <td>2</td>
+                <td>100,080</td>
+                <td>0.68 ms</td>
+                <td>1.21 ms</td>
+                <td>1.40 ms</td>
+                <td>2.29 ms</td>
+                <td>2.00 ms</td>
+                <td>102,395</td>
+              </tr>
+              <tr>
+                <td><strong>200k msg/s</strong></td>
+                <td>1</td>
+                <td>200,157</td>
+                <td>0.75 ms</td>
+                <td>1.34 ms</td>
+                <td>1.76 ms</td>
+                <td>3.09 ms</td>
+                <td>2.00 ms</td>
+                <td>204,694</td>
+              </tr>
+              <tr>
+                <td><strong>200k msg/s</strong></td>
+                <td>2</td>
+                <td>200,194</td>
+                <td>0.73 ms</td>
+                <td>1.31 ms</td>
+                <td>1.72 ms</td>
+                <td>2.98 ms</td>
+                <td>2.00 ms</td>
+                <td>205,832</td>
+              </tr>
+              <tr>
+                <td><strong>Max rate</strong></td>
+                <td>1</td>
+                <td>271,231</td>
+                <td>170.6 ms</td>
+                <td>1,028 ms</td>
+                <td>1,290 ms</td>
+                <td>1,543 ms</td>
+                <td>1,303 ms</td>
+                <td>285,971</td>
+              </tr>
+              <tr>
+                <td><strong>Max rate</strong></td>
+                <td>2</td>
+                <td>271,469</td>
+                <td>39.7 ms</td>
+                <td>597 ms</td>
+                <td>918 ms</td>
+                <td>1,210 ms</td>
+                <td>934 ms</td>
+                <td>287,703</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          At the maximum rate, latency varies from run to run (the queue depth at saturation is not stable) while
+          throughput does not.
+        </p>
+
+        <h2 id="perf-cpu">CPU Use</h2>
+        <p>
+          The machine's four physical cores were split so that the broker and the load generator never share a core: the
+          broker container ran on vCPUs <code>0,1,4,5</code> (two physical cores) and OMB on vCPUs <code>2,3,6,7</code>.
+          CPU was sampled every 5 seconds with <code>sar</code> on each set.
+        </p>
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Workload</th>
+                <th>Broker cores busy (4 vCPUs)</th>
+                <th>Load-generator cores busy (4 vCPUs)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>100,000 msg/s</strong></td>
+                <td>14%</td>
+                <td>48%</td>
+              </tr>
+              <tr>
+                <td><strong>200,000 msg/s</strong></td>
+                <td>22%</td>
+                <td>59%</td>
+              </tr>
+              <tr>
+                <td><strong>Maximum rate</strong></td>
+                <td>55%</td>
+                <td>62%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Neither side was fully busy at the maximum rate, so the 271,000 msg/s limit is not raw CPU on the broker's cores.
+        </p>
+
+        <h2 id="perf-testbed">Test Environment &amp; Methodology</h2>
+        <div class="spec-table-wrapper">
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Specification</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Machine</strong></td>
+                <td>AWS EC2 <code>c6id.2xlarge</code>, us-east-1a, single machine for broker and load generator</td>
+              </tr>
+              <tr>
+                <td><strong>Processor</strong></td>
+                <td>Intel Xeon Platinum 8375C &#64; 2.90 GHz: 8 vCPUs = 4 physical cores x 2 threads (AWS Nitro, KVM)</td>
+              </tr>
+              <tr>
+                <td><strong>Memory / storage</strong></td>
+                <td>16 GiB RAM, 474 GB local NVMe (broker data directory)</td>
+              </tr>
+              <tr>
+                <td><strong>Operating system</strong></td>
+                <td>Amazon Linux 2023, Linux 6.18, Docker</td>
+              </tr>
+              <tr>
+                <td><strong>Broker placement</strong></td>
+                <td>Docker container, host networking, pinned to vCPUs <code>0,1,4,5</code>, 8 GiB memory limit; fresh data directory and dropped page cache before every run</td>
+              </tr>
+              <tr>
+                <td><strong>Load generator</strong></td>
+                <td>OpenMessaging Benchmark (commit <code>5b1fa70</code>), pinned to vCPUs <code>2,3,6,7</code></td>
+              </tr>
+              <tr>
+                <td><strong>Workload</strong></td>
+                <td>1 topic, 32 partitions, 1,024-byte payloads, 8 producers, 8 consumers (one subscription)</td>
+              </tr>
+              <tr>
+                <td><strong>Producer settings</strong></td>
+                <td><code>acks=1</code>, <code>linger.ms=1</code>, <code>batch.size=131072</code>, <code>max.in.flight.requests.per.connection=5</code></td>
+              </tr>
+              <tr>
+                <td><strong>Consumer settings</strong></td>
+                <td><code>auto.offset.reset=earliest</code>, auto-commit every 5 s, <code>max.partition.fetch.bytes=1048576</code></td>
+              </tr>
+              <tr>
+                <td><strong>Broker build</strong></td>
+                <td><code>quay.io/gradientgeeks/aerostream:latest</code> (digest <code>sha256:1fd1a44a7c8c</code>), one broker, no replication</td>
+              </tr>
+              <tr>
+                <td><strong>Run structure</strong></td>
+                <td>2-minute warm-up (excluded) + 5-minute measurement, 2 rounds per workload, 3 workloads</td>
+              </tr>
+              <tr>
+                <td><strong>Date</strong></td>
+                <td>30 September 2026</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="perf-laptop">Earlier Test: Constrained Container on a Laptop</h2>
+        <p>
+          An earlier run measured the broker under a strict resource cap: 2 CPUs and 2 GiB of RAM, on a laptop-class machine,
+          16 partitions, 2 producers and 2 consumers at the maximum rate for 60 seconds.
         </p>
         <div class="spec-table-wrapper">
           <table class="spec-table">
             <thead>
               <tr>
                 <th>Metric</th>
-                <th>AeroStream</th>
-                <th>Apache Kafka 4.3.1</th>
-                <th>Difference</th>
+                <th>AeroStream (Port 9092)</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td><strong>Publish throughput (avg)</strong></td>
                 <td>202,395 msg/s (197.7 MB/s)</td>
-                <td>153,235 msg/s (149.6 MB/s)</td>
-                <td>+32%</td>
               </tr>
               <tr>
-                <td>Publish throughput (peak interval)</td>
+                <td><strong>Publish throughput (peak 10 s interval)</strong></td>
                 <td>216,680 msg/s</td>
-                <td>196,749 msg/s</td>
-                <td>+10%</td>
               </tr>
               <tr>
-                <td>Consume throughput (avg)</td>
+                <td><strong>Consume throughput (avg)</strong></td>
                 <td>202,418 msg/s</td>
-                <td>153,234 msg/s</td>
-                <td>+32%</td>
               </tr>
               <tr>
-                <td>Publish latency p50</td>
-                <td>1.5 ms</td>
-                <td>30.3 ms</td>
-                <td>20x lower</td>
+                <td><strong>Publish latency p50 / p99 / p99.9 / max</strong></td>
+                <td>1.5 ms / 452 ms / 494 ms / 565 ms</td>
               </tr>
               <tr>
-                <td>Publish latency p99</td>
-                <td>452 ms</td>
-                <td>1,099 ms</td>
-                <td>2.4x lower</td>
+                <td><strong>End-to-end latency p50 / p99</strong></td>
+                <td>4.0 ms / 485 ms</td>
               </tr>
               <tr>
-                <td>Publish latency p99.9</td>
-                <td>494 ms</td>
-                <td>1,289 ms</td>
-                <td>2.6x lower</td>
+                <td><strong>Average CPU (steady state)</strong></td>
+                <td>134% of the 200% cap (about 1.34 cores)</td>
               </tr>
               <tr>
-                <td>Publish latency max</td>
-                <td>565 ms</td>
-                <td>1,344 ms</td>
-                <td>2.4x lower</td>
-              </tr>
-              <tr>
-                <td>End-to-end latency p50</td>
-                <td>4.0 ms</td>
-                <td>33.0 ms</td>
-                <td>8x lower</td>
-              </tr>
-              <tr>
-                <td>End-to-end latency p99</td>
-                <td>485 ms</td>
-                <td>1,098 ms</td>
-                <td>2.3x lower</td>
-              </tr>
-              <tr>
-                <td>Errors</td>
-                <td>0</td>
-                <td>0</td>
-                <td>-</td>
-              </tr>
-              <tr>
-                <td>Peak broker memory</td>
-                <td>533 MiB</td>
-                <td>1,247 MiB</td>
-                <td>2.3x less</td>
+                <td><strong>Peak container memory</strong></td>
+                <td>533 MiB (from 41 MiB at start)</td>
               </tr>
             </tbody>
           </table>
         </div>
-
-        <h2 id="perf-throughput">Throughput Over Time</h2>
-        <p>
-          OMB reports the publish rate every 10 seconds. AeroStream held a steady rate for the whole minute, while
-          Apache Kafka's rate faded over the run.
-        </p>
         <div class="spec-table-wrapper">
           <table class="spec-table">
             <thead>
@@ -593,7 +815,7 @@
             </thead>
             <tbody>
               <tr>
-                <td><strong>AeroStream (msg/s)</strong></td>
+                <td><strong>Throughput (msg/s)</strong></td>
                 <td>209,910</td>
                 <td>181,919</td>
                 <td>197,393</td>
@@ -601,174 +823,19 @@
                 <td>207,052</td>
                 <td>201,414</td>
               </tr>
-              <tr>
-                <td><strong>Apache Kafka (msg/s)</strong></td>
-                <td>142,301</td>
-                <td>196,749</td>
-                <td>174,660</td>
-                <td>164,438</td>
-                <td>122,403</td>
-                <td>118,860</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <h2 id="perf-cpu-thermal">CPU, Memory &amp; Temperature</h2>
-        <p>
-          The container CPU limit is 2.0 CPUs, which <code>docker stats</code> reports as 200%. The figures below come from
-          sampling <code>docker stats</code> continuously during each run. "Steady state" excludes the ramp-up and
-          cool-down samples, meaning everything from the first to the last sample above 100%.
-        </p>
-        <div class="spec-table-wrapper">
-          <table class="spec-table">
-            <thead>
-              <tr>
-                <th>Broker container</th>
-                <th>AeroStream</th>
-                <th>Apache Kafka</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>Peak CPU</strong></td>
-                <td>208%</td>
-                <td>218%</td>
-              </tr>
-              <tr>
-                <td><strong>Average CPU, steady state</strong></td>
-                <td>134%</td>
-                <td>199%</td>
-              </tr>
-              <tr>
-                <td>Median CPU, steady state</td>
-                <td>142%</td>
-                <td>207%</td>
-              </tr>
-              <tr>
-                <td>Samples at or above 190% (near the cap)</td>
-                <td>32%</td>
-                <td>84%</td>
-              </tr>
-              <tr>
-                <td>Samples below 100%</td>
-                <td>42%</td>
-                <td>0%</td>
-              </tr>
-              <tr>
-                <td><strong>Throughput per 1% of one CPU</strong></td>
-                <td>about 1,500 msg/s</td>
-                <td>about 770 msg/s</td>
-              </tr>
-              <tr>
-                <td>Memory, start to peak</td>
-                <td>41 MiB to 533 MiB</td>
-                <td>312 MiB to 1,247 MiB</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="callout callout-note">
-          <div class="callout-icon"><mat-icon>info</mat-icon></div>
-          <div class="callout-body">
-            <strong>Apache Kafka was CPU-bound; AeroStream was not.</strong> Kafka sat at or near the 2-CPU cap for
-            84% of the run and never dropped below 100%. AeroStream delivered about 32% more messages while averaging
-            about a third less CPU, so it did roughly twice the work per unit of CPU. Its CPU use also came in
-            repeating bursts: peaks near 200% followed by several intervals at 55-80%. That pattern means the broker
-            was not limited by CPU during the dips. Its cause is still under investigation.
-          </div>
-        </div>
-
-        <p>
-          Temperatures were read from the hardware sensors at the start of each run. They were not logged continuously
-          during the runs, so mid-run thermal throttling cannot be ruled out.
-        </p>
-        <div class="spec-table-wrapper">
-          <table class="spec-table">
-            <thead>
-              <tr>
-                <th>Sensor (at run start)</th>
-                <th>AeroStream run</th>
-                <th>Apache Kafka run</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>CPU package</strong></td>
-                <td>63 °C</td>
-                <td>45 °C</td>
-              </tr>
-              <tr>
-                <td><strong>NVMe SSD</strong></td>
-                <td>31 °C</td>
-                <td>35 °C</td>
-              </tr>
             </tbody>
           </table>
         </div>
         <p>
-          For reference, this SSD reports a temperature warning at about 83 °C (critical at about 85 °C), and the CPU
-          reports a maximum of 100 °C. Neither run started near those limits, and the AeroStream run started with the
-          warmer CPU of the two.
+          This single-iteration run used a laptop (Intel Core i5-1235U, 15 GiB, Debian 13) with desktop background processes
+          active, so run-to-run variation of about 20% is possible. It is included as a data point for small,
+          resource-limited deployments.
         </p>
 
-        <h2 id="perf-testbed">Test Machine &amp; Methodology</h2>
-        <div class="spec-table-wrapper">
-          <table class="spec-table">
-            <thead>
-              <tr>
-                <th>Component</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>Processor</strong></td>
-                <td>Intel Core i5-1235U (12th Gen): 2 performance cores + 8 efficiency cores, 12 threads, 0.4-4.4 GHz</td>
-              </tr>
-              <tr>
-                <td><strong>Memory</strong></td>
-                <td>15 GiB</td>
-              </tr>
-              <tr>
-                <td><strong>Storage</strong></td>
-                <td>Samsung MZVLQ512HBLU NVMe SSD, 512 GB</td>
-              </tr>
-              <tr>
-                <td><strong>Operating system</strong></td>
-                <td>Debian GNU/Linux 13, kernel 6.12.107, Docker 29.8.1</td>
-              </tr>
-              <tr>
-                <td><strong>Machine type</strong></td>
-                <td>Samsung 550XED laptop, bare metal, with a normal desktop session running alongside the benchmark</td>
-              </tr>
-              <tr>
-                <td><strong>Broker limits</strong></td>
-                <td>2.0 CPUs and 2 GiB of memory per broker container</td>
-              </tr>
-              <tr>
-                <td><strong>Workload</strong></td>
-                <td>1 topic, 16 partitions, 1,024-byte messages, 2 producers, 2 consumers, producer rate 0 (OMB's maximum-sustainable-rate discovery mode), 60 seconds</td>
-              </tr>
-              <tr>
-                <td><strong>Client settings</strong></td>
-                <td>OMB Kafka driver with acks=1, linger.ms=1, batch.size=131072, max in-flight requests=5 (identical for both brokers)</td>
-              </tr>
-              <tr>
-                <td><strong>AeroStream build</strong></td>
-                <td>quay.io/gradientgeeks/aerostream:latest, image digest sha256:3cbef320...</td>
-              </tr>
-              <tr>
-                <td><strong>Apache Kafka build</strong></td>
-                <td>apache/kafka:latest (Kafka 4.3.1), single-node KRaft, default JVM settings, image digest sha256:77e3df90...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <h2 id="perf-repro">Reproducing the Benchmark</h2>
         <p>
-          The machine has a hybrid CPU, so the 2-CPU quota can land on either performance or efficiency cores, which adds
-          run-to-run variation. To reproduce a run:
+          On AWS EC2 (the results above), one command creates the machine, runs OMB, copies the results back and destroys the
+          machine. See <code>benchmarks/aws-ec2/README.md</code> for the method and safety mechanisms.
         </p>
         <div class="code-block">
           <div class="code-topbar">
@@ -777,19 +844,17 @@
           <pre><code [textContent]="perfReproSnippet"></code></pre>
         </div>
 
-        <h2 id="perf-caveats">Caveats</h2>
+        <h2 id="perf-caveats">Caveats &amp; Methodology Notes</h2>
         <div class="callout callout-warning">
           <div class="callout-icon"><mat-icon>warning</mat-icon></div>
           <div class="callout-body">
-            <strong>Read these numbers as indicative, not definitive.</strong>
+            <strong>Benchmark considerations</strong>
             <ul>
-              <li>Each broker was measured once. On this machine, run-to-run variation of about 20% is common.</li>
-              <li>The runs were about 30 minutes apart and were not interleaved.</li>
-              <li>This is a shared laptop, not a dedicated benchmark server, and other applications were running.</li>
-              <li>Apache Kafka ran with stock settings and no tuning.</li>
-              <li>Only the Kafka wire protocol at 1 KB messages was measured. Other message sizes and the native protocol are not covered here.</li>
-              <li>Temperatures were sampled at run start only.</li>
-              <li>Redpanda results are not included yet.</li>
+              <li><strong>Single broker, <code>acks=1</code>, no replication.</strong> These are single-node numbers; replication adds work that is not measured here.</li>
+              <li><strong>Latency at the maximum rate is queueing.</strong> Compare latency using the fixed-rate workloads, where the offered load is the same in every run.</li>
+              <li><strong>Page cache.</strong> Data is written through the OS page cache and the broker's data directory is on local NVMe; each run starts from an empty data directory and a dropped page cache.</li>
+              <li><strong>Hardware dependent.</strong> Results describe this machine (4 physical cores) and 1 KB messages on the Kafka wire protocol; other hardware and message sizes will differ. The native AeroStream TCP protocol is not covered here.</li>
+              <li><strong>What limits the maximum rate is open.</strong> At 271,000 msg/s neither the broker's nor the load generator's cores were fully busy; the limit has not been isolated yet.</li>
             </ul>
           </div>
         </div>

@@ -14,16 +14,13 @@ This guide outlines hardware sizing, Kubernetes StatefulSet deployment patterns,
 
 ## Production Hardware Sizing
 
-Thanks to Rust's zero-copy architecture and Go's Green Tea GC, AeroStream achieves exceptional compute density compared to legacy JVM-based platforms:
+Thanks to Rust's zero-copy architecture and Go's Green Tea GC, AeroStream achieves high compute density:
 
 | Scale Tier | Throughput Target | Recommended CPU | Recommended RAM | Storage Configuration |
 |---|---|---|---|---|
 | **Edge / Dev** | Up to 50 MB/s | 1 vCPU | 512 MiB | Standard SATA / Cloud SSD |
 | **Standard Production** | Up to 500 MB/s | 2 – 4 vCPUs | 2 – 4 GiB | Single NVMe SSD + S3 Tiered Storage |
 | **Extreme Scale** | 1,000+ MB/s | 8 vCPUs (Pinned) | 8 – 16 GiB | Dual NVMe RAID-0 + S3 Tiered Storage |
-
-!!! note "RAM Comparison: AeroStream vs Apache Kafka"
-    Apache Kafka typically recommends **32 GiB to 64 GiB of RAM** per broker node to accommodate JVM heap allocations, GC buffers, and OS page cache. AeroStream delivers higher sustained throughput with just **2 GiB to 4 GiB of RAM**, eliminating out-of-memory (OOM) killer risks under bursty load.
 
 ---
 

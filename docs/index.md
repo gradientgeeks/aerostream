@@ -19,17 +19,14 @@
 
 ## Dual-Engine Architectural Rationale
 
-Traditional streaming platforms make painful compromises between developer velocity and low-level mechanical sympathy:
+AeroStream pairs two runtimes, each used where it fits best: **Go** for the control plane, where fast iteration matters (REST APIs, Raft consensus finite state machines (FSM), schema evolution rules, and access control policies), and **Rust** for the storage data plane, where predictable memory use and raw I/O matter (zero-copy `sendfile(2)`, hardware CRC32C, no garbage collector).
 
-1. **JVM Runtimes (e.g. Apache Kafka)**: Incur heavy memory fragmentation, large object headers (16–24 bytes per reference), non-deterministic Garbage Collection pauses, and high baseline memory footprints (often requiring gigabytes just to idle).
-2. **Homogeneous C++ or Rust Brokers**: Deliver raw I/O throughput but suffer high development friction and long compile cycles when orchestrating dynamic REST APIs, complex Raft consensus finite state machines (FSM), schema evolution rules, and access control policies.
-
-AeroStream resolves this dichotomy by cleanly decoupling the control plane from the storage data plane:
+The control plane is cleanly decoupled from the storage data plane:
 
 | Subsystem | Engine Runtime | Core Responsibilities | Performance Highlights |
 |---|---|---|---|
 | **Control Plane** | **Go 1.26** (Alpine) | HashiCorp Raft Quorum, Schema Registry, RBAC ACLs, Stream Transforms, Connectors, Web Console REST API | Green Tea GC (<1ms pause), SIMD Swiss Tables hash maps, native Kubernetes cgroup auto-tuning |
-| **Data Plane** | **Rust 1.98.1** (Edition 2024) | TCP Listeners (Ports 9091/9092), Zero-Copy Segmented Commit Log, Hardware CRC32C, Tiered Storage | Zero-copy `sendfile(2)` I/O, microsecond commit latency, 66% lower RAM footprint, lock-free execution |
+| **Data Plane** | **Rust 1.98.1** (Edition 2024) | TCP Listeners (Ports 9091/9092), Zero-Copy Segmented Commit Log, Hardware CRC32C, Tiered Storage | Zero-copy `sendfile(2)` I/O, 0.7 ms median publish latency at 100,000-200,000 msg/s, lock-free execution |
 
 ```mermaid
 flowchart TD

@@ -305,12 +305,26 @@ On dual-socket or multi-NUMA systems (e.g. AMD EPYC with multiple CCDs or Intel 
 
 ## 6. Measured Benchmark & Performance Characteristics (OpenMessaging Benchmark)
 
-AeroStream was evaluated using the official vendor-neutral **Linux Foundation OpenMessaging Benchmark (OMB)** suite under strict container constraints (`--cpus=2.0 --memory=2g`, 1 topic, 16 partitions, 1 KB payloads, max rate) against Redpanda v26.2.3 and Apache Kafka. Full benchmark reports reside in [`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md), with raw run outputs in [`benchmarks/omb-results/`](../benchmarks/omb-results/).
+AeroStream was evaluated using the official vendor-neutral **Linux Foundation OpenMessaging Benchmark (OMB)** suite under strict container constraints (`--cpus=2.0 --memory=2g`, 1 topic, 16 partitions, 1 KB payloads, max rate) Full benchmark reports reside in [`benchmarks/BENCHMARK.md`](../../benchmarks/BENCHMARK.md), with raw run outputs in [`benchmarks/omb-results/`](../../benchmarks/omb-results/).
 
-### 6.1 OpenMessaging Benchmark (OMB) 16-Partition Sustained Comparison
+### 6.1 OpenMessaging Benchmark (OMB) 16-Partition Sustained Results
 
-| Metric | AeroStream (Shard-per-Core) | Redpanda (v26.2.3) | Shard-per-Core Advantage |
-| :--- | :---: | :---: | :---: |
+| Metric | AeroStream (Shard-per-Core) |
+| :--- | :---: |
+| **Sustained Publish Rate** | **217,100 msg/s** (212.0 MB/s) |
+| **Peak Publish Rate** | **243,460 msg/s** |
+| **Consume Rate (Real-time)** | **217,143 msg/s** |
+| **Publish Latency ($p_{50}$)** | 5.3 ms |
+| **Publish Latency ($p_{99}$)** | 460.2 ms |
+| **Publish Latency (Max)** | 591.4 ms |
+| **End-to-End Latency ($p_{99}$)** | 492.0 ms |
+| **Peak Container Memory** | 513 MiB |
+| **Broker Idle Memory** | 1.3 MiB |
+| **Benchmark Errors** | 0 |
+
+Current results on AWS EC2 c6id.2xlarge (one broker, 32 partitions, 1 KB, 8 producers / 8 consumers) are in [`benchmarks/BENCHMARK.md`](../../benchmarks/BENCHMARK.md): 271,350 msg/s maximum rate, with publish p99 of 1.4 ms at a fixed 100,000 msg/s and 1.7 ms at 200,000 msg/s.
+
+--- | :---: | :---: | :---: |
 | **Sustained Publish Rate** | **217,100 msg/s** (212.0 MB/s) | 145,649 msg/s (142.2 MB/s) | **+49.1% Higher Throughput** |
 | **Peak Publish Rate** | **243,460 msg/s** | 271,033 msg/s | Consistent throughput floor |
 | **Consume Rate (Real-time)** | **217,143 msg/s** | 145,805 msg/s | **Zero Consumer Lag** |

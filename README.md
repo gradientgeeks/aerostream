@@ -235,7 +235,7 @@ AeroStream provides dual documentation surfaces: interactive web documentation b
 * **[Distributed Systems Engineering Treatise](core/docs/DISTRIBUTED_SYSTEMS_DESIGN.md)**: High-efficiency systems programming in Go and Rust, cache line mechanical sympathy, and 2PC WAL.
 * **[Architecture Deep-Dive Specification](core/docs/ARCHITECTURE.md)**: Exhaustive 75 KB engineering specification of the dual-engine platform.
 * **[REST & Wire Protocol API Reference](core/docs/API_REFERENCE.md)**: Exhaustive endpoint schemas, binary Kafka frame structures, and payload specifications.
-* **[Feature Comparison & Evolution Roadmap](core/docs/FEATURE_COMPARISON_AND_ROADMAP.md)**: Head-to-head comparison vs. Apache Kafka and Redpanda, and Next-Gen Enterprise Roadmap (Phases 9–14).
+* **[Features & Evolution Roadmap](core/docs/FEATURES_AND_ROADMAP.md)**: Feature status matrix, implemented capabilities (Phases 1–8) and the Next-Gen Enterprise Roadmap (Phases 9–14).
 * **[OpenMessaging Benchmark Execution Guide](core/docs/OPENMESSAGING_BENCHMARK_GUIDE.md)**: Official OMB benchmark compilation, driver configuration, and test execution runbook.
 * **[Host & Multi-Payload Benchmark Report](benchmarks/BENCHMARK.md)**: Comprehensive host benchmarks across 100B, 1KB, 1MB, 10MB, and 50MB message sizes.
 * **[Kafka Port Optimization Research](core/docs/KAFKA_PORT_OPTIMIZATION_RESEARCH.md)**: Low-level profiling, system call tracing, and optimization notes on Kafka protocol handling.

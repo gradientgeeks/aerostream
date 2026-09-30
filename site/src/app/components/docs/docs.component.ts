@@ -150,16 +150,18 @@ export class DocsComponent {
     {
       id: 'performance',
       category: 'Benchmarks',
-      title: 'Performance Measurement: AeroStream vs Apache Kafka',
+      title: 'Performance Benchmarks',
       badge: 'OMB',
       readTime: '5 min',
-      summary: 'OpenMessaging Benchmark results on the Kafka wire protocol, with CPU, memory, and temperature details of the test machine.',
+      summary: 'AeroStream OpenMessaging Benchmark results on AWS EC2: throughput, latency percentiles, CPU use, and test environment.',
       anchors: [
         { id: 'perf-results', label: 'Results at a Glance' },
-        { id: 'perf-throughput', label: 'Throughput Over Time' },
-        { id: 'perf-cpu-thermal', label: 'CPU, Memory & Temperature' },
-        { id: 'perf-testbed', label: 'Test Machine & Methodology' },
-        { id: 'perf-caveats', label: 'Caveats' },
+        { id: 'perf-runs', label: 'Every Run' },
+        { id: 'perf-cpu', label: 'CPU Use' },
+        { id: 'perf-testbed', label: 'Test Environment & Methodology' },
+        { id: 'perf-laptop', label: 'Earlier Laptop Test' },
+        { id: 'perf-repro', label: 'Reproducing the Benchmark' },
+        { id: 'perf-caveats', label: 'Caveats & Methodology Notes' },
       ]
     }
   ];
@@ -229,10 +231,14 @@ spring.kafka.bootstrap-servers=aerostream.internal:9092`;
   readonly drainSnippet = `# Drains broker 10, electing alternative replicas as partition leaders gracefully
 curl -X POST http://localhost:9001/api/brokers/10/drain`;
 
-  readonly perfReproSnippet = `# Each command starts one broker container (--cpus=2.0 --memory=2g), runs the OMB workload, samples
-# docker stats throughout, and removes the broker afterwards (benchmarks/openmessaging-benchmark/omb-run.sh)
-./omb-run.sh quay.io/gradientgeeks/aerostream:latest workloads/aerostream-16p-1kb.yaml aerostream-kafkawire
-./omb-run.sh kafka workloads/aerostream-16p-1kb.yaml apache-kafka-kafkawire`;
+  readonly perfReproSnippet = `# AWS EC2 (the results above): creates the machine, runs OMB, copies results back, destroys the machine
+cd benchmarks/aws-ec2
+./run-aerostream-8core.sh          # prints the plan, time and cost estimate; creates nothing
+./run-aerostream-8core.sh --yes    # runs it (about 80 minutes)
+
+# Local container run
+cd benchmarks/openmessaging-benchmark
+./omb-run.sh quay.io/gradientgeeks/aerostream:latest workloads/aerostream-16p-1kb.yaml aerostream-kafkawire`;
 
   selectSection(id: string): void {
     this.activeSectionId.set(id);

@@ -8,63 +8,61 @@
 ---
 
 
-> **Note (September 27, 2026):** the figures in this document come from one earlier benchmark session. In the latest 3-run session on `quay.io/gradientgeeks/aerostream:latest`
-> the Kafka port reaches 333 MB/s at 1 MB and 81 MB/s at 50 MB (Kafka 384 / 81, Redpanda 306 / 95) and the native port 280 MB/s at 50 MB. See
-> [`benchmarks/BENCHMARK.md`](../benchmarks/BENCHMARK.md) for current numbers and per-run ranges.
+> **Note (September 2026):** the figures in this document come from one earlier benchmark session. For AeroStream's current benchmark results see
+> [`benchmarks/BENCHMARK.md`](../../benchmarks/BENCHMARK.md). The latest run (AWS EC2 c6id.2xlarge, one broker, 32 partitions, 1 KB messages, 8 producers / 8 consumers)
+> reaches a maximum rate of 271,350 msg/s, with publish p99 of 1.4 ms at a fixed 100,000 msg/s and 1.7 ms at 200,000 msg/s.
 
 ## Executive Summary & Benchmark Analysis
 
-AeroStream represents a next-generation distributed append-only streaming platform built in Rust and Go. Recent empirical benchmarks comparing AeroStream against **Apache Kafka 4.3.1 (KRaft)** and **Redpanda v26.2.3** under identical containerized hardware constraints (`--cpus=2.0 --memory=2g`, Linux kernel 6.12, host networking) demonstrate exceptional architectural efficiency in AeroStream's native protocol and memory profile.
+AeroStream represents a next-generation distributed append-only streaming platform built in Rust and Go. Empirical benchmarks under containerized hardware constraints (`--cpus=2.0 --memory=2g`, Linux kernel 6.12, host networking) show AeroStream's native protocol and memory profile.
 
-However, cross-protocol benchmarks reveal a striking performance dichotomy between AeroStream's **Native Protocol** and its **Kafka-Compatible Wire Protocol Port**, as well as an unexpected plateau shared by all three systems when driven by Kafka's standard Java load generation harness.
+Benchmarks also reveal a performance dichotomy between AeroStream's **Native Protocol** and its **Kafka-Compatible Wire Protocol Port**, including a plateau on the Kafka port at very large messages when driven by Kafka's standard Java load generation harness.
 
 ### The Empirical Benchmark Numbers
 
 The following table summarizes the median results across three independent runs moving 500 MB bursts for large messages and 50,000 to 100,000 iterations for small messages (documented in [`benchmarks/BENCHMARK.md`](file:///home/uttam/projects/AeroMQ/benchmarks/BENCHMARK.md) and [`benchmarks/KAFKA_PORT_PERFORMANCE.md`](file:///home/uttam/projects/AeroMQ/benchmarks/KAFKA_PORT_PERFORMANCE.md)):
 
-| Workload Payload Size | Apache Kafka 4.3.1 | Redpanda v26.2.3 | AeroStream Kafka Port | AeroStream Native Protocol | Native vs Kafka Gain |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **100 B** (msgs/s) | 141,243 msg/s (13.5 MB/s) | 171,527 msg/s (16.4 MB/s) | **174,520 msg/s** (16.7 MB/s) | 121,852 msg/s (11.6 MB/s) | 1.24x (Kafka Port win) |
-| **1 KB** (msgs/s) | 44,366 msg/s (43.3 MB/s) | 60,024 msg/s (58.6 MB/s) | **71,942 msg/s** (70.3 MB/s) | **137,253 msg/s** (134.0 MB/s) | **3.09x** |
-| **1 MB** (Throughput) | 191.7 MB/s (p50: 75.0 ms) | 209.7 MB/s (p50: 44.0 ms) | **330.7 MB/s** (p50: **5.0 ms**) | **1,028.9 MB/s** (p50: **6.57 ms**) | **5.37x** |
-| **10 MB** (Throughput) | 173.3 MB/s (p50: 527.0 ms) | 209.7 MB/s (p50: 446.0 ms) | 189.1 MB/s (p50: 596.0 ms) | **339.9 MB/s** (p50: **120.3 ms**) | **1.96x** |
-| **50 MB** (Throughput) | 52.5 MB/s (p50: 4,829 ms) | 52.6 MB/s (p50: 4,507 ms) | 49.4 MB/s (p50: 5,233 ms) | **527.5 MB/s** (p50: **278.6 ms**) | **10.05x** |
+| Workload Payload Size | AeroStream Kafka Port | AeroStream Native Protocol |
+| :--- | :--- | :--- |
+| **100 B** (msgs/s) | **174,520 msg/s** (16.7 MB/s) | 121,852 msg/s (11.6 MB/s) |
+| **1 KB** (msgs/s) | **71,942 msg/s** (70.3 MB/s) | **137,253 msg/s** (134.0 MB/s) |
+| **1 MB** (Throughput) | **330.7 MB/s** (p50: **5.0 ms**) | **1,028.9 MB/s** (p50: **6.57 ms**) |
+| **10 MB** (Throughput) | 189.1 MB/s (p50: 596.0 ms) | **339.9 MB/s** (p50: **120.3 ms**) |
+| **50 MB** (Throughput) | 49.4 MB/s (p50: 5,233 ms) | **527.5 MB/s** (p50: **278.6 ms**) |
 
 #### Runtime Resource Footprint Under Load
 
-| System Metric | Apache Kafka 4.3.1 (JVM) | Redpanda v26.2.3 (C++ Seastar) | AeroStream Kafka Port (Rust/Tokio) | Efficiency Advantage |
-| :--- | :--- | :--- | :--- | :--- |
-| **Idle Memory Footprint** | 303.3 MiB - 321.2 MiB | 140.9 MiB - 283.1 MiB | **1.43 MiB - 1.59 MiB** | **200x lower** than Kafka |
-| **Peak Memory (500MB write)**| 1,014.0 MiB - 1,455.1 MiB | 1,382.4 MiB - 1,434.0 MiB | **132.7 MiB - 137.7 MiB** | **10.4x lower** than Kafka |
-| **Active OS Threads (PIDs)** | **130 threads** | 5 - 10 threads | **3 threads** | **43x fewer** threads |
-| **Peak CPU Utilization** | 177% - 201% (CFS throttled) | 53% - 72% | **107% - 151%** | Predictable scheduling |
+| System Metric | AeroStream Kafka Port (Rust/Tokio) |
+| :--- | :--- |
+| **Idle Memory Footprint** | **1.43 MiB - 1.59 MiB** |
+| **Peak Memory (500MB write)**| **132.7 MiB - 137.7 MiB** |
+| **Active OS Threads (PIDs)** | **3 threads** |
+| **Peak CPU Utilization** | **107% - 151%** |
 
 ```
 50 MB Payload Throughput (MB/s)
 ════════════════════════════════════════════════════════════════════════════
 AeroStream Native  [██████████████████████████████████████████████████] 527.5 MB/s
-Redpanda           [█████                                             ]  52.6 MB/s
-Apache Kafka       [█████                                             ]  52.5 MB/s
 AeroStream Kafka   [████                                              ]  49.4 MB/s
 ════════════════════════════════════════════════════════════════════════════
 ```
 
 ### The Central Paradox
 
-1. **At 1 MB payloads**: AeroStream's Kafka port delivers **330.7 MB/s** at **5.0 ms median latency**, significantly beating Apache Kafka (191.7 MB/s, 75 ms) and Redpanda (209.7 MB/s, 44 ms). Meanwhile, AeroStream Native achieves a staggering **1,028.9 MB/s** (over 1.0 GB/s over loopback TCP).
-2. **At 50 MB payloads**: Apache Kafka, Redpanda, and AeroStream's Kafka port **all collapse to an identical plateau of ~50–55 MB/s** (52.5, 52.6, and 49.4 MB/s respectively), whereas AeroStream Native sustains **527.5 MB/s** (a **10x to 15x advantage**).
-3. **Hardware utilization**: AeroStream achieves this with **1.59 MiB idle memory**, **137.7 MiB peak memory**, and only **3 OS threads**, proving that the bottleneck is not raw hardware saturation or cgroup throttling.
+1. **At 1 MB payloads**: AeroStream's Kafka port delivers **330.7 MB/s** at **5.0 ms median latency**, while AeroStream Native achieves **1,028.9 MB/s** (over 1.0 GB/s over loopback TCP).
+2. **At 50 MB payloads**: AeroStream's Kafka port plateaus at **49.4 MB/s**, whereas AeroStream Native sustains **527.5 MB/s**.
+3. **Hardware utilization**: AeroStream runs with **1.59 MiB idle memory**, **137.7 MiB peak memory**, and only **3 OS threads**, indicating that the bottleneck is not raw hardware saturation or cgroup throttling.
 
 This document presents a deep-dive investigation into:
-- The fundamental causes of the **50 MB message plateau** in Kafka-compatible clients.
+- The causes of the **50 MB message plateau** on the Kafka-compatible port.
 - The **client-side architectural bottlenecks** in Java's official `kafka-producer-perf-test.sh`.
 - The **broker-side storage and network optimizations** required in AeroStream to maximize Kafka-port throughput and close the gap with the native protocol.
 
 ---
 
-## Root Cause Analysis: The 50 MB Message Plateau (~50–55 MB/s)
+## Root Cause Analysis: The 50 MB Message Plateau (~49 MB/s)
 
-The convergence of three completely independent broker implementations—Apache Kafka (Scala/Java JVM), Redpanda (C++20 Seastar with `io_uring` and Direct I/O), and AeroStream Kafka Port (Rust Tokio asynchronous page-cache engine)—on the exact same ~50–55 MB/s plateau is the defining clue.
+The Kafka port's ~49 MB/s ceiling at 50 MB messages, against 527.5 MB/s for the native protocol, points to the load generator's single-connection architecture rather than the broker's storage engine.
 
 ```mermaid
 flowchart TD
@@ -77,9 +75,7 @@ flowchart TD
         KP --> RA --> SND --> SEL --> SKT
     end
 
-    SKT -->|"Single TCP Connection (50 MB/s Plateau)"| B1["Apache Kafka (JVM Engine) ~52.5 MB/s"]
-    SKT -->|"Single TCP Connection (50 MB/s Plateau)"| B2["Redpanda (C++ Seastar Engine) ~52.6 MB/s"]
-    SKT -->|"Single TCP Connection (50 MB/s Plateau)"| B3["AeroStream Kafka Port (Rust Engine) ~49.4 MB/s"]
+    SKT -->|"Single TCP Connection (~49 MB/s Plateau)"| B3["AeroStream Kafka Port (Rust Engine) ~49.4 MB/s"]
 
     subgraph NativeHarness["AeroStream Native Client (Go)"]
         W1["Worker 1 (Conn 1)"]
@@ -94,7 +90,7 @@ flowchart TD
 
 ### The Conclusive Architectural Deduction
 
-The ~50–55 MB/s ceiling is **not imposed by broker storage engines or disk I/O limitations**. It is an artifact of the **official Java Kafka client architecture interacting with single-connection TCP flow control** under multi-megabyte frame sizes:
+The ~49 MB/s ceiling appears to be **imposed by the load generator rather than by broker storage or disk I/O limitations**. It is consistent with the **official Java Kafka client architecture interacting with single-connection TCP flow control** under multi-megabyte frame sizes:
 
 1. **Client Concurrency Mismatch**:
    - `kafka-producer-perf-test.sh` instantiates a **single `KafkaProducer` instance** containing **one single I/O thread (`Sender`)** transmitting over a **single TCP socket** to partition 0.
@@ -103,13 +99,13 @@ The ~50–55 MB/s ceiling is **not imposed by broker storage engines or disk I/O
    - For a 50 MB payload, `max.in.flight.requests.per.connection` is effectively capped to 1 or 2 because `max.request.size` is 64 MiB and `buffer.memory` is 256 MiB.
    - The Java `Sender` thread cannot pipeline multiple 50 MB frames. It sends a frame, waits for the TCP socket send buffer to drain, awaits the Kafka `ProduceResponse`, and only then serializes the next batch.
 3. **Transport Layer Bandwidth-Delay Product (BDP) & Socket Buffer Choke**:
-   - A single TCP socket moving 50 MB segments requires continuous window replenishment. With standard Linux loopback socket buffer defaults and TCP sliding-window overhead, single-socket throughput for large sequential blocks without concurrent multi-channel streaming tops out around 50–60 MB/s when serialized through JVM user-space buffers.
+   - A single TCP socket moving 50 MB segments requires continuous window replenishment. With standard Linux loopback socket buffer defaults and TCP sliding-window overhead, single-socket throughput for large sequential blocks without concurrent multi-channel streaming tops out at a few tens of MB/s when serialized through JVM user-space buffers.
 
 ---
 
 ## Java Client-Side Bottleneck Analysis (`kafka-producer-perf-test.sh`)
 
-To understand why the Java client hits this wall, we inspect the internals of Apache Kafka's client library (`org.apache.kafka.clients:kafka-clients`):
+To understand why the Java client hits this wall, we inspect the internals of the Kafka Java client library (`org.apache.kafka.clients:kafka-clients`):
 
 ### 1. Single-Socket Synchronous Chunking & Head-of-Line Blocking
 
@@ -203,14 +199,14 @@ Even on loopback (`localhost`), where RTT is $<0.1\text{ ms}$, the Linux socket 
 
 ## Broker-Side Profiling & Bottlenecks in AeroStream's Kafka Port
 
-While the Java client is fundamentally bottlenecked at ~50–55 MB/s on a single socket, profiling AeroStream's Kafka port reveals critical broker-side inefficiencies that prevent it from matching Redpanda (which achieves 58.4 MB/s vs AeroStream's 50.8 MB/s) and holding back smaller/medium workloads (1 MB and 10 MB).
+While the Java client is bottlenecked on a single socket at 50 MB, profiling AeroStream's Kafka port reveals broker-side inefficiencies that hold back smaller/medium workloads (1 MB and 10 MB).
 
 ### 1. The Record-Splitting Anti-Pattern (`txn::batch::to_entries`)
 
-In Apache Kafka, a `RecordBatch` is the fundamental atomic unit of both network transport and disk storage:
+In the Kafka protocol, a `RecordBatch` is the fundamental atomic unit of both network transport and disk storage:
 - A batch contains 1 to $N$ records.
-- Kafka **never decodes records from the batch during produce**.
-- Kafka assigns offsets by taking the current log end offset as `baseOffset`, writing the entire intact batch to the segment, and advancing the log end offset by `lastOffsetDelta + 1`.
+- A broker does not need to decode records from the batch during produce.
+- Offsets can be assigned by taking the current log end offset as `baseOffset`, writing the entire intact batch to the segment, and advancing the log end offset by `lastOffsetDelta + 1`.
 
 #### What AeroStream Currently Does:
 
@@ -291,7 +287,7 @@ self.next_offset += 1;
 ```
 - Every single record appended writes a 16-byte tuple `(offset: u64, physical_pos: u64)` to the `.idx` file via `write_all_at`.
 - For 10,000,000 messages, the index file is **160 MB**!
-- In contrast, Kafka uses a **sparse index** (`log.index.interval.bytes=4096`), writing an index entry only every 4 KiB of log data, using 8-byte entries (4-byte relative offset + 4-byte position). Kafka's index for 10M messages of 1 KB is only **~20 MB** (8x smaller) and requires 4,000x fewer index write operations.
+- A **sparse index** (`log.index.interval.bytes=4096`) would write an index entry only every 4 KiB of log data, using 8-byte entries (4-byte relative offset + 4-byte position).
 
 ### 3. Dynamic Frame Buffer Allocation (`Vec::with_capacity`)
 
@@ -310,7 +306,7 @@ let got = (&mut stream).take(frame_len as u64).read_to_end(&mut frame_buf).await
 
 ## Blueprint 1: In-Place KIP-98 Batch Preservation
 
-The most impactful optimization for the Kafka port is **adopting Kafka's native in-place batch append architecture**.
+The most impactful optimization for the Kafka port is **adopting an in-place batch append architecture**.
 
 ### Deep Dive: Anatomy of a KIP-98 RecordBatch (Magic v2)
 
@@ -435,9 +431,9 @@ pub fn append_raw_batch_inplace(
 
 ## Blueprint 2: Sparse Offset Indexing (`log.index.interval.bytes = 4096`)
 
-### The Architecture of Kafka's `.index` File
+### The Architecture of a Sparse `.index` File
 
-Apache Kafka pairs every segment log (`.log`) with a sparse offset index (`.index`). Rather than recording every offset, Kafka writes an entry only when the segment has advanced by at least `index.interval.bytes` (default: 4,096 bytes).
+A sparse design pairs every segment log (`.log`) with an offset index (`.index`). Rather than recording every offset, an entry is written only when the segment has advanced by at least `index.interval.bytes` (default: 4,096 bytes).
 
 ```
 Segment .log File:
@@ -669,20 +665,20 @@ Socket FD ──────(splice)──────> Pipe Buffer ────
 
 ---
 
-## Architectural Comparison & Performance Projections
+## Current vs Optimized Architecture & Performance Projections
 
-### Comprehensive Architectural Matrix
+### Architecture Matrix
 
-| Architectural Feature | Apache Kafka 4.3.1 (KRaft) | Redpanda v26.2.3 | AeroStream Kafka Port (Current) | AeroStream Kafka Port (Optimized) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Language & Concurrency** | Scala/Java, Thread-per-request | C++20, Thread-per-core (Seastar) | Rust, Async Tokio Runtime | Rust, Async Tokio Runtime |
-| **Batch Append Unit** | Atomic `RecordBatch` (in-place) | Atomic `RecordBatch` (in-place) | **Split into single records** | **In-Place Atomic RecordBatch** |
-| **CRC32C on Produce** | **Excluded from BaseOffset** | **Excluded from BaseOffset** | Recomputed per record | **0 CRC calculations on append** |
-| **Index Density** | Sparse (every 4096 bytes) | Sparse (every 4096 bytes) | **Dense (16B per record)** | **Sparse (every 4096 bytes)** |
-| **Fetch Zero-Copy** | `FileChannel.transferTo()` | Direct I/O block transfer | `sendfile(2)` | `sendfile(2)` |
-| **Compressed Batch Storage**| Preserved compressed on disk | Preserved compressed on disk | **Decompressed to disk** | **Preserved compressed on disk** |
-| **Frame Memory Allocation** | Heap BufferPool (unpooled > 16KB)| Fixed Seastar memory slab | `Vec::with_capacity(len)` | **Connection Slab Buffer Pool** |
-| **Idle Memory Footprint** | ~300 MiB | ~140 MiB | **1.5 MiB** | **1.5 MiB** |
+| Architectural Feature | AeroStream Kafka Port (Current) | AeroStream Kafka Port (Optimized) |
+| :--- | :--- | :--- |
+| **Language & Concurrency** | Rust, Async Tokio Runtime | Rust, Async Tokio Runtime |
+| **Batch Append Unit** | **Split into single records** | **In-Place Atomic RecordBatch** |
+| **CRC32C on Produce** | Recomputed per record | **0 CRC calculations on append** |
+| **Index Density** | **Dense (16B per record)** | **Sparse (every 4096 bytes)** |
+| **Fetch Zero-Copy** | `sendfile(2)` | `sendfile(2)` |
+| **Compressed Batch Storage**| **Decompressed to disk** | **Preserved compressed on disk** |
+| **Frame Memory Allocation** | `Vec::with_capacity(len)` | **Connection Slab Buffer Pool** |
+| **Idle Memory Footprint** | **1.5 MiB** | **1.5 MiB** |
 
 ### Projected Performance Impact
 

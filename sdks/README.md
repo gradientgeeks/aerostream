@@ -16,7 +16,7 @@ Official production-grade client SDKs for **AeroStream**'s ultra-low-latency nat
 | 🦀 **Rust** | [`rust/`](rust/) | `aerostream-client` | ✅ **v0.1.0-preview** |
 | ☕ **Java** | [`java/`](java/) | `org.gradientgeeks.aerostream:aerostream-client` | ✅ **v0.1.0-preview** |
 | 🔷 **.NET (C#)** | [`dotnet/`](dotnet/) | `GradientGeeks.AeroStream.Client` | ✅ **v0.1.0-preview** |
-| 🟩 **Node.js** | `nodejs/` | `@gradientgeeks/aerostream-client` | 📋 *Specification Ready* |
+| 🟩 **Node.js** | [`nodejs/`](nodejs/) | `@gradientgeeks/aerostream-client` | ✅ **v0.1.0-preview** |
 
 ---
 
@@ -116,6 +116,19 @@ await using var client = await AeroClient.ConnectAsync(new AeroClientOptions {
 var producer = client.CreateProducer();
 long offset = await producer.SendAsync("telemetry", 0, Encoding.UTF_8.GetBytes("sensor-payload"));
 Console.WriteLine($"Produced record at offset {offset}");
+```
+
+### Node.js / TypeScript
+```typescript
+import { AeroClient } from '@gradientgeeks/aerostream-client';
+
+const client = await AeroClient.connect('127.0.0.1:9091', 'secret-token');
+const producer = client.producer();
+
+const offset = await producer.send('telemetry', 0, 'sensor-payload');
+console.log(`Produced record at offset ${offset}`);
+
+await client.close();
 ```
 
 ---
