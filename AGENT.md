@@ -55,6 +55,7 @@ The AeroStream ecosystem is organized into modular, independently versioned stan
 | `sdks/` | [`gradientgeeks/aerostream-sdk`](https://github.com/gradientgeeks/aerostream-sdk) | Official Native Protocol client SDKs (Go, Rust, Java, .NET, Node.js) | Public |
 | `ui/` | [`gradientgeeks/aerostream-ui`](https://github.com/gradientgeeks/aerostream-ui) | Standalone Angular 21 Web Management Console | Public |
 | `docs/` | [`gradientgeeks/aerostream-docs`](https://github.com/gradientgeeks/aerostream-docs) | MkDocs Material documentation portal source & diagrams | Public |
+| `examples/` | [`gradientgeeks/aerostream-examples`](https://github.com/gradientgeeks/aerostream-examples) | Production-ready example applications (Java, Go, Rust, .NET, FastAPI) | Public |
 
 ### 2.1 Submodule Usage & Workflows
 

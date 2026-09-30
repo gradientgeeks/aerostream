@@ -7,3 +7,6 @@
 [submodule "docs"]
 	path = docs
 	url = https://github.com/gradientgeeks/aerostream-docs.git
+[submodule "examples"]
+	path = examples
+	url = https://github.com/gradientgeeks/aerostream-examples.git
