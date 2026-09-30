@@ -100,8 +100,6 @@ docker run -d --name aerostream \
 
 ## 🏗 Architecture Overview
 
-![AeroStream Dual-Engine Architecture](docs/images/dual_engine_architecture.png)
-
 AeroStream achieves its performance through strict architectural decoupling and hardware-aligned execution:
 
 * **Go Control Plane (Ports 9001 & 8001)**: Drives distributed consensus via HashiCorp Raft, serves the dynamic Schema Registry, manages enterprise RBAC / ACL policies, Stream Processing Engine, and connector runtimes. Brokers maintain a 2-second heartbeat loop with dynamic configuration piggybacking and cluster topology synchronization.
