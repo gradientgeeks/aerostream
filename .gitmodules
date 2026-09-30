@@ -1,3 +1,6 @@
 [submodule "sdks"]
 	path = sdks
 	url = https://github.com/gradientgeeks/aerostream-sdk.git
+[submodule "ui"]
+	path = ui
+	url = https://github.com/gradientgeeks/aerostream-ui.git
