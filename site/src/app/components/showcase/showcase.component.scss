@@ -896,10 +896,19 @@
 }
 
 .proto-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--app-text);
   line-height: 1.2;
+}
+
+.proto-title-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .proto-sub {

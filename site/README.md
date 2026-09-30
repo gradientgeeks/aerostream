@@ -4,13 +4,13 @@ Welcome to the official web showcase and documentation portal for **AeroStream**
 
 ---
 
-## 🎯 Overview
+## Overview
 
 This is the public-facing showcase and technical documentation portal for **AeroStream**, designed for deployment to CDN / static hosting (e.g. Cloudflare Pages, Firebase Hosting, AWS S3/CloudFront) at [`aerostream.gradientgeeks.com`](https://aerostream.gradientgeeks.com). It showcases architecture deep dives, Kafka wire compatibility, quickstart guides, and interactive documentation.
 
 ---
 
-## 🚀 Key Features of the Showcase App
+## Key Features of the Showcase App
 
 1. **Dual-Engine Showcase Hero**:
    - Interactive system architecture highlights and instant quickstart commands.
@@ -34,7 +34,7 @@ This is the public-facing showcase and technical documentation portal for **Aero
 
 ---
 
-## 🛠️ Local Development
+## Local Development
 
 ### Prerequisites
 - Node.js `v20.x` or `v24.x` (verified with `v24.17.0`)
@@ -58,7 +58,7 @@ Open your browser at `http://localhost:4200`.
 
 ---
 
-## 📦 Production Build
+## Production Build
 
 ```bash
 cd site
@@ -74,7 +74,7 @@ npx serve dist/site/browser -p 8080
 
 ---
 
-## 🌐 Deploying to `aerostream.gradientgeeks.com`
+## Deploying to `aerostream.gradientgeeks.com`
 
 ### Option 1: Cloudflare Pages / Vercel
 1. Set Root Directory to `site`.
