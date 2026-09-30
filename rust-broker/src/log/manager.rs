@@ -392,6 +392,65 @@ impl PartitionLog {
         Ok(offset)
     }
 
+    /// Appends multiple entries in order, batching disk writes per segment.
+    /// Returns the offset of the first appended entry.
+    pub fn append_entries<E: AsRef<[u8]>>(&mut self, entries: &[E]) -> io::Result<u64> {
+        let first_offset = self.next_offset;
+        if entries.is_empty() {
+            return Ok(first_offset);
+        }
+        self.last_access = std::time::Instant::now();
+        let total: usize = entries.iter().map(|e| e.as_ref().len()).sum();
+        let mut data: Vec<u8> = Vec::with_capacity(total.min(self.max_segment_size.max(1) as usize + 1));
+        let mut idx: Vec<u8> = Vec::with_capacity(entries.len() * 16);
+        let mut rolled = false;
+
+        for e in entries {
+            let e = e.as_ref();
+            // Same roll rule as `append`, evaluated against the length including entries still buffered.
+            let cur_len = self.active_len + data.len() as u64;
+            if cur_len + e.len() as u64 > self.max_segment_size && cur_len > 0 {
+                self.flush_pending(&mut data, &mut idx)?;
+                self.roll_over()?;
+                rolled = true;
+            }
+            let pos = self.active_len + data.len() as u64;
+            let offset = self.next_offset + (idx.len() / 16) as u64;
+            idx.extend_from_slice(&offset.to_be_bytes());
+            idx.extend_from_slice(&pos.to_be_bytes());
+            data.extend_from_slice(e);
+        }
+        self.flush_pending(&mut data, &mut idx)?;
+
+        if rolled || self.last_retention_check.elapsed() >= std::time::Duration::from_secs(1) {
+            self.clean_retention()?;
+            self.last_retention_check = std::time::Instant::now();
+        }
+        self.recompute_high_watermark();
+        if let Some(n) = &self.append_notify {
+            n.notify_waiters();
+        }
+        Ok(first_offset)
+    }
+
+    /// Writes the buffered entries of the active segment (data first, then index, like `append`) and commits them.
+    fn flush_pending(&mut self, data: &mut Vec<u8>, idx: &mut Vec<u8>) -> io::Result<()> {
+        use std::os::unix::fs::FileExt;
+        if data.is_empty() {
+            return Ok(());
+        }
+        let count = (idx.len() / 16) as u64;
+        self.active_log.get()?.write_all_at(data, self.active_len)?;
+        self.active_len += data.len() as u64;
+        self.write_back_progress();
+        self.active_idx.get()?.write_all_at(idx, self.active_idx_len)?;
+        self.active_idx_len += idx.len() as u64;
+        self.next_offset += count;
+        data.clear();
+        idx.clear();
+        Ok(())
+    }
+
     /// Appends a raw batch slice with in-place base-offset patching, advancing
     /// `next_offset` by `record_count` to maintain accurate offset boundaries.
     pub fn append_batch_slice(&mut self, base_offset: i64, batch: &[u8], record_count: u64) -> io::Result<u64> {
@@ -1297,6 +1356,65 @@ mod tests {
         println!("{n} cold fetches: {:?}", t.elapsed());
         for l in logs.iter_mut() { l.make_dormant(); }
         println!("all dormant: fds={}, rssΔ={} MB", fds(), (rss_kb() - r0) / 1024);
+    }
+
+    /// `append_entries` must be indistinguishable on disk from calling `append` for every entry: same log bytes, same
+    /// index bytes, same segment files (roll points), same offsets. Sizes vary and the segment limit is tiny so many
+    /// rolls happen in the middle of a batch.
+    #[test]
+    fn append_entries_matches_looped_append() {
+        let mut seed = 0x9E3779B97F4A7C15u64;
+        let mut next = || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; seed };
+        let entries: Vec<Vec<u8>> = (0..400)
+            .map(|i| { let n = 1 + (next() % 260) as usize; vec![(i % 251) as u8; n] })
+            .collect();
+
+        let (da, db) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let mut a = PartitionLog::new(da.path(), "eq", 0, 1, 700, None, None).unwrap();
+        let mut b = PartitionLog::new(db.path(), "eq", 0, 1, 700, None, None).unwrap();
+        for e in &entries { a.append(e).unwrap(); }
+        // uneven chunks, including 1-entry and whole-remainder chunks
+        let mut i = 0;
+        while i < entries.len() {
+            let n = (1 + (next() % 37) as usize).min(entries.len() - i);
+            assert_eq!(b.append_entries(&entries[i..i + n]).unwrap(), i as u64, "first offset of chunk at {i}");
+            i += n;
+        }
+
+        assert_eq!(a.next_offset, b.next_offset);
+        assert_eq!(a.high_watermark, b.high_watermark);
+        let bases = |l: &PartitionLog| l.segments.iter().map(|s| s.base_offset).collect::<Vec<_>>();
+        assert_eq!(bases(&a), bases(&b), "segment roll points differ");
+        assert!(a.segments.len() > 10, "test should cross many segment rolls");
+        for (sa, sb) in a.segments.iter().zip(b.segments.iter()) {
+            assert_eq!(fs::read(&sa.log_path).unwrap(), fs::read(&sb.log_path).unwrap(), "log bytes differ in segment {}", sa.base_offset);
+            assert_eq!(fs::read(&sa.idx_path).unwrap(), fs::read(&sb.idx_path).unwrap(), "index bytes differ in segment {}", sa.base_offset);
+        }
+        // and reads through the index work on the batched log
+        let (f, pos, len, _) = b.read_range(123, 124, 1 << 20).unwrap().unwrap();
+        let mut got = vec![0u8; len as usize];
+        std::os::unix::fs::FileExt::read_exact_at(&f, &mut got, pos).unwrap();
+        assert_eq!(got, entries[123]);
+    }
+
+    #[test]
+    fn append_entries_edge_cases() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut l = PartitionLog::new(dir.path(), "edge", 0, 1, 100, None, None).unwrap();
+        let none: [Vec<u8>; 0] = [];
+        assert_eq!(l.append_entries(&none).unwrap(), 0, "empty batch is a no-op returning next_offset");
+        assert_eq!(l.next_offset, 0);
+        // an entry larger than the segment limit goes into an empty segment without rolling
+        assert_eq!(l.append_entries(&[vec![1u8; 250]]).unwrap(), 0);
+        assert_eq!(l.segments.len(), 1);
+        // the next entry does not fit, so it rolls into a new segment based at offset 1
+        assert_eq!(l.append_entries(&[vec![2u8; 10], vec![3u8; 10]]).unwrap(), 1);
+        assert_eq!(l.segments.iter().map(|s| s.base_offset).collect::<Vec<_>>(), vec![0, 1]);
+        assert_eq!(l.next_offset, 3);
+        // works with borrowed slices too
+        let a: &[u8] = b"xy";
+        assert_eq!(l.append_entries(&[a, a]).unwrap(), 3);
+        assert_eq!(l.next_offset, 5);
     }
 
     /// Phase 10: many partitions with a tiny fd pool still append and fetch correctly, dormant eviction is

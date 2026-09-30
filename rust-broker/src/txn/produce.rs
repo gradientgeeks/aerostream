@@ -74,17 +74,19 @@ pub fn append_payload(
                 }
             }
         } else {
-            for e in to_entries(b, first) {
-                match log.append(&e) {
-                    Ok(off) => {
-                        if transactional {
-                            log.txn_index.note_data(pid, epoch, off);
-                        }
+            // One batched append for all of the batch's per-record entries (same bytes/offsets as appending them
+            // one by one, far fewer syscalls). note_data only records the FIRST offset of a transaction, so calling
+            // it once with the first entry's offset is equivalent to calling it for every entry.
+            let entries = to_entries(b, first);
+            match log.append_entries(&entries) {
+                Ok(off) => {
+                    if transactional {
+                        log.txn_index.note_data(pid, epoch, off);
                     }
-                    Err(e) => {
-                        tracing::error!("[AeroMQ Txn] append failed: {}", e);
-                        return Some(ProduceOutcome { error: err::KAFKA_STORAGE_ERROR, base_offset: -1 });
-                    }
+                }
+                Err(e) => {
+                    tracing::error!("[AeroMQ Txn] append failed: {}", e);
+                    return Some(ProduceOutcome { error: err::KAFKA_STORAGE_ERROR, base_offset: -1 });
                 }
             }
         }
