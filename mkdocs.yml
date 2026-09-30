@@ -109,3 +109,4 @@ nav:
   - Operations & Security:
       - Security & RBAC: security-rbac.md
       - Cluster Operations: operations.md
+      - Contributor Agreement (CLA): cla.md

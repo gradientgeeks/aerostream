@@ -23,9 +23,9 @@ jobs:
           PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_BOT_PAT || secrets.GITHUB_TOKEN }}
         with:
           path-to-signatures: 'signatures/cla.json'
-          path-to-document: 'https://github.com/gradientgeeks/aerostream/blob/main/CLA.md'
+          path-to-document: 'https://aerostream.gradientgeeks.com/docs/cla/'
           branch: 'cla-signatures'
           allowlist: 'bot* dependabot[bot],Uttam-Mahata,gradientgeeks'
           create-file-commit-msg: 'chore: create CLA signatures store'
           signed-commit-msg: '$contributorName has signed the CLA'
-          custom-notsigned-prcomment: 'Thank you for your pull request! Before we can review and merge your changes, please review and accept our [Contributor License Agreement (CLA)](https://github.com/gradientgeeks/aerostream/blob/main/CLA.md). To accept, simply reply to this comment with: `I have read the CLA Document and I hereby sign the CLA`'
+          custom-notsigned-prcomment: 'Thank you for your pull request! Before we can review and merge your changes, please review and accept our [Contributor License Agreement (CLA)](https://aerostream.gradientgeeks.com/docs/cla/). To accept, simply reply to this comment with: `I have read the CLA Document and I hereby sign the CLA`'
