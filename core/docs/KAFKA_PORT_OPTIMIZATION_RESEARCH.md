@@ -64,29 +64,7 @@ This document presents a deep-dive investigation into:
 
 The Kafka port's ~49 MB/s ceiling at 50 MB messages, against 527.5 MB/s for the native protocol, points to the load generator's single-connection architecture rather than the broker's storage engine.
 
-```mermaid
-flowchart TD
-    subgraph Harness["Java Load Generator: kafka-producer-perf-test.sh"]
-        KP["Single KafkaProducer Instance"]
-        RA["RecordAccumulator (buffer.memory=256MB)"]
-        SND["Single I/O Sender Thread"]
-        SEL["Java NIO Epoll Selector"]
-        SKT["Single TCP Socket (SO_SNDBUF)"]
-        KP --> RA --> SND --> SEL --> SKT
-    end
-
-    SKT -->|"Single TCP Connection (~49 MB/s Plateau)"| B3["AeroStream Kafka Port (Rust Engine) ~49.4 MB/s"]
-
-    subgraph NativeHarness["AeroStream Native Client (Go)"]
-        W1["Worker 1 (Conn 1)"]
-        W2["Worker 2 (Conn 2)"]
-        W3["Worker 3 (Conn 3)"]
-        W4["Worker 4 (Conn 4)"]
-        W5["Worker 5 (Conn 5)"]
-    end
-
-    W1 & W2 & W3 & W4 & W5 -->|"5 Concurrent TCP Streams (527.5 MB/s)"| B4["AeroStream Native Port (:9091)"]
-```
+![AeroStream Native and Kafka Dual Protocol Ingress](images/native_and_kafka_dual_protocol.png)
 
 ### The Conclusive Architectural Deduction
 
@@ -702,20 +680,14 @@ Workload      Current Aero Kafka       Optimized Aero Kafka       Projected Gain
 
 ## Implementation Roadmap & Action Plan
 
-```mermaid
-gantt
-    title AeroStream Kafka Port Optimization Roadmap
-    dateFormat  YYYY-MM-DD
-    section Phase 1: Batch & Index
-    In-Place KIP-98 Batch Preservation   :p1_1, 2026-10-01, 7d
-    Sparse Offset Indexing (.index)      :p1_2, 2026-10-08, 5d
-    section Phase 2: Memory & Transport
-    Connection Buffer Pooling (BytesMut) :p2_1, 2026-10-13, 4d
-    Linux TCP Socket Buffer Tuning       :p2_2, 2026-10-17, 3d
-    section Phase 3: Benchmarking & Verification
-    Interleaved A/B Benchmark Validation :p3_1, 2026-10-20, 4d
-    Comprehensive Release Documentation  :p3_2, 2026-10-24, 3d
-```
+| Phase | Optimization Deliverable | Target Timeline | Verification Milestone |
+|:---|:---|:---|:---|
+| **Phase 1: Batch & Index** | In-Place KIP-98 Batch Preservation & Base Offset Patching | 2026-10-01 – 2026-10-08 | Zero unpack allocations in `produce.rs` |
+| **Phase 1: Batch & Index** | Sparse Offset Indexing (`.index` 4 KB step) | 2026-10-08 – 2026-10-13 | 16-byte index entries across 4 KB boundaries |
+| **Phase 2: Memory & Transport** | Connection Buffer Pooling (`BytesMut` reuse) | 2026-10-13 – 2026-10-17 | Eliminates buffer re-allocation per socket |
+| **Phase 2: Memory & Transport** | Linux TCP Socket Buffer Sizing (`SO_RCVBUF` / `SO_SNDBUF` 4 MiB) | 2026-10-17 – 2026-10-20 | BDP saturation on high-throughput connections |
+| **Phase 3: Benchmarking** | Interleaved A/B Benchmark Validation & Regression Gates | 2026-10-20 – 2026-10-24 | 1 KB, 1 MB, 10 MB, 50 MB throughput gates |
+| **Phase 3: Documentation** | Comprehensive Release Documentation & Public Whitepaper | 2026-10-24 – 2026-10-27 | Published technical specifications |
 
 ### Next Steps:
 1. **Implement `append_raw_batch_inplace`**: Replace `to_entries()` unpacking in [`rust-broker/src/txn/produce.rs`](file:///home/uttam/projects/AeroMQ/rust-broker/src/txn/produce.rs#L69-L81) and [`rust-broker/src/kafka/handlers.rs`](file:///home/uttam/projects/AeroMQ/rust-broker/src/kafka/handlers.rs#L1346) with atomic batch patching.

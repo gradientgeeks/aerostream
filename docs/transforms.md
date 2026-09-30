@@ -8,17 +8,7 @@
 
 AeroStream features an **In-Broker Stream Processing & Transformation Engine**. Instead of spinning up heavy external processing clusters (such as Apache Flink or Kafka Streams) for straightforward event sanitization, routing, or PII masking, AeroStream executes transforms inline directly on the broker.
 
-```mermaid
-flowchart LR
-    Ingress["Source Topic<br/>(e.g., 'orders-raw')"]
-    subgraph AeroStreamBroker["AeroStream In-Broker Processing"]
-        Engine["Transform Engine<br/>Filter / PII Mask / WASM"]
-    end
-    Egress["Sanitized Topic<br/>(e.g., 'orders-clean')"]
-
-    Ingress --> Engine
-    Engine --> Egress
-```
+![Dual Engine Architecture](images/dual_engine_architecture.png)
 
 ---
 

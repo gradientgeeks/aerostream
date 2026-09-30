@@ -1,0 +1,298 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3200" height="2160" viewBox="0 0 3200 2160">
+<defs>
+
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.7" stroke-opacity="0.6"/>
+      <circle cx="40" cy="40" r="1.2" fill="#334155" opacity="0.4"/>
+    </pattern>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrow-emerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#a855f7"/>
+    </marker>
+    <marker id="arrow-rose" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#fb7185"/>
+    </marker>
+    <linearGradient id="grad-card" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.95"/>
+    </linearGradient>
+    <linearGradient id="grad-cyan-card" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0c4a6e" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="grad-emerald-card" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.9"/>
+    </linearGradient>
+        
+</defs>
+<rect width="3200" height="2160" fill="#0b0f19"/>
+<rect width="3200" height="2160" fill="url(#grid)"/>
+<rect x="60" y="40" width="3080" height="140" rx="14" fill="#0f172a" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<text x="96" y="98" fill="#f8fafc" font-size="34" font-family="sans-serif" font-weight="800">AeroStream Multi-Cloud Tiered Storage Pipeline</text>
+<text x="96" y="142" fill="#94a3b8" font-size="18" font-family="sans-serif" font-weight="500">Active NVMe Segment Rollover, Async Compression, Multi-Cloud Offload (S3/GCS/Azure), and Transparent Cold Read</text>
+<rect x="2814" y="92" width="270" height="36" rx="8" fill="#047857" stroke="#10b981" stroke-width="1.5"/>
+<text x="2949.0" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Multi-Cloud S3 / GCS / Azure</text>
+<rect x="2588" y="92" width="210" height="36" rx="8" fill="#7c3aed" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="2693.0" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Transparent Cold Read</text>
+<rect x="2336" y="92" width="236" height="36" rx="8" fill="#b45309" stroke="#fbbf24" stroke-width="1.5"/>
+<text x="2454.0" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Cloud Object Tier (Cold)</text>
+<rect x="2110" y="92" width="210" height="36" rx="8" fill="#0284c7" stroke="#38bdf8" stroke-width="1.5"/>
+<text x="2215.0" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Local NVMe Tier (Hot)</text>
+<rect x="1884" y="92" width="210" height="36" rx="8" fill="#059669" stroke="#34d399" stroke-width="1.5"/>
+<text x="1989.0" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Tiered Storage Kernel</text>
+<rect x="60" y="220" width="940" height="1380" rx="16" fill="url(#grad-cyan-card)" stroke="#0284c7" stroke-width="3" filter="url(#shadow)"/>
+<text x="96" y="274" fill="#38bdf8" font-size="28" font-family="sans-serif" font-weight="800">TIER 1: LOCAL NVMe STORAGE (HOT DATA)</text>
+<text x="96" y="306" fill="#94a3b8" font-size="16" font-family="sans-serif" font-weight="500">Sub-millisecond latency append log &amp; active segment writes</text>
+<rect x="860" y="252" width="104" height="32" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5"/>
+<text x="912.0" y="273" fill="#38bdf8" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Local NVMe</text>
+<rect x="96" y="350" width="868" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 108 350 L 952 350" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="120" y="386" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">Active Head Segment (.log &amp; .idx)</text>
+<rect x="836" y="368" width="108" height="26" rx="6" fill="#0369a1"/>
+<text x="890.0" y="386" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Active Head</text>
+<text x="120" y="416" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Active Write Buffer • High Performance</text>
+<circle cx="122" cy="439" r="3" fill="#38bdf8"/>
+<text x="134" y="444" fill="#cbd5e1" font-size="15" font-family="sans-serif">mmap memory-mapped append buffer: 00000000000000000000.log</text>
+<circle cx="122" cy="467" r="3" fill="#38bdf8"/>
+<text x="134" y="472" fill="#cbd5e1" font-size="15" font-family="sans-serif">Sub-microsecond write latency with single-syscall write_all_at</text>
+<circle cx="122" cy="495" r="3" fill="#38bdf8"/>
+<text x="134" y="500" fill="#cbd5e1" font-size="15" font-family="sans-serif">In-place base offset patching into record batch headers</text>
+<circle cx="122" cy="523" r="3" fill="#38bdf8"/>
+<text x="134" y="528" fill="#cbd5e1" font-size="15" font-family="sans-serif">Paced dirty page writeback via sync_file_range(2)</text>
+<circle cx="122" cy="551" r="3" fill="#38bdf8"/>
+<text x="134" y="556" fill="#cbd5e1" font-size="15" font-family="sans-serif">Sparse offset index (.idx) &amp; timestamp index (.timeindex)</text>
+<circle cx="122" cy="579" r="3" fill="#38bdf8"/>
+<text x="134" y="584" fill="#cbd5e1" font-size="15" font-family="sans-serif">All recent producer writes &amp; consumer fetches served here</text>
+<rect x="96" y="750" width="868" height="340" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 108 750 L 952 750" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+<text x="120" y="786" fill="#fbbf24" font-size="20" font-family="sans-serif" font-weight="700">Rollover Trigger &amp; Segment Sealing</text>
+<rect x="860" y="768" width="84" height="26" rx="6" fill="#b45309"/>
+<text x="902.0" y="786" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Rollover</text>
+<text x="120" y="816" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Segment Rollover Thresholds</text>
+<circle cx="122" cy="839" r="3" fill="#fbbf24"/>
+<text x="134" y="844" fill="#cbd5e1" font-size="15" font-family="sans-serif">Condition 1: Segment size reaches max_segment_size (1 GB)</text>
+<circle cx="122" cy="867" r="3" fill="#fbbf24"/>
+<text x="134" y="872" fill="#cbd5e1" font-size="15" font-family="sans-serif">Condition 2: Segment age reaches segment_ms (e.g. 7 days)</text>
+<circle cx="122" cy="895" r="3" fill="#fbbf24"/>
+<text x="134" y="900" fill="#cbd5e1" font-size="15" font-family="sans-serif">roll_over() initiates sealing of active segment:</text>
+<circle cx="122" cy="923" r="3" fill="#fbbf24"/>
+<text x="134" y="928" fill="#cbd5e1" font-size="15" font-family="sans-serif">• Flushes pending mmap writes and closes active file handles</text>
+<circle cx="122" cy="951" r="3" fill="#fbbf24"/>
+<text x="134" y="956" fill="#cbd5e1" font-size="15" font-family="sans-serif">• Creates new active segment for next base offset</text>
+<circle cx="122" cy="979" r="3" fill="#fbbf24"/>
+<text x="134" y="984" fill="#cbd5e1" font-size="15" font-family="sans-serif">• Fast hard-link or copy to data/cold_storage/ staging</text>
+<rect x="96" y="1130" width="868" height="430" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 108 1130 L 952 1130" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="120" y="1166" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">Closed Local Segment Staging</text>
+<rect x="876" y="1148" width="68" height="26" rx="6" fill="#0284c7"/>
+<text x="910.0" y="1166" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Staged</text>
+<text x="120" y="1196" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Cold Storage Staging Directory</text>
+<circle cx="122" cy="1219" r="3" fill="#38bdf8"/>
+<text x="134" y="1224" fill="#cbd5e1" font-size="15" font-family="sans-serif">Immutable local segment files ready for archival</text>
+<circle cx="122" cy="1247" r="3" fill="#38bdf8"/>
+<text x="134" y="1252" fill="#cbd5e1" font-size="15" font-family="sans-serif">Named: {base_offset:020}.log &amp; {base_offset:020}.idx</text>
+<circle cx="122" cy="1275" r="3" fill="#38bdf8"/>
+<text x="134" y="1280" fill="#cbd5e1" font-size="15" font-family="sans-serif">Fast hard-linking allows instantaneous unblocking of write thread</text>
+<circle cx="122" cy="1303" r="3" fill="#38bdf8"/>
+<text x="134" y="1308" fill="#cbd5e1" font-size="15" font-family="sans-serif">Log retention policy tracks local NVMe disk usage threshold</text>
+<circle cx="122" cy="1331" r="3" fill="#38bdf8"/>
+<text x="134" y="1336" fill="#cbd5e1" font-size="15" font-family="sans-serif">Local segments pruned after successful cloud upload confirmation</text>
+<rect x="1040" y="220" width="1080" height="1380" rx="16" fill="url(#grad-card)" stroke="#34d399" stroke-width="3" filter="url(#shadow)"/>
+<text x="1076" y="274" fill="#34d399" font-size="28" font-family="sans-serif" font-weight="800">ASYNCHRONOUS OFFLOAD ENGINE</text>
+<text x="1076" y="306" fill="#94a3b8" font-size="16" font-family="sans-serif" font-weight="500">Lock-free task pipeline, optional Zstandard compression, and cloud upload workers</text>
+<rect x="1964" y="252" width="120" height="32" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+<text x="2024.0" y="273" fill="#34d399" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Async Engine</text>
+<rect x="1076" y="350" width="1008" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1088 350 L 2072 350" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="1100" y="386" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">Lock-Free Offload Task Queue (mpsc)</text>
+<rect x="1964" y="368" width="100" height="26" rx="6" fill="#047857"/>
+<text x="2014.0" y="386" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Task Queue</text>
+<text x="1100" y="416" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">OffloadTask MPSC Pipeline</text>
+<circle cx="1102" cy="439" r="3" fill="#34d399"/>
+<text x="1114" y="444" fill="#cbd5e1" font-size="15" font-family="sans-serif">Non-blocking try_send(OffloadTask) from log rollover thread</text>
+<circle cx="1102" cy="467" r="3" fill="#34d399"/>
+<text x="1114" y="472" fill="#cbd5e1" font-size="15" font-family="sans-serif">Carries metadata: topic, partition, base_offset, file paths</text>
+<circle cx="1102" cy="495" r="3" fill="#34d399"/>
+<text x="1114" y="500" fill="#cbd5e1" font-size="15" font-family="sans-serif">Zero latency impact on main Shard-per-Core storage engine</text>
+<circle cx="1102" cy="523" r="3" fill="#34d399"/>
+<text x="1114" y="528" fill="#cbd5e1" font-size="15" font-family="sans-serif">Bounded task capacity with backpressure monitoring</text>
+<circle cx="1102" cy="551" r="3" fill="#34d399"/>
+<text x="1114" y="556" fill="#cbd5e1" font-size="15" font-family="sans-serif">Worker thread pool polls tasks concurrently</text>
+<rect x="1076" y="750" width="1008" height="340" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1088 750 L 2072 750" stroke="#a855f7" stroke-width="3" stroke-linecap="round"/>
+<text x="1100" y="786" fill="#a855f7" font-size="20" font-family="sans-serif" font-weight="700">Cold Segment Compression (Zstd / LZ4)</text>
+<rect x="1964" y="768" width="100" height="26" rx="6" fill="#6b21a8"/>
+<text x="2014.0" y="786" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Zstd / LZ4</text>
+<text x="1100" y="816" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Storage Cost Optimization Pipeline</text>
+<circle cx="1102" cy="839" r="3" fill="#a855f7"/>
+<text x="1114" y="844" fill="#cbd5e1" font-size="15" font-family="sans-serif">Optional background compression of sealed segment chunks</text>
+<circle cx="1102" cy="867" r="3" fill="#a855f7"/>
+<text x="1114" y="872" fill="#cbd5e1" font-size="15" font-family="sans-serif">Zstandard level 19 or LZ4 high-throughput codecs</text>
+<circle cx="1102" cy="895" r="3" fill="#a855f7"/>
+<text x="1114" y="900" fill="#cbd5e1" font-size="15" font-family="sans-serif">Reduces cloud storage volume by 60% – 80%</text>
+<circle cx="1102" cy="923" r="3" fill="#a855f7"/>
+<text x="1114" y="928" fill="#cbd5e1" font-size="15" font-family="sans-serif">Compresses both commit log (.log) and sparse index (.idx)</text>
+<circle cx="1102" cy="951" r="3" fill="#a855f7"/>
+<text x="1114" y="956" fill="#cbd5e1" font-size="15" font-family="sans-serif">Computes SHA-256 integrity checksum before upload</text>
+<rect x="1076" y="1130" width="1008" height="430" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1088 1130 L 2072 1130" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="1100" y="1166" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">TieredStorageOffloader Worker Pool</text>
+<rect x="1940" y="1148" width="124" height="26" rx="6" fill="#047857"/>
+<text x="2002.0" y="1166" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Upload Worker</text>
+<text x="1100" y="1196" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Unified TieredStorageProvider Interface</text>
+<circle cx="1102" cy="1219" r="3" fill="#34d399"/>
+<text x="1114" y="1224" fill="#cbd5e1" font-size="15" font-family="sans-serif">Multi-threaded Tokio async workers executing cloud I/O</text>
+<circle cx="1102" cy="1247" r="3" fill="#34d399"/>
+<text x="1114" y="1252" fill="#cbd5e1" font-size="15" font-family="sans-serif">Standardized Object Key Format:</text>
+<circle cx="1102" cy="1275" r="3" fill="#34d399"/>
+<text x="1114" y="1280" fill="#cbd5e1" font-size="15" font-family="sans-serif">  tiered/{topic}/partition_{id}/{base_offset:020}.log</text>
+<circle cx="1102" cy="1303" r="3" fill="#34d399"/>
+<text x="1114" y="1308" fill="#cbd5e1" font-size="15" font-family="sans-serif">  tiered/{topic}/partition_{id}/{base_offset:020}.idx</text>
+<circle cx="1102" cy="1331" r="3" fill="#34d399"/>
+<text x="1114" y="1336" fill="#cbd5e1" font-size="15" font-family="sans-serif">Multipart chunked upload with exponential backoff &amp; retries</text>
+<circle cx="1102" cy="1359" r="3" fill="#34d399"/>
+<text x="1114" y="1364" fill="#cbd5e1" font-size="15" font-family="sans-serif">Notifies Go Controller of archived segment offset range</text>
+<rect x="2160" y="220" width="980" height="1380" rx="16" fill="url(#grad-card)" stroke="#fbbf24" stroke-width="3" filter="url(#shadow)"/>
+<text x="2196" y="274" fill="#fbbf24" font-size="28" font-family="sans-serif" font-weight="800">TIER 2: MULTI-CLOUD OBJECT STORAGE (COLD)</text>
+<text x="2196" y="306" fill="#94a3b8" font-size="16" font-family="sans-serif" font-weight="500">Infinite retention at 90% reduced infrastructure storage cost</text>
+<rect x="3000" y="252" width="104" height="32" rx="8" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+<text x="3052.0" y="273" fill="#fbbf24" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Cloud Tier</text>
+<rect x="2196" y="350" width="908" height="260" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2208 350 L 3092 350" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+<text x="2220" y="386" fill="#fbbf24" font-size="20" font-family="sans-serif" font-weight="700">AWS S3 &amp; MinIO Provider</text>
+<rect x="3000" y="368" width="84" height="26" rx="6" fill="#0f172a"/>
+<text x="3042.0" y="386" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Provider</text>
+<text x="2220" y="416" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">S3StorageProvider • Custom endpoints &amp; path-style addressing</text>
+<circle cx="2222" cy="439" r="3" fill="#fbbf24"/>
+<text x="2234" y="444" fill="#cbd5e1" font-size="15" font-family="sans-serif">Official AWS SDK with IAM Role / Web Identity federation</text>
+<circle cx="2222" cy="467" r="3" fill="#fbbf24"/>
+<text x="2234" y="472" fill="#cbd5e1" font-size="15" font-family="sans-serif">Configurable S3 buckets, storage classes (STANDARD, GLACIER)</text>
+<circle cx="2222" cy="495" r="3" fill="#fbbf24"/>
+<text x="2234" y="500" fill="#cbd5e1" font-size="15" font-family="sans-serif">MinIO local / on-premise object storage support</text>
+<rect x="2196" y="645" width="908" height="260" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2208 645 L 3092 645" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="2220" y="681" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">Google Cloud Storage (GCS)</text>
+<rect x="3000" y="663" width="84" height="26" rx="6" fill="#0f172a"/>
+<text x="3042.0" y="681" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Provider</text>
+<text x="2220" y="711" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">GcsStorageProvider • Native JSON API &amp; chunked uploads</text>
+<circle cx="2222" cy="734" r="3" fill="#38bdf8"/>
+<text x="2234" y="739" fill="#cbd5e1" font-size="15" font-family="sans-serif">Native Google Cloud service account authentication</text>
+<circle cx="2222" cy="762" r="3" fill="#38bdf8"/>
+<text x="2234" y="767" fill="#cbd5e1" font-size="15" font-family="sans-serif">Chunked resumable upload sessions for multi-gigabyte logs</text>
+<circle cx="2222" cy="790" r="3" fill="#38bdf8"/>
+<text x="2234" y="795" fill="#cbd5e1" font-size="15" font-family="sans-serif">Multi-region bucket redundancy across availability zones</text>
+<rect x="2196" y="940" width="908" height="260" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2208 940 L 3092 940" stroke="#818cf8" stroke-width="3" stroke-linecap="round"/>
+<text x="2220" y="976" fill="#818cf8" font-size="20" font-family="sans-serif" font-weight="700">Azure Blob Storage</text>
+<rect x="3000" y="958" width="84" height="26" rx="6" fill="#0f172a"/>
+<text x="3042.0" y="976" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Provider</text>
+<text x="2220" y="1006" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">AzureBlobStorageProvider • SharedKey &amp; Bearer auth</text>
+<circle cx="2222" cy="1029" r="3" fill="#818cf8"/>
+<text x="2234" y="1034" fill="#cbd5e1" font-size="15" font-family="sans-serif">Azure Blob storage accounts &amp; container management</text>
+<circle cx="2222" cy="1057" r="3" fill="#818cf8"/>
+<text x="2234" y="1062" fill="#cbd5e1" font-size="15" font-family="sans-serif">BlockBlob upload with parallel block staging</text>
+<circle cx="2222" cy="1085" r="3" fill="#818cf8"/>
+<text x="2234" y="1090" fill="#cbd5e1" font-size="15" font-family="sans-serif">Azure Managed Identity &amp; Service Principal auth</text>
+<rect x="2196" y="1235" width="908" height="260" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2208 1235 L 3092 1235" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="2220" y="1271" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">Local / NFS Storage</text>
+<rect x="3000" y="1253" width="84" height="26" rx="6" fill="#0f172a"/>
+<text x="3042.0" y="1271" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Provider</text>
+<text x="2220" y="1301" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">LocalStorageProvider • Network filesystem mounts</text>
+<circle cx="2222" cy="1324" r="3" fill="#34d399"/>
+<text x="2234" y="1329" fill="#cbd5e1" font-size="15" font-family="sans-serif">High-speed NFS, CephFS, or Lustre network storage mounts</text>
+<circle cx="2222" cy="1352" r="3" fill="#34d399"/>
+<text x="2234" y="1357" fill="#cbd5e1" font-size="15" font-family="sans-serif">Zero cloud egress costs for enterprise on-premise clusters</text>
+<circle cx="2222" cy="1380" r="3" fill="#34d399"/>
+<text x="2234" y="1385" fill="#cbd5e1" font-size="15" font-family="sans-serif">Atomic file rename and directory sync guarantees</text>
+<line x1="1000" y1="400" x2="1040" y2="400" stroke="#38bdf8" stroke-width="4"  marker-end="url(#arrow-cyan)"/>
+<rect x="966.0" y="374.0" width="108" height="24" rx="6" fill="#0b0f19" stroke="#38bdf8" stroke-width="1.5"/>
+<text x="1020.0" y="391.0" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="700" text-anchor="middle">roll_over()</text>
+<line x1="2120" y1="1140" x2="2160" y2="1140" stroke="#34d399" stroke-width="4"  marker-end="url(#arrow-emerald)"/>
+<rect x="2078.0" y="1114.0" width="124" height="24" rx="6" fill="#0b0f19" stroke="#34d399" stroke-width="1.5"/>
+<text x="2140.0" y="1131.0" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="700" text-anchor="middle">put_segment()</text>
+<rect x="60" y="1640" width="3080" height="470" rx="16" fill="url(#grad-card)" stroke="#a855f7" stroke-width="3" filter="url(#shadow)"/>
+<text x="96" y="1694" fill="#a855f7" font-size="28" font-family="sans-serif" font-weight="800">TRANSPARENT COLD SEGMENT RETRIEVAL &amp; LRU DISK CACHE EVICTION</text>
+<text x="96" y="1726" fill="#94a3b8" font-size="16" font-family="sans-serif" font-weight="500">How consumers seamlessly read historical data that has been pruned from local NVMe disks</text>
+<rect x="2968" y="1672" width="136" height="32" rx="8" fill="#0f172a" stroke="#a855f7" stroke-width="1.5"/>
+<text x="3036.0" y="1693" fill="#a855f7" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Cold Retrieval</text>
+<rect x="100" y="1760" width="570" height="320" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 112 1760 L 658 1760" stroke="#a855f7" stroke-width="3" stroke-linecap="round"/>
+<text x="124" y="1796" fill="#a855f7" font-size="20" font-family="sans-serif" font-weight="700">1. Historical Fetch</text>
+<rect x="582" y="1778" width="68" height="26" rx="6" fill="#0f172a"/>
+<text x="616.0" y="1796" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Step 1</text>
+<text x="124" y="1826" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Consumer Request</text>
+<circle cx="126" cy="1849" r="3" fill="#a855f7"/>
+<text x="138" y="1854" fill="#cbd5e1" font-size="15" font-family="sans-serif">Consumer requests offset X.</text>
+<circle cx="126" cy="1877" r="3" fill="#a855f7"/>
+<text x="138" y="1882" fill="#cbd5e1" font-size="15" font-family="sans-serif">Offset X is older than earliest local NVMe segment.</text>
+<circle cx="126" cy="1905" r="3" fill="#a855f7"/>
+<text x="138" y="1910" fill="#cbd5e1" font-size="15" font-family="sans-serif">Storage kernel detects local cache miss.</text>
+<line x1="670" y1="1910" x2="710" y2="1910" stroke="#a855f7" stroke-width="3"  marker-end="url(#arrow-purple)"/>
+<rect x="710" y="1760" width="570" height="320" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 722 1760 L 1268 1760" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="734" y="1796" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">2. Index Search</text>
+<rect x="1192" y="1778" width="68" height="26" rx="6" fill="#0f172a"/>
+<text x="1226.0" y="1796" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Step 2</text>
+<text x="734" y="1826" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">find_cold_segment</text>
+<circle cx="736" cy="1849" r="3" fill="#38bdf8"/>
+<text x="748" y="1854" fill="#cbd5e1" font-size="15" font-family="sans-serif">Binary search on cloud segment metadata index.</text>
+<circle cx="736" cy="1877" r="3" fill="#38bdf8"/>
+<text x="748" y="1882" fill="#cbd5e1" font-size="15" font-family="sans-serif">Identifies exact object key holding offset X.</text>
+<circle cx="736" cy="1905" r="3" fill="#38bdf8"/>
+<text x="748" y="1910" fill="#cbd5e1" font-size="15" font-family="sans-serif">Resolves byte range within remote .log file.</text>
+<line x1="1280" y1="1910" x2="1320" y2="1910" stroke="#a855f7" stroke-width="3"  marker-end="url(#arrow-purple)"/>
+<rect x="1320" y="1760" width="570" height="320" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1332 1760 L 1878 1760" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+<text x="1344" y="1796" fill="#fbbf24" font-size="20" font-family="sans-serif" font-weight="700">3. Cloud Fetch</text>
+<rect x="1802" y="1778" width="68" height="26" rx="6" fill="#0f172a"/>
+<text x="1836.0" y="1796" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Step 3</text>
+<text x="1344" y="1826" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">get_segment Range Read</text>
+<circle cx="1346" cy="1849" r="3" fill="#fbbf24"/>
+<text x="1358" y="1854" fill="#cbd5e1" font-size="15" font-family="sans-serif">Issues HTTP Range GET to S3/GCS/Azure provider.</text>
+<circle cx="1346" cy="1877" r="3" fill="#fbbf24"/>
+<text x="1358" y="1882" fill="#cbd5e1" font-size="15" font-family="sans-serif">Downloads requested segment chunk or full index.</text>
+<circle cx="1346" cy="1905" r="3" fill="#fbbf24"/>
+<text x="1358" y="1910" fill="#cbd5e1" font-size="15" font-family="sans-serif">Decompresses Zstandard chunk in RAM buffer.</text>
+<line x1="1890" y1="1910" x2="1930" y2="1910" stroke="#a855f7" stroke-width="3"  marker-end="url(#arrow-purple)"/>
+<rect x="1930" y="1760" width="570" height="320" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1942 1760 L 2488 1760" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="1954" y="1796" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">4. Stream to Client</text>
+<rect x="2412" y="1778" width="68" height="26" rx="6" fill="#0f172a"/>
+<text x="2446.0" y="1796" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Step 4</text>
+<text x="1954" y="1826" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">sendfile / Socket Write</text>
+<circle cx="1956" cy="1849" r="3" fill="#34d399"/>
+<text x="1968" y="1854" fill="#cbd5e1" font-size="15" font-family="sans-serif">Streams decompressed records directly to consumer.</text>
+<circle cx="1956" cy="1877" r="3" fill="#34d399"/>
+<text x="1968" y="1882" fill="#cbd5e1" font-size="15" font-family="sans-serif">Client SDK perceives zero difference in stream format.</text>
+<circle cx="1956" cy="1905" r="3" fill="#34d399"/>
+<text x="1968" y="1910" fill="#cbd5e1" font-size="15" font-family="sans-serif">No manual operator intervention or restore jobs.</text>
+<line x1="2500" y1="1910" x2="2540" y2="1910" stroke="#a855f7" stroke-width="3"  marker-end="url(#arrow-purple)"/>
+<rect x="2540" y="1760" width="570" height="320" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2552 1760 L 3098 1760" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="2564" y="1796" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">5. Local LRU Cache</text>
+<rect x="3022" y="1778" width="68" height="26" rx="6" fill="#0f172a"/>
+<text x="3056.0" y="1796" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Step 5</text>
+<text x="2564" y="1826" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Cache Management</text>
+<circle cx="2566" cy="1849" r="3" fill="#38bdf8"/>
+<text x="2578" y="1854" fill="#cbd5e1" font-size="15" font-family="sans-serif">Recently fetched cold chunks cached in staging NVMe.</text>
+<circle cx="2566" cy="1877" r="3" fill="#38bdf8"/>
+<text x="2578" y="1882" fill="#cbd5e1" font-size="15" font-family="sans-serif">Background LRU cleaner evicts least recently accessed data.</text>
+<circle cx="2566" cy="1905" r="3" fill="#38bdf8"/>
+<text x="2578" y="1910" fill="#cbd5e1" font-size="15" font-family="sans-serif">Maintains configured local disk capacity ceiling.</text>
+<line x1="60" y1="2110" x2="3140" y2="2110" stroke="#1e293b" stroke-width="1"/>
+<text x="96" y="2135" fill="#64748b" font-size="14" font-family="sans-serif">AeroStream Next-Gen Distributed Streaming Platform • Excalidraw v2 Verified Architecture Spec</text>
+<text x="3104" y="2135" fill="#64748b" font-size="14" font-family="sans-serif" text-anchor="end">Production Engineered • High-Resolution 3200×2160</text>
+</svg>

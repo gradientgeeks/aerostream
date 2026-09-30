@@ -1,0 +1,320 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3200" height="2160" viewBox="0 0 3200 2160">
+<defs>
+
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.7" stroke-opacity="0.6"/>
+      <circle cx="40" cy="40" r="1.2" fill="#334155" opacity="0.4"/>
+    </pattern>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrow-emerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#a855f7"/>
+    </marker>
+    <marker id="arrow-rose" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#fb7185"/>
+    </marker>
+    <linearGradient id="grad-card" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.95"/>
+    </linearGradient>
+    <linearGradient id="grad-cyan-card" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0c4a6e" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="grad-emerald-card" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.9"/>
+    </linearGradient>
+        
+</defs>
+<rect width="3200" height="2160" fill="#0b0f19"/>
+<rect width="3200" height="2160" fill="url(#grid)"/>
+<rect x="60" y="40" width="3080" height="140" rx="14" fill="#0f172a" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<text x="96" y="98" fill="#f8fafc" font-size="34" font-family="sans-serif" font-weight="800">AeroStream Dual-Engine Architecture</text>
+<text x="96" y="142" fill="#94a3b8" font-size="18" font-family="sans-serif" font-weight="500">Go 1.26 Control Plane (Consensus, Registry, RBAC) &amp; Rust 1.98.1 Data Plane (Zero-Copy Storage Kernel)</text>
+<rect x="2925" y="92" width="159" height="36" rx="8" fill="#d97706" stroke="#f59e0b" stroke-width="1.5"/>
+<text x="3004.5" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Kafka Wire 9092</text>
+<rect x="2741" y="92" width="168" height="36" rx="8" fill="#4f46e5" stroke="#6366f1" stroke-width="1.5"/>
+<text x="2825.0" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">gRPC Stream 8001</text>
+<rect x="2540" y="92" width="185" height="36" rx="8" fill="#059669" stroke="#10b981" stroke-width="1.5"/>
+<text x="2632.5" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Rust 1.98.1 Kernel</text>
+<rect x="2365" y="92" width="159" height="36" rx="8" fill="#0284c7" stroke="#0ea5e9" stroke-width="1.5"/>
+<text x="2444.5" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Go 1.26 Control</text>
+<rect x="2113" y="92" width="236" height="36" rx="8" fill="#0369a1" stroke="#38bdf8" stroke-width="1.5"/>
+<text x="2231.0" y="115" fill="#e0f2fe" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Dual-Engine Architecture</text>
+<rect x="60" y="220" width="1480" height="1850" rx="16" fill="url(#grad-cyan-card)" stroke="#0284c7" stroke-width="3" filter="url(#shadow)"/>
+<text x="96" y="274" fill="#38bdf8" font-size="28" font-family="sans-serif" font-weight="800">GO 1.26 CONTROL PLANE</text>
+<text x="96" y="306" fill="#94a3b8" font-size="16" font-family="sans-serif" font-weight="500">Cluster Metadata State Machine, Raft Quorum Consensus, Security &amp; Administration</text>
+<rect x="1296" y="252" width="208" height="32" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5"/>
+<text x="1400.0" y="273" fill="#38bdf8" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Port 7001 / 8001 / 9001</text>
+<rect x="100" y="340" width="680" height="250" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 112 340 L 768 340" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="124" y="376" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">Web Console &amp; Management API</text>
+<rect x="668" y="358" width="92" height="26" rx="6" fill="#0369a1"/>
+<text x="714.0" y="376" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">REST / UI</text>
+<text x="124" y="406" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Port 9001 • HTTP/1.1 &amp; HTTP/2 REST Gateway</text>
+<circle cx="126" cy="429" r="3" fill="#38bdf8"/>
+<text x="138" y="434" fill="#cbd5e1" font-size="15" font-family="sans-serif">REST API endpoints (POST /api/topics, GET /api/cluster)</text>
+<circle cx="126" cy="457" r="3" fill="#38bdf8"/>
+<text x="138" y="462" fill="#cbd5e1" font-size="15" font-family="sans-serif">Angular 18 Enterprise Admin Web Dashboard</text>
+<circle cx="126" cy="485" r="3" fill="#38bdf8"/>
+<text x="138" y="490" fill="#cbd5e1" font-size="15" font-family="sans-serif">Prometheus metrics scraping endpoint (/metrics)</text>
+<circle cx="126" cy="513" r="3" fill="#38bdf8"/>
+<text x="138" y="518" fill="#cbd5e1" font-size="15" font-family="sans-serif">Broker scale-down drain triggers (/api/brokers/{id}/drain)</text>
+<rect x="820" y="340" width="680" height="250" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 832 340 L 1488 340" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="844" y="376" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">Confluent-Compatible Schema Registry</text>
+<rect x="1396" y="358" width="84" height="26" rx="6" fill="#0369a1"/>
+<text x="1438.0" y="376" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Registry</text>
+<text x="844" y="406" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Port 9001 • Confluent Wire Format Compatible</text>
+<circle cx="846" cy="429" r="3" fill="#38bdf8"/>
+<text x="858" y="434" fill="#cbd5e1" font-size="15" font-family="sans-serif">Full Schema Registry v1 REST API compatibility</text>
+<circle cx="846" cy="457" r="3" fill="#38bdf8"/>
+<text x="858" y="462" fill="#cbd5e1" font-size="15" font-family="sans-serif">Avro, Protocol Buffers, and JSON Schema validators</text>
+<circle cx="846" cy="485" r="3" fill="#38bdf8"/>
+<text x="858" y="490" fill="#cbd5e1" font-size="15" font-family="sans-serif">Schema evolution rules: BACKWARD, FORWARD, FULL</text>
+<circle cx="846" cy="513" r="3" fill="#38bdf8"/>
+<text x="858" y="518" fill="#cbd5e1" font-size="15" font-family="sans-serif">Fast schema ID cache with Swiss Table lookups</text>
+<rect x="100" y="620" width="680" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 112 620 L 768 620" stroke="#818cf8" stroke-width="3" stroke-linecap="round"/>
+<text x="124" y="656" fill="#818cf8" font-size="20" font-family="sans-serif" font-weight="700">Raft Consensus Engine</text>
+<rect x="628" y="638" width="132" height="26" rx="6" fill="#4338ca"/>
+<text x="694.0" y="656" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Raft Consensus</text>
+<text x="124" y="686" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Port 7001 • Distributed Log Replication</text>
+<circle cx="126" cy="709" r="3" fill="#818cf8"/>
+<text x="138" y="714" fill="#cbd5e1" font-size="15" font-family="sans-serif">Port 7001 • 3-Node / 5-Node Raft Consensus Quorum</text>
+<circle cx="126" cy="737" r="3" fill="#818cf8"/>
+<text x="138" y="742" fill="#cbd5e1" font-size="15" font-family="sans-serif">HashiCorp Raft algorithm implementation in Go</text>
+<circle cx="126" cy="765" r="3" fill="#818cf8"/>
+<text x="138" y="770" fill="#cbd5e1" font-size="15" font-family="sans-serif">Leader Election, Term Management, Heartbeats</text>
+<circle cx="126" cy="793" r="3" fill="#818cf8"/>
+<text x="138" y="798" fill="#cbd5e1" font-size="15" font-family="sans-serif">Replicated commit log with log compaction &amp; snapshots</text>
+<circle cx="126" cy="821" r="3" fill="#818cf8"/>
+<text x="138" y="826" fill="#cbd5e1" font-size="15" font-family="sans-serif">Zero-downtime failover with sub-second re-election</text>
+<circle cx="126" cy="849" r="3" fill="#818cf8"/>
+<text x="138" y="854" fill="#cbd5e1" font-size="15" font-family="sans-serif">Linearizable state reads via ReadIndex verification</text>
+<rect x="820" y="620" width="680" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 832 620 L 1488 620" stroke="#818cf8" stroke-width="3" stroke-linecap="round"/>
+<text x="844" y="656" fill="#818cf8" font-size="20" font-family="sans-serif" font-weight="700">Metadata State Machine (FSM) &amp; BoltDB</text>
+<rect x="1380" y="638" width="100" height="26" rx="6" fill="#4338ca"/>
+<text x="1430.0" y="656" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">BoltDB FSM</text>
+<text x="844" y="686" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Embedded BoltDB • Local B+ Tree ACID Engine</text>
+<circle cx="846" cy="709" r="3" fill="#818cf8"/>
+<text x="858" y="714" fill="#cbd5e1" font-size="15" font-family="sans-serif">ACID embedded transactional storage: cluster_state.db</text>
+<circle cx="846" cy="737" r="3" fill="#818cf8"/>
+<text x="858" y="742" fill="#cbd5e1" font-size="15" font-family="sans-serif">Persistent topic definitions, partition counts, replicas</text>
+<circle cx="846" cy="765" r="3" fill="#818cf8"/>
+<text x="858" y="770" fill="#cbd5e1" font-size="15" font-family="sans-serif">In-Sync Replicas (ISR) set tracking and High Watermark</text>
+<circle cx="846" cy="793" r="3" fill="#818cf8"/>
+<text x="858" y="798" fill="#cbd5e1" font-size="15" font-family="sans-serif">Dynamic broker discovery and rack-aware layouts</text>
+<circle cx="846" cy="821" r="3" fill="#818cf8"/>
+<text x="858" y="826" fill="#cbd5e1" font-size="15" font-family="sans-serif">B+ Tree indexed key-value engine with zero external deps</text>
+<circle cx="846" cy="849" r="3" fill="#818cf8"/>
+<text x="858" y="854" fill="#cbd5e1" font-size="15" font-family="sans-serif">Snapshot recovery and fast bootstrap replay on restart</text>
+<rect x="100" y="1010" width="680" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 112 1010 L 768 1010" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="124" y="1046" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">RBAC &amp; Granular ACL Swiss Tables</text>
+<rect x="676" y="1028" width="84" height="26" rx="6" fill="#0369a1"/>
+<text x="718.0" y="1046" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Security</text>
+<text x="124" y="1076" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">High-Performance Hashbrown In-Memory Tables</text>
+<circle cx="126" cy="1099" r="3" fill="#38bdf8"/>
+<text x="138" y="1104" fill="#cbd5e1" font-size="15" font-family="sans-serif">Swiss Table hash map for O(1) concurrent authorization</text>
+<circle cx="126" cy="1127" r="3" fill="#38bdf8"/>
+<text x="138" y="1132" fill="#cbd5e1" font-size="15" font-family="sans-serif">Principal authentication: mTLS, SASL/PLAIN, SASL/SCRAM</text>
+<circle cx="126" cy="1155" r="3" fill="#38bdf8"/>
+<text x="138" y="1160" fill="#cbd5e1" font-size="15" font-family="sans-serif">Role-Based Access Control: Superuser, Admin, Producer, Consumer</text>
+<circle cx="126" cy="1183" r="3" fill="#38bdf8"/>
+<text x="138" y="1188" fill="#cbd5e1" font-size="15" font-family="sans-serif">Topic-level &amp; Consumer Group-level fine-grained ACLs</text>
+<circle cx="126" cy="1211" r="3" fill="#38bdf8"/>
+<text x="138" y="1216" fill="#cbd5e1" font-size="15" font-family="sans-serif">Dynamic ACL propagation to Rust brokers via gRPC</text>
+<rect x="820" y="1010" width="680" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 832 1010 L 1488 1010" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="844" y="1046" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">Cooperative Sticky Rebalance Engine</text>
+<rect x="1372" y="1028" width="108" height="26" rx="6" fill="#0369a1"/>
+<text x="1426.0" y="1046" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Coordinator</text>
+<text x="844" y="1076" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Cooperative Sticky Protocol • KIP-429 Compliant</text>
+<circle cx="846" cy="1099" r="3" fill="#38bdf8"/>
+<text x="858" y="1104" fill="#cbd5e1" font-size="15" font-family="sans-serif">Incremental cooperative consumer group partition assignments</text>
+<circle cx="846" cy="1127" r="3" fill="#38bdf8"/>
+<text x="858" y="1132" fill="#cbd5e1" font-size="15" font-family="sans-serif">Sticky partition migration minimizing client rebalance latency</text>
+<circle cx="846" cy="1155" r="3" fill="#38bdf8"/>
+<text x="858" y="1160" fill="#cbd5e1" font-size="15" font-family="sans-serif">Broker drain orchestrator with automatic ISR re-election</text>
+<circle cx="846" cy="1183" r="3" fill="#38bdf8"/>
+<text x="858" y="1188" fill="#cbd5e1" font-size="15" font-family="sans-serif">Client quota enforcement (produce/fetch byte rate limits)</text>
+<circle cx="846" cy="1211" r="3" fill="#38bdf8"/>
+<text x="858" y="1216" fill="#cbd5e1" font-size="15" font-family="sans-serif">Automated partition leader balance across cluster racks</text>
+<rect x="100" y="1400" width="1400" height="240" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 112 1400 L 1488 1400" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="124" y="1436" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">gRPC Controller Server (ControlService)</text>
+<rect x="1348" y="1418" width="132" height="26" rx="6" fill="#0284c7"/>
+<text x="1414.0" y="1436" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">gRPC Port 8001</text>
+<text x="124" y="1466" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Port 8001 • Bidirectional Control Plane Highway</text>
+<circle cx="126" cy="1489" r="3" fill="#38bdf8"/>
+<text x="138" y="1494" fill="#cbd5e1" font-size="15" font-family="sans-serif">Port 8001 • Bidirectional HTTP/2 Multiplexed gRPC Channel to Data Plane Brokers</text>
+<circle cx="126" cy="1517" r="3" fill="#38bdf8"/>
+<text x="138" y="1522" fill="#cbd5e1" font-size="15" font-family="sans-serif">RegisterBroker RPC: broker registration, host advertisement, rack allocation, storage config</text>
+<circle cx="126" cy="1545" r="3" fill="#38bdf8"/>
+<text x="138" y="1550" fill="#cbd5e1" font-size="15" font-family="sans-serif">Periodic Heartbeat RPC (2s ticker): collects LEO, lag telemetry, disk capacity, and broker liveness</text>
+<circle cx="126" cy="1573" r="3" fill="#38bdf8"/>
+<text x="138" y="1578" fill="#cbd5e1" font-size="15" font-family="sans-serif">HeartbeatResponse piggybacking: sends updated partition leadership, quota tables, topic configs</text>
+<circle cx="126" cy="1601" r="3" fill="#38bdf8"/>
+<text x="138" y="1606" fill="#cbd5e1" font-size="15" font-family="sans-serif">Failure detection sweeper (every 3s): detects 8s lease expiry and triggers automated leader election</text>
+<rect x="1660" y="220" width="1480" height="1850" rx="16" fill="url(#grad-emerald-card)" stroke="#059669" stroke-width="3" filter="url(#shadow)"/>
+<text x="1696" y="274" fill="#34d399" font-size="28" font-family="sans-serif" font-weight="800">RUST 1.98.1 DATA PLANE</text>
+<text x="1696" y="306" fill="#94a3b8" font-size="16" font-family="sans-serif" font-weight="500">Zero-Copy Append-Only Storage Kernel, Shard-per-Core Engine, Dual Protocol</text>
+<rect x="2952" y="252" width="152" height="32" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+<text x="3028.0" y="273" fill="#34d399" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Port 9091 / 9092</text>
+<rect x="1700" y="340" width="680" height="250" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1712 340 L 2368 340" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+<text x="1724" y="376" fill="#fbbf24" font-size="20" font-family="sans-serif" font-weight="700">Kafka Wire Protocol Server</text>
+<rect x="2260" y="358" width="100" height="26" rx="6" fill="#b45309"/>
+<text x="2310.0" y="376" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Kafka 9092</text>
+<text x="1724" y="406" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Port 9092 • Full Native Compatibility</text>
+<circle cx="1726" cy="429" r="3" fill="#fbbf24"/>
+<text x="1738" y="434" fill="#cbd5e1" font-size="15" font-family="sans-serif">Port 9092 • Drop-in Apache Kafka Binary Protocol</text>
+<circle cx="1726" cy="457" r="3" fill="#fbbf24"/>
+<text x="1738" y="462" fill="#cbd5e1" font-size="15" font-family="sans-serif">ApiKeys 0 through 36 (Produce, Fetch, Metadata, Txn)</text>
+<circle cx="1726" cy="485" r="3" fill="#fbbf24"/>
+<text x="1738" y="490" fill="#cbd5e1" font-size="15" font-family="sans-serif">Zero translation proxy or sidecar overhead</text>
+<circle cx="1726" cy="513" r="3" fill="#fbbf24"/>
+<text x="1738" y="518" fill="#cbd5e1" font-size="15" font-family="sans-serif">SASL/PLAIN, SASL/SCRAM, and SSL/TLS support</text>
+<circle cx="1726" cy="541" r="3" fill="#fbbf24"/>
+<text x="1738" y="546" fill="#cbd5e1" font-size="15" font-family="sans-serif">Fetch v0-v11 with KIP-392 rack-aware follower fetch</text>
+<rect x="2420" y="340" width="680" height="250" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2432 340 L 3088 340" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="2444" y="376" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">AeroStream Native High-Speed Protocol</text>
+<rect x="2972" y="358" width="108" height="26" rx="6" fill="#047857"/>
+<text x="3026.0" y="376" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Native 9091</text>
+<text x="2444" y="406" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Port 9091 • 0xAE 0x01 Binary Framing</text>
+<circle cx="2446" cy="429" r="3" fill="#34d399"/>
+<text x="2458" y="434" fill="#cbd5e1" font-size="15" font-family="sans-serif">Port 9091 • Ultra-compact 7-byte binary header</text>
+<circle cx="2446" cy="457" r="3" fill="#34d399"/>
+<text x="2458" y="462" fill="#cbd5e1" font-size="15" font-family="sans-serif">Framing: [0xAE, 0x01][cmd: u8][body_len: u32 BE]</text>
+<circle cx="2446" cy="485" r="3" fill="#34d399"/>
+<text x="2458" y="490" fill="#cbd5e1" font-size="15" font-family="sans-serif">Sub-millisecond p99.9 latency, zero header bloat</text>
+<circle cx="2446" cy="513" r="3" fill="#34d399"/>
+<text x="2458" y="518" fill="#cbd5e1" font-size="15" font-family="sans-serif">Commands: Produce(1), Fetch(2), ReplicaFetch(3), Multi(4)</text>
+<circle cx="2446" cy="541" r="3" fill="#34d399"/>
+<text x="2458" y="546" fill="#cbd5e1" font-size="15" font-family="sans-serif">Official client SDKs: Go, Rust, Java, .NET, Node.js</text>
+<rect x="1700" y="620" width="680" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1712 620 L 2368 620" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="1724" y="656" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">Shard-per-Core Execution Engine</text>
+<rect x="2228" y="638" width="132" height="26" rx="6" fill="#047857"/>
+<text x="2294.0" y="656" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Shard-per-Core</text>
+<text x="1724" y="686" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Thread-per-Core Architecture • Zero Contention</text>
+<circle cx="1726" cy="709" r="3" fill="#34d399"/>
+<text x="1738" y="714" fill="#cbd5e1" font-size="15" font-family="sans-serif">Dedicated OS threads pinned via libc::sched_setaffinity</text>
+<circle cx="1726" cy="737" r="3" fill="#34d399"/>
+<text x="1738" y="742" fill="#cbd5e1" font-size="15" font-family="sans-serif">Deterministic routing: S = (Hash64(topic) ^ partition) % N_shards</text>
+<circle cx="1726" cy="765" r="3" fill="#34d399"/>
+<text x="1738" y="770" fill="#cbd5e1" font-size="15" font-family="sans-serif">Lock-free flume bounded MPMC actor channels</text>
+<circle cx="1726" cy="793" r="3" fill="#34d399"/>
+<text x="1738" y="798" fill="#cbd5e1" font-size="15" font-family="sans-serif">Zero mutexes, zero RwLocks, zero atomic spinlocks</text>
+<circle cx="1726" cy="821" r="3" fill="#34d399"/>
+<text x="1738" y="826" fill="#cbd5e1" font-size="15" font-family="sans-serif">Exclusive HashMap&lt;PartitionKey, PartitionLog&gt; per core</text>
+<circle cx="1726" cy="849" r="3" fill="#34d399"/>
+<text x="1738" y="854" fill="#cbd5e1" font-size="15" font-family="sans-serif">Guaranteed L1/L2 data &amp; instruction cache locality</text>
+<rect x="2420" y="620" width="360" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2432 620 L 2768 620" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="2444" y="656" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">Append-Only Log Kernel</text>
+<rect x="2628" y="638" width="132" height="26" rx="6" fill="#047857"/>
+<text x="2694.0" y="656" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Storage Kernel</text>
+<text x="2444" y="686" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Physical PartitionLog Storage</text>
+<circle cx="2446" cy="709" r="3" fill="#34d399"/>
+<text x="2458" y="714" fill="#cbd5e1" font-size="15" font-family="sans-serif">Active segment mmap append log</text>
+<circle cx="2446" cy="737" r="3" fill="#34d399"/>
+<text x="2458" y="742" fill="#cbd5e1" font-size="15" font-family="sans-serif">Sparse index (.idx) binary search</text>
+<circle cx="2446" cy="765" r="3" fill="#34d399"/>
+<text x="2458" y="770" fill="#cbd5e1" font-size="15" font-family="sans-serif">Timestamp index (.timeindex)</text>
+<circle cx="2446" cy="793" r="3" fill="#34d399"/>
+<text x="2458" y="798" fill="#cbd5e1" font-size="15" font-family="sans-serif">Single-syscall write_all_at</text>
+<circle cx="2446" cy="821" r="3" fill="#34d399"/>
+<text x="2458" y="826" fill="#cbd5e1" font-size="15" font-family="sans-serif">CRC32C hardware acceleration (SSE4.2)</text>
+<circle cx="2446" cy="849" r="3" fill="#34d399"/>
+<text x="2458" y="854" fill="#cbd5e1" font-size="15" font-family="sans-serif">In-place base offset patching</text>
+<rect x="2800" y="620" width="300" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2812 620 L 3088 620" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="2824" y="656" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">I/O Kernel Directives</text>
+<rect x="2956" y="638" width="124" height="26" rx="6" fill="#047857"/>
+<text x="3018.0" y="656" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Zero-Copy DMA</text>
+<text x="2824" y="686" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Linux Kernel Optimized</text>
+<circle cx="2826" cy="709" r="3" fill="#34d399"/>
+<text x="2838" y="714" fill="#cbd5e1" font-size="15" font-family="sans-serif">Linux sendfile(2) DMA</text>
+<circle cx="2826" cy="737" r="3" fill="#34d399"/>
+<text x="2838" y="742" fill="#cbd5e1" font-size="15" font-family="sans-serif">Zero userspace copying</text>
+<circle cx="2826" cy="765" r="3" fill="#34d399"/>
+<text x="2838" y="770" fill="#cbd5e1" font-size="15" font-family="sans-serif">Page cache passthrough</text>
+<circle cx="2826" cy="793" r="3" fill="#34d399"/>
+<text x="2838" y="798" fill="#cbd5e1" font-size="15" font-family="sans-serif">sync_file_range(2)</text>
+<circle cx="2826" cy="821" r="3" fill="#34d399"/>
+<text x="2838" y="826" fill="#cbd5e1" font-size="15" font-family="sans-serif">Paced writeback scheduler</text>
+<circle cx="2826" cy="849" r="3" fill="#34d399"/>
+<text x="2838" y="854" fill="#cbd5e1" font-size="15" font-family="sans-serif">No dirty page flush storms</text>
+<rect x="1700" y="1010" width="680" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1712 1010 L 2368 1010" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="1724" y="1046" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">In-Broker Transforms &amp; Compaction</text>
+<rect x="2260" y="1028" width="100" height="26" rx="6" fill="#047857"/>
+<text x="2310.0" y="1046" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Transforms</text>
+<text x="1724" y="1076" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">In-Line Stream Enrichment &amp; Deduplication</text>
+<circle cx="1726" cy="1099" r="3" fill="#34d399"/>
+<text x="1738" y="1104" fill="#cbd5e1" font-size="15" font-family="sans-serif">Lightweight stream transformations without external flink/spark</text>
+<circle cx="1726" cy="1127" r="3" fill="#34d399"/>
+<text x="1738" y="1132" fill="#cbd5e1" font-size="15" font-family="sans-serif">Wasm runtime &amp; native transform execution pipelines</text>
+<circle cx="1726" cy="1155" r="3" fill="#34d399"/>
+<text x="1738" y="1160" fill="#cbd5e1" font-size="15" font-family="sans-serif">Background log compaction thread with clean/dirty ratio checks</text>
+<circle cx="1726" cy="1183" r="3" fill="#34d399"/>
+<text x="1738" y="1188" fill="#cbd5e1" font-size="15" font-family="sans-serif">Key-deduplication retaining latest record per message key</text>
+<circle cx="1726" cy="1211" r="3" fill="#34d399"/>
+<text x="1738" y="1216" fill="#cbd5e1" font-size="15" font-family="sans-serif">Zero allocation byte-slice filtering on ingress records</text>
+<rect x="2420" y="1010" width="680" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2432 1010 L 3088 1010" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+<text x="2444" y="1046" fill="#fbbf24" font-size="20" font-family="sans-serif" font-weight="700">Multi-Cloud Tiered Storage Offload</text>
+<rect x="2948" y="1028" width="132" height="26" rx="6" fill="#b45309"/>
+<text x="3014.0" y="1046" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Tiered Storage</text>
+<text x="2444" y="1076" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Hybrid Hot NVMe &amp; Cold Cloud Storage</text>
+<circle cx="2446" cy="1099" r="3" fill="#fbbf24"/>
+<text x="2458" y="1104" fill="#cbd5e1" font-size="15" font-family="sans-serif">Seamless local NVMe rollover to cloud object storage</text>
+<circle cx="2446" cy="1127" r="3" fill="#fbbf24"/>
+<text x="2458" y="1132" fill="#cbd5e1" font-size="15" font-family="sans-serif">Async OffloadTask queue powered by worker thread pools</text>
+<circle cx="2446" cy="1155" r="3" fill="#fbbf24"/>
+<text x="2458" y="1160" fill="#cbd5e1" font-size="15" font-family="sans-serif">Supported providers: AWS S3, MinIO, Google Cloud GCS, Azure Blob</text>
+<circle cx="2446" cy="1183" r="3" fill="#fbbf24"/>
+<text x="2458" y="1188" fill="#cbd5e1" font-size="15" font-family="sans-serif">Transparent cold segment retrieval on historical fetch requests</text>
+<circle cx="2446" cy="1211" r="3" fill="#fbbf24"/>
+<text x="2458" y="1216" fill="#cbd5e1" font-size="15" font-family="sans-serif">Local disk space preservation with LRU cache eviction</text>
+<rect x="1700" y="1400" width="1400" height="240" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1712 1400 L 3088 1400" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="1724" y="1436" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">Broker Orchestration &amp; Replication Client</text>
+<rect x="2972" y="1418" width="108" height="26" rx="6" fill="#047857"/>
+<text x="3026.0" y="1436" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">gRPC Client</text>
+<text x="1724" y="1466" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">HTTP/2 gRPC Channel • Automated Broker Lifecycle</text>
+<circle cx="1726" cy="1489" r="3" fill="#34d399"/>
+<text x="1738" y="1494" fill="#cbd5e1" font-size="15" font-family="sans-serif">Continuous gRPC background client connected to Go Controller on Port 8001</text>
+<circle cx="1726" cy="1517" r="3" fill="#34d399"/>
+<text x="1738" y="1522" fill="#cbd5e1" font-size="15" font-family="sans-serif">Reports Log End Offsets (LEO), partition lag, and storage health every 2 seconds</text>
+<circle cx="1726" cy="1545" r="3" fill="#34d399"/>
+<text x="1738" y="1550" fill="#cbd5e1" font-size="15" font-family="sans-serif">Receives dynamic configuration updates (quotas, topic compression codecs)</text>
+<circle cx="1726" cy="1573" r="3" fill="#34d399"/>
+<text x="1738" y="1578" fill="#cbd5e1" font-size="15" font-family="sans-serif">Automated partition leader/follower transitions directed by Controller</text>
+<circle cx="1726" cy="1601" r="3" fill="#34d399"/>
+<text x="1738" y="1606" fill="#cbd5e1" font-size="15" font-family="sans-serif">Follower replica replication loop: issues Native Cmd 3 ReplicaFetch to leader broker</text>
+<line x1="1540" y1="1480" x2="1660" y2="1480" stroke="#38bdf8" stroke-width="4"  marker-end="url(#arrow-cyan)"/>
+<rect x="1486.0" y="1454.0" width="228" height="24" rx="6" fill="#0b0f19" stroke="#38bdf8" stroke-width="1.5"/>
+<text x="1600.0" y="1471.0" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="700" text-anchor="middle">Heartbeat &amp; Telemetry (2s)</text>
+<line x1="1660" y1="1540" x2="1540" y2="1540" stroke="#34d399" stroke-width="4"  marker-end="url(#arrow-emerald)"/>
+<rect x="1486.0" y="1514.0" width="228" height="24" rx="6" fill="#0b0f19" stroke="#34d399" stroke-width="1.5"/>
+<text x="1600.0" y="1531.0" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="700" text-anchor="middle">Configs &amp; Assignments Push</text>
+<line x1="60" y1="2110" x2="3140" y2="2110" stroke="#1e293b" stroke-width="1"/>
+<text x="96" y="2135" fill="#64748b" font-size="14" font-family="sans-serif">AeroStream Next-Gen Distributed Streaming Platform • Excalidraw v2 Verified Architecture Spec</text>
+<text x="3104" y="2135" fill="#64748b" font-size="14" font-family="sans-serif" text-anchor="end">Production Engineered • High-Resolution 3200×2160</text>
+</svg>

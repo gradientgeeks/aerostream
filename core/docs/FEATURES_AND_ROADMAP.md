@@ -112,29 +112,22 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 
 ## 5. Strategic Roadmap for AeroStream
 
-```
-+-----------------------------------------------------------------------------------+
-|                        AeroStream Evolution Roadmap                               |
-+-----------------------------------------------------------------------------------+
-| [x] Phase 1: Kafka Wire Protocol Shim  -> Produce / Fetch / Metadata / ApiVersions |
-| [x] Phase 2: Log Compaction Cleaner    -> Key-hash indexing & Tombstone garbage   |
-| [x] Phase 3: Multi-Cloud Tiered Storage-> Async offloading to S3, GCS, Azure, MinIO|
-| [x] Phase 4: Idempotent Producer EOS   -> Producer ID (PID) & sequence de-dup     |
-| [x] Phase 5: Built-in Schema Registry  -> Avro, Protobuf, JSON Schema & Web UI    |
-| [x] Phase 6: In-Broker Stream Transforms-> Native WASM & Inline Transform Engine   |
-| [x] Phase 7: Enterprise RBAC / ACLs    -> Principal Roles & Granular Rules        |
-| [x] Phase 8: Connectors Ecosystem      -> Kafka Connect API & Native Connectors   |
-+-----------------------------------------------------------------------------------+
-|                       Next-Generation Enterprise Horizon                          |
-+-----------------------------------------------------------------------------------+
-| [x] Phase 9: End-to-End 2PC Distributed Transactions (Multi-Topic Atomic Commits) |
-| [~] Phase 10: Massive Partition Density (core done; broker-level scale test open) |
-| [x] Phase 11: Enterprise Wire Security (SASL/PLAIN, SASL/SCRAM-SHA-256)           |
-| [ ] Phase 12: Distributed Stateful Stream Processing (Windows, KTable State Stores)|
-| [ ] Phase 13: Cross-Datacenter Active-Active Geo-Replication (Cluster Mirroring)  |
-| [ ] Phase 14: Chaos Engineering, Jepsen Hardening & Soak Testing                  |
-+-----------------------------------------------------------------------------------+
-```
+| Phase | Capability | Focus Area | Status |
+|:---|:---|:---|:---|
+| **Phase 1** | Kafka Wire Protocol Shim | Produce, Fetch, Metadata, ApiVersions | **Completed** |
+| **Phase 2** | Log Compaction Cleaner | Key-hash indexing & tombstone GC | **Completed** |
+| **Phase 3** | Multi-Cloud Tiered Storage | S3, MinIO, GCS, Azure Blob offload | **Completed** |
+| **Phase 4** | Idempotent Producer EOS | PID & sequence deduplication | **Completed** |
+| **Phase 5** | Built-in Schema Registry | Avro, Protobuf, JSON Schema | **Completed** |
+| **Phase 6** | Stream Transforms | Inline filtering, masking & WASM | **Completed** |
+| **Phase 7** | Enterprise RBAC & ACLs | Principal roles & Swiss Tables lookup | **Completed** |
+| **Phase 8** | Connectors Ecosystem | Kafka Connect REST API & native tasks | **Completed** |
+| **Phase 9** | Distributed 2PC Transactions | Multi-topic atomic commits & WAL | **Completed** |
+| **Phase 10** | Massive Partition Density | Shard-per-core partition routing | **Active / In Progress** |
+| **Phase 11** | Enterprise Wire Security | SASL/PLAIN, SASL/SCRAM-SHA-256 | **Completed** |
+| **Phase 12** | Stateful Stream Processing | Windows & KTable state stores | Planned |
+| **Phase 13** | Geo-Replication | Active-Active cross-DC mirroring | Planned |
+| **Phase 14** | Chaos & Jepsen Hardening | Failure injection & soak verification | Planned |
 
 ---
 

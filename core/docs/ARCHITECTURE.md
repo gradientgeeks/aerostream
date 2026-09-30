@@ -2,8 +2,8 @@
 
 **AeroStream** is a distributed, high-throughput, cloud-native event streaming and messaging engine designed for microsecond-latency event distribution, petabyte-scale retention, and modern cloud deployment. AeroStream addresses fundamental architectural bottlenecks in traditional distributed streaming platforms (such as JVM memory churn, stop-the-world garbage collection pauses, heavy thread thrashing, and fragile external consensus dependencies) by implementing a **Dual-Engine Architecture**:
 
-1. A distributed, resilient **Control Plane** authored in **Go**, utilizing HashiCorp Raft for cluster state consensus, metadata quorum, schema governance, RBAC enforcement, connectors management, and stream transforms.
-2. An extreme-performance, zero-copy **Data Plane** authored in **Rust**, utilizing Tokio with CPU-pinned worker threads, kernel `sendfile(2)` zero-copy transfers, memory-mapped (`mmap`) indices, append-only segmented commit logs, Kafka wire-protocol compatibility, and multi-cloud tiered storage offloading.
+1. A distributed, resilient **Control Plane** authored in **Go 1.26**, utilizing HashiCorp Raft for cluster state consensus, metadata quorum, schema governance, RBAC enforcement, connectors management, stream transforms, and Green Tea GC with SIMD Swiss Tables.
+2. An extreme-performance, zero-copy **Data Plane** authored in **Rust 1.98.1 (Edition 2024)**, utilizing Tokio 1.48 with CPU-pinned worker threads, kernel `sendfile(2)` zero-copy transfers, memory-mapped (`mmap`) indices, append-only segmented commit logs, Kafka wire-protocol compatibility, and multi-cloud tiered storage offloading.
 
 ---
 
@@ -15,38 +15,12 @@ AeroStream resolves this dichotomy through clean physical and architectural deco
 
 ![AeroStream Dual-Engine Architecture](images/dual_engine_architecture.png)
 
-```
-+===================================================================================================+
-|                                    AeroStream Dual-Engine Topology                                |
-+===================================================================================================+
-|                                                                                                   |
-|  [ Kafka Clients ]      [ Native TCP Clients ]     [ Web Console UI ]     [ HTTP REST / Curl ]     |
-|   (:9092 wire)               (:9091 data)             (:9001 Angular)          (:9001 REST)       |
-|         │                          │                         │                       │            |
-|         │                          │                         └───────────┬───────────┘            |
-|         │                          │                                     │                        |
-|         ▼                          ▼                                     ▼                        |
-|  +───────────────────────────────────────────────+      +──────────────────────────────────────+  |
-|  |           RUST STORAGE DATA PLANE             |      |        GO RAFT CONTROL PLANE         |  |
-|  |       (Storage Broker Kernel - Port 9091/9092)|      |      (Cluster Controller - Port 8001)|  |
-|  +───────────────────────────────────────────────+      +──────────────────────────────────────+  |
-|  | * Tokio Async I/O (epoll / kqueue)            |      | * HashiCorp Raft Consensus Quorum    |  |
-|  | * Pinned CPU Threads (libc::sched_setaffinity)|      | * Topic & Partition Metadata FSM     |  |
-|  | * Zero-Copy Network Transfer (sendfile(2))    |      | * Confluent Schema Registry          |  |
-|  | * Append-Only Commit Log (.log / .idx)        |◄────►| * Granular RBAC & ACL Policy Engine  |  |
-|  | * CRC32 (IEEE 802.3) & CRC32C (Castagnoli)    | gRPC | * Cooperative Sticky Rebalance       |  |
-|  | * Idempotent Producer Tracking (EOS)          |      | * Stream Transforms (WASM/Filter/PII)|  |
-|  | * Background Log Compaction & Tombstone GC   |      | * Kafka Connect Management API       |  |
-|  | * Async Tiered Storage Offloader Pipeline     |      | * Broker Heartbeats & Drain Workflow |  |
-|  +───────────────────────┬───────────────────────+      +──────────────────────────────────────+  |
-|                          │                                                                        |
-|                          ▼                                                                        |
-|  +─────────────────────────────────────────────────────────────────────────────────────────────+  |
-|  |                                Multi-Cloud Tiered Storage                                   |  |
-|  |      [ NVMe / SSD Hot ] ──► [ AWS S3 / MinIO ] ──► [ Google Cloud GCS ] ──► [ Azure Blob ]  |  |
-|  +─────────────────────────────────────────────────────────────────────────────────────────────+  |
-+===================================================================================================+
-```
+The AeroStream Dual-Engine topology separates ingress and storage into distinct operational planes:
+
+* **Client Ingress Layer**: Supports Kafka clients (`:9092`), native binary streaming clients (`:9091`), Angular 21 Web Console (`:9001`), and HTTP REST endpoints (`:9001`).
+* **Rust Storage Data Plane (Ports 9091/9092)**: Pinned Tokio worker threads, zero-copy `sendfile(2)` kernel dispatch, Shard-per-Core partition logs, hardware CRC32C, idempotent producer tracking, and background log compaction.
+* **Go Raft Control Plane (Ports 7001/8001/9001)**: HashiCorp Raft quorum consensus, dynamic metadata FSM, Confluent-compatible Schema Registry, Swiss Tables SIMD RBAC evaluation, stream transforms, and connector runtimes.
+* **Tiered Storage Pipeline**: Seamless offload from local NVMe hot segments to AWS S3, MinIO, Google Cloud Storage, or Azure Blob Storage.
 
 ### Why Go for the Control Plane?
 
@@ -78,48 +52,37 @@ Full methodology, per-run ranges and durability caveats are in [`benchmarks/BENC
 | **OS threads** | 3 | 3 |
 | **Time until usable** | 1.8-3.4 s | 1.8-3.4 s |
 
---- | ---: | ---: | ---: | ---: |
-| **100 B messages (msgs/s)** | 146,199 | 178,253 | **186,727** | **188,324** |
-| **1 KB messages (msgs/s)** | 46,729 | 67,385 | **174,714** | 71,023 |
-| **1 MB messages (MB/s)** | **384** | 306 | 347 (277-1,233) | 333 |
-| **10 MB messages (MB/s)** | 240 | **299** | 276 (271-914) | 166 |
-| **50 MB messages (MB/s)** | 81 | 95 | **280** | 81 |
-| **Broker idle memory** | 314 MiB | 137 MiB | **1.3-5.4 MiB** | 1.3 MiB |
-| **Peak memory under load** | 1,434 MiB | 1,364 MiB | 320 MiB | 143 MiB |
-| **OS threads** | 130 | 10 | 3 | 3 |
-| **Time until usable** | 3.9-4.2 s | **0.75 s** | 1.8-3.4 s | 1.8-3.4 s |
+
+### OpenMessaging Benchmark (OMB) Results on AWS EC2 (`c6id.2xlarge`)
+
+AeroStream was evaluated using the official Linux Foundation OpenMessaging Benchmark (OMB) suite through its Kafka wire protocol port (`9092`) on an AWS `c6id.2xlarge` (8 vCPUs, 16 GiB RAM, local NVMe SSD, 32 partitions, 1,024-byte payloads):
+
+| Workload Target | Actual Publish Rate | Publish $p_{50}$ | Publish $p_{99}$ | Publish $p_{99.9}$ | End-to-End $p_{99}$ | Broker Cores Busy | Errors |
+|---|---|---|---|---|---|---|---|
+| **100,000 msg/s** (fixed) | 100,082 msg/s (97.7 MB/s) | **0.7 ms** | **1.4 ms** | **2.3 ms** | 2.0 ms | 14% | 0 |
+| **200,000 msg/s** (fixed) | 200,175 msg/s (195.5 MB/s) | **0.7 ms** | **1.7 ms** | **3.0 ms** | 2.0 ms | 22% | 0 |
+| **Maximum Rate** (unthrottled) | **271,350 msg/s** (265.0 MB/s) | 105 ms | 1,104 ms | 1,376 ms | 1,119 ms | 55% | 0 |
 
 ---
 
 ## 2. Control Plane Deep-Dive (`go-controller/`)
 
-The AeroStream Control Plane runs as the central coordination daemon (`controller`). It manages cluster membership, topic partitions, leader assignments, high-watermark computation, schema governance, stream transformations, connectors, and role-based access control.
+The AeroStream Control Plane runs as the central coordination daemon (`controller`). Engineered in **Go 1.26**, it leverages Go 1.26's **Green Tea GC** (providing ultra-low sub-millisecond stop-the-world pause guarantees), compiler-intrinsic **Swiss Tables** (SIMD-accelerated hash map lookups with fast metadata control bytes), and optimized goroutine scheduling. It manages cluster membership, topic partitions, leader assignments, high-watermark computation, schema governance, stream transformations, connectors, and role-based access control.
 
-```
-+─────────────────────────────────────────────────────────────────────────────────────────────+
-|                                Go Controller Internal Architecture                          |
-+─────────────────────────────────────────────────────────────────────────────────────────────+
-|                                                                                             |
-|        [ REST API :9001 ]       [ gRPC ControlService :8001 ]    [ Raft Consensus :7001 ]   |
-|                 │                              │                               │            |
-|                 ▼                              ▼                               ▼            |
-|       +───────────────────+          +───────────────────+           +───────────────────+  |
-|       |    REST Server    |          |    gRPC Server    |           |     RaftNode      |  |
-|       |  (api.go / HTTP)  |          | (server.go / gRPC)|           |  (raft.go / TCP)  |  |
-|       +─────────┬─────────+          +─────────┬─────────+           +─────────┬─────────+  |
-|                 │                              │                               │            |
-|                 ├──────────────────────────────┴───────────────────────────────┤            |
-|                 ▼                                                              ▼            |
-|       +──────────────────────────────────+           +───────────────────────────────────+  |
-|       |      State Subsystems & Logic    |           |    HashiCorp Raft Consensus Core  |  |
-|       |                                  |           |                                   |  |
-|       | * Schema Registry (registry.go)  |           | * FSM State Machine (fsm.go)      |  |
-|       | * Transform Engine (engine.go)   |◄─────────►| * ClusterState State Container    |  |
-|       | * ACL / RBAC Manager (acls.go)   |  Propose  | * Snapshot & Restore Engine       |  |
-|       | * Connect Manager (manager.go)   |  Log Entry| * Failure Detection & Drain Logic |  |
-|       +──────────────────────────────────+           +───────────────────────────────────+  |
-+─────────────────────────────────────────────────────────────────────────────────────────────+
-```
+![AeroStream Controller-Broker Orchestration](images/controller_broker_orchestration.png)
+
+The controller architecture decouples ingress interfaces, state consensus, and domain subsystems:
+* **Ingress Protocols**:
+  * **REST Management API (`:9001`)**: Administers topics, partitions, broker draining, schemas, transforms, connectors, and metrics.
+  * **gRPC Control Service (`:8001`)**: High-throughput multiplexed HTTP/2 channel for broker registrations, status heartbeats, metadata updates, and replica ISR synchronization.
+  * **Raft Consensus Transport (`:7001`)**: Dedicated TCP transport for HashiCorp Raft log replication, leader heartbeats, and cluster state agreement.
+* **State Subsystems & Core Engines**:
+  * **Consensus Core ([`RaftNode`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/consensus/raft.go#L14) & [`FSM`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/consensus/fsm.go#L78))**: Finite state machine executing Raft commands, maintaining [`ClusterState`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/consensus/fsm.go#L70), and generating compact point-in-time state snapshots.
+  * **Schema Registry Engine ([`Registry`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/schemaregistry/registry.go#L105))**: Thread-safe schema evolution evaluator supporting Avro, JSON Schema, and Protobuf with backward, forward, and full compatibility validation.
+  * **Stream Transform Engine ([`Engine`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/transform/engine.go#L52))**: Real-time record mutator running PII redaction, field extraction, mathematical expressions, and sandboxed WebAssembly (WASI) modules.
+  * **RBAC & ACL Manager ([`AclManager`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/auth/acls.go#L66))**: Role-based access control engine evaluating fine-grained principal permissions with wildcard matching.
+  * **Connect Manager ([`ConnectorManager`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/connect/manager.go#L53))**: Kafka Connect-compatible connector lifecycle manager and task distributor.
+
 
 ### 2.1 Raft Consensus Engine
 
@@ -244,40 +207,15 @@ The orchestration between the Go Control Plane and the Rust Data Plane is driven
 
 ![AeroStream Controller-Broker Orchestration](images/controller_broker_orchestration.png)
 
-```
-+===================================================================================================+
-|                        AeroStream Controller-Broker Control Plane Channels                        |
-+===================================================================================================+
-|                                                                                                   |
-|    +─────────────────────────────────+             +────────────────────────────────────────+     |
-|    |      GO CONTROLLER (LEADER)     |             |         RUST STORAGE BROKER            |     |
-|    |  Raft Consensus & State Machine |             |       Data Plane Storage Kernel        |     |
-|    +────────────────┬────────────────+             +───────────────────┬────────────────────+     |
-|                     │                                                  │                          |
-|                     │◄─── 1. RegisterBroker(host, ports, rack) ────────┤ (At broker startup)      |
-|                     ├─── RegisterBrokerResponse(success) ─────────────►│                          |
-|                     │                                                  │                          |
-|                     │◄─── 2. Heartbeat(disk_usage, replica_offsets) ───┤ (Every 2 seconds)        |
-|                     │     [Log End Offsets (LEO) reported per partition]│                         |
-|                     │                                                  │                          |
-|                     ├─── 3. HeartbeatResponse ────────────────────────►│ (Piggybacked state)      |
-|                     │     - assigned_leaders & assigned_followers      │                          |
-|                     │     - client_quotas (producer/consumer byte rates)                          |
-|                     │     - topic_compression (zstd/lz4/snappy codecs)  │                         |
-|                     │                                                  │                          |
-|                     │                                                  │                          |
-|    +────────────────┴────────────────+             +───────────────────┴────────────────────+     |
-|    |     FAILURE DETECTION & DRAIN   |             |       REPLICA REPLICATION (CMD 3)      |     |
-|    +─────────────────────────────────+             +────────────────────────────────────────+     |
-|    | * Sweep every 3s: timeout > 8s  |             | * Follower broker issues Native Cmd 3  |     |
-|    | * Reassign leaders from ISR     |◄── gRPC ───►| * Leader updates follower offset       |     |
-|    | * POST /api/brokers/{id}/drain  |             | * Advances partition High Watermark    |     |
-|    +─────────────────────────────────+             +────────────────────────────────────────+     |
-+===================================================================================================+
-```
+The orchestration lifecycle operates across four tightly-coupled control channels:
+* **Registration Channel**: Invoked once at storage daemon bootstrap to publish endpoint addresses, dual-protocol ports (`9091` Native, `9092` Kafka), hardware topology, and rack awareness.
+* **Telemetry & Heartbeat Channel**: Periodic 2-second bidirectional keepalive exchanging storage metrics, Log End Offsets (LEO) for all local partitions, and receiving leader/follower assignments.
+* **State Synchronization Channel**: Piggybacks client bandwidth quotas, dynamic topic configurations, and compression codecs (`zstd`, `lz4`, `snappy`) directly in heartbeat replies.
+* **Failure Detection & Reassignment Channel**: A 3-second evaluation ticker that evicts unresponsive brokers after an 8-second timeout, immediately reassigning partition leadership to remaining in-sync replicas (ISR).
+
 
 1. **Broker Registration**:
-   Upon startup, each Rust broker calls [`ControlService.RegisterBroker`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/grpcserver/server.go#L62) carrying `broker_id`, `host`, `data_port` (`9091`), `kafka_port` (`9093`), and `rack` identifier. The controller commits a `CmdRegisterBroker` entry into the Raft log, recording the broker in [`ClusterState.Brokers`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/consensus/fsm.go#L71).
+   Upon startup, each Rust broker calls [`ControlService.RegisterBroker`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/grpcserver/server.go#L62) carrying `broker_id`, `host`, `data_port` (`9091`), `kafka_port` (`9092`), and `rack` identifier. The controller commits a `CmdRegisterBroker` entry into the Raft log, recording the broker in [`ClusterState.Brokers`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/consensus/fsm.go#L71).
 
 2. **Bidirectional 2-Second Heartbeat & LEO Reporting**:
    Every 2 seconds, each broker invokes [`ControlService.Heartbeat`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/grpcserver/server.go#L88):
@@ -317,40 +255,11 @@ The AeroStream Data Plane runs as the native storage daemon (`rust-broker`). It 
 
 ![AeroStream Shard-per-Core Architecture](images/shard_per_core_architecture.png)
 
-```
-+===================================================================================================+
-|                             AeroStream Shard-per-Core Data Plane Architecture                     |
-+===================================================================================================+
-|                                                                                                   |
-|  [ Kafka Clients (:9093) ]                              [ Native TCP Clients (:9091) ]            |
-|               │                                                        │                          |
-|               ▼                                                        ▼                          |
-|  +─────────────────────────────────────────────────────────────────────────────────────────────+  |
-|  |                     Tokio Asynchronous Network Ingress & ShardRouter                        |  |
-|  |           shard_id = (DefaultHasher(topic, partition)) % num_shards                         |  |
-|  +─────────────────────────────────────────────────────────────────────────────────────────────+  |
-|            │                                 │                                 │                  |
-|            ▼ (flume channel)                 ▼ (flume channel)                 ▼ (flume channel)  |
-|  +───────────────────────────+ +───────────────────────────+ +───────────────────────────+        |
-|  |      SHARD ENGINE #0      | |      SHARD ENGINE #1      | |      SHARD ENGINE #2..N   |        |
-|  | Dedicated OS Thread       | | Dedicated OS Thread       | | Dedicated OS Thread       |        |
-|  | Pinned to CPU Core 0      | | Pinned to CPU Core 1      | | Pinned to CPU Core 2..N   |        |
-|  | (libc::sched_setaffinity) | | (libc::sched_setaffinity) | | (libc::sched_setaffinity) |        |
-|  +───────────────────────────+ +───────────────────────────+ +───────────────────────────+        |
-|  | * Owned PartitionLogs     | | * Owned PartitionLogs     | | * Owned PartitionLogs     |        |
-|  | * In-Place Offset Patch   | | * In-Place Offset Patch   | | * In-Place Offset Patch   |        |
-|  | * Paced Writeback (8 MiB) | | * Paced Writeback (8 MiB) | | * Paced Writeback (8 MiB) |        |
-|  | * Out-of-Lock Disk Reads  | | * Out-of-Lock Disk Reads  | | * Out-of-Lock Disk Reads  |        |
-|  | * Hard-Linked Archival    | | * Hard-Linked Archival    | | * Hard-Linked Archival    |        |
-|  +─────────────┬─────────────+ +─────────────┬─────────────+ +─────────────┬─────────────+        |
-|                │                             │                             │                      |
-|                ▼                             ▼                             ▼                      |
-|  +─────────────────────────────────────────────────────────────────────────────────────────────+  |
-|  |                                Physical NVMe Storage & Tiered Offload                       |  |
-|  |   [ .log / .idx Files ] ──► [ cold_storage/ (Hard Links) ] ──► [ AWS S3 / GCS / Azure Blob ]|  |
-|  +─────────────────────────────────────────────────────────────────────────────────────────────+  |
-+===================================================================================================+
-```
+The shard architecture orchestrates three fundamental layers:
+* **Ingress & Dispatch Layer**: Dual Tokio listeners on port `9091` (native binary) and port `9092` (Kafka protocol) parse message batch envelopes and hash `(topic, partition)` through [`ShardRouter`](file:///home/uttam/projects/AeroMQ/rust-broker/src/shard/router.rs#L5).
+* **Shard Execution Layer**: Dedicated OS threads (`shard-0` through `shard-N`), each pinned to a dedicated hardware CPU core via `libc::sched_setaffinity`. Each thread possesses absolute, lock-free ownership of its assigned partition log instances.
+* **Storage & Tiered Layer**: NVMe append-only commit logs, in-place base offset patching, dirty memory writeback pacing, and background offloading via asynchronous task queues to cloud object stores.
+
 
 ### 3.1 Shard-per-Core Architecture & Thread-per-Core Engine
 
@@ -557,6 +466,8 @@ Disk ──► Page Cache ──────────────────
 
 ### 3.8 Kafka Wire Protocol Compatibility Engine
 
+![AeroStream Dual-Protocol Engine: Native vs. Kafka Wire Protocol](images/native_and_kafka_dual_protocol.png)
+
 AeroStream implements a high-performance native parser for the Apache Kafka wire protocol in [`kafka_server.rs`](file:///home/uttam/projects/AeroMQ/rust-broker/src/net/kafka_server.rs#L12), [`handlers.rs`](file:///home/uttam/projects/AeroMQ/rust-broker/src/kafka/handlers.rs), and [`admin.rs`](file:///home/uttam/projects/AeroMQ/rust-broker/src/kafka/admin.rs):
 
 * **4-Byte Frame Delimiter**: Incoming frames are framed with a 32-bit big-endian length prefix.
@@ -605,19 +516,14 @@ For compaction-enabled topics, AeroStream runs an autonomous background cleaner 
 
 To decouple storage costs from local disk capacity, AeroStream integrates an asynchronous tiered storage architecture ([`storage/`](file:///home/uttam/projects/AeroMQ/rust-broker/src/storage/)):
 
-```
-[ Active Head Segment ] ──(roll_over)──► [ Closed Local Segment ]
-                                                  │
-                                                  ▼ (mpsc channel)
-                                          [ OffloadTask Queue ]
-                                                  │
-                                                  ▼
-                                       [ TieredStorageOffloader ]
-                                                  │
-                  ┌───────────────────────────────┼───────────────────────────────┐
-                  ▼                               ▼                               ▼
-          [ AWS S3 / MinIO ]            [ Google Cloud GCS ]            [ Azure Blob Storage ]
-```
+![AeroStream Multi-Cloud Tiered Storage Pipeline](images/tiered_storage_pipeline.png)
+
+The tiered offload pipeline operates continuously in the background, entirely decoupled from latency-sensitive client write operations:
+* **Segment Sealing**: Active head segments roll over based on size (`max_segment_size = 1 GiB`) or time (`segment_ms = 604800000`). Once sealed, segments become strictly immutable.
+* **Hard-Link Staging**: The broker creates a hard link in `cold_storage/` within microseconds without copying data bytes, ensuring that compaction or retention pruning does not prematurely unlink the active file while offloading is pending.
+* **Asynchronous Queue Dispatch**: An `OffloadTask` tuple `(Topic, Partition, BaseOffset, LogPath, IdxPath)` is enqueued onto an unbounded lock-free channel.
+* **Parallel Cloud Upload**: Worker tasks consume the queue and invoke parallel multipart or streaming PUT requests against the target object storage bucket.
+
 
 1. **The Provider Trait ([`TieredStorageProvider`](file:///home/uttam/projects/AeroMQ/rust-broker/src/storage/provider.rs#L61))**:
    Exposes standard async operations: `put_segment`, `get_segment`, `delete_segment`, `exists`, and `list_segments`.
@@ -633,120 +539,96 @@ To decouple storage costs from local disk capacity, AeroStream integrates an asy
 4. **Transparent Cold Segment Retrieval**:
    When a consumer requests an offset that has been pruned locally, [`find_cold_segment`](file:///home/uttam/projects/AeroMQ/rust-broker/src/log/manager.rs#L471) binary-searches the cold storage directory, allowing reads of historical segments without manual operator intervention.
 
+### 3.12 KIP-932 Share Groups & Cooperative Queue Semantics
+
+Standard partition-based consumer groups enforce a strict 1:1 mapping between a topic partition and an active consumer instance. When partition counts are lower than consumer worker scale, or when individual message processing latencies exhibit high variance, partition head-of-line blocking degrades overall system throughput. AeroStream implements **Share Groups (KIP-932)** to provide cooperative, queue-like record delivery directly over partitioned append-only logs:
+
+1. **Share-Partition Coordinator**:
+   Within the storage daemon, each partition assigned to a Share Group is wrapped by an in-memory `SharePartitionState` actor. The coordinator decouples offset progression from single-consumer ownership:
+   * **`Available`**: Records residing between the share-partition start offset and the High Watermark ($HW$) that have not yet been leased.
+   * **`Acquired`**: Records leased to a consumer instance for a configurable `acquisition_timeout_ms` (default: 30,000 ms). An active acquisition lock prevents duplicate delivery to concurrent consumers.
+   * **`Acknowledged`**: Records successfully processed and acknowledged via `ShareAcknowledge`. Once contiguous offset sequences reach terminal acknowledgment, the share group base offset advances.
+   * **`Archived`**: Records whose delivery attempt counter exceeds `max_delivery_attempts` (default: 5) are marked archived and routed to an internal dead-letter queue (DLQ) topic, preventing poisonous records from blocking queue progression.
+2. **ShareFetch & ShareAcknowledge Wire Protocol**:
+   * On port `9092` (Kafka protocol) and port `9091` (Native protocol), clients issue batch `ShareFetch` requests. The broker atomically leases an offset interval $[O_{\text{start}}, O_{\text{end}}]$ to the requesting client connection.
+   * As processing completes, the consumer issues pipelined `ShareAcknowledge` packets specifying acknowledgment types (`ACK = 1`, `REJECT = 2`, `RELEASE = 3`).
+   * If a consumer crashes or fails to heartbeat before `acquisition_timeout_ms` expires, the acquisition lock times out, automatically transitioning the records back to `Available` for redelivery to another worker.
+
+### 3.13 Streaming Apache Iceberg Lakehouse Offloading & Parquet Vectorization
+
+To bridge operational event streaming with modern analytical lakehouses (Trino, DuckDB, Apache Spark, Snowflake, Databricks), AeroStream provides native, continuous log-to-columnar offloading into **Apache Iceberg Table Format v2**:
+
+1. **In-Memory Columnar Transcoding**:
+   As active log segments are sealed and hard-linked, the background offloader streams raw binary records into Apache Arrow columnar record batches using the vectorized Rust `arrow` and `parquet` engines:
+   * Schema mappings are resolved dynamically against the Control Plane Schema Registry ([`Registry`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/schemaregistry/registry.go#L105)), translating Avro or JSON schemas into strict Arrow datatypes.
+   * Batches are encoded as columnar Parquet files compressed with Zstandard (`zstd`) level 3 or Snappy, generating column-level dictionary encoding, bloom filters, and min/max statistics.
+2. **Iceberg Table Spec v2 Commits**:
+   * The offloader generates Iceberg data file manifests (`manifest-list.avro`) recording byte lengths, partition tuples, record counts, and lower/upper column bounds.
+   * Fast metadata commits are posted atomically to the designated Iceberg catalog (REST Catalog, AWS Glue, or Project Nessie).
+   * Downstream query engines can query the streaming topic data directly in object storage with millisecond partition pruning, eliminating external ETL connectors and micro-batch pipelines.
+
+### 3.14 Two-Phase Commit (2PC) Distributed Transaction Coordinator
+
+AeroStream guarantees end-to-end **Exactly-Once Semantics (EOS)** across multi-partition and cross-topic message workflows via an embedded Two-Phase Commit (2PC) transaction coordinator:
+
+1. **Transaction Lifecycle State Machine**:
+   Transactional producers register via `InitProducerId`, receiving an assigned Producer ID ($PID$) and incremented Producer Epoch. Transactions progress through deterministic state transitions:
+   $$\text{Empty} \longrightarrow \text{Ongoing} \longrightarrow \text{PrepareCommit / PrepareAbort} \longrightarrow \text{CompleteCommit / CompleteAbort}$$
+2. **Write-Ahead Log Markers (`TxnMarkerBatch`)**:
+   When a producer invokes `EndTxn(commit = true/false)`, the transaction coordinator writes a transactional control batch (Record Type `0x02`) directly to the commit logs of all participating topic partitions:
+   * **Commit Marker**: Authorizes consumers to observe all preceding records in the transaction.
+   * **Abort Marker**: Instructs consumers to discard all preceding records associated with the aborted $PID$.
+3. **Log Stable Offset ($LSO$) & Read Isolation**:
+   The storage kernel maintains two distinct watermarks per partition:
+   * **High Watermark ($HW$)**: The highest offset replicated across all In-Sync Replicas (ISR).
+   * **Log Stable Offset ($LSO$)**: The offset of the earliest ongoing (uncommitted) transaction.
+   * Consumers configured with `isolation_level = read_committed` only receive messages up to $LSO$. Any aborted transaction records prior to $LSO$ are stripped from the fetch stream in-memory by [`handle_fetch`](file:///home/uttam/projects/AeroMQ/rust-broker/src/kafka/handlers.rs#L1353), guaranteeing strict transactional isolation without performance overhead on non-transactional reads.
+
 ---
 
-## 4. Architectural Workflows & Mermaid Diagrams
+## 4. Architectural Workflows & Operational Execution Pipelines
 
 ![AeroStream Zero-Copy Produce & Fetch Pipeline](images/produce_fetch_pipeline.png)
 
+
 ### 4.1 End-to-End Produce Flow
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Producer as Kafka / Native Producer
-    participant Ingress as Broker Ingress (Port 9092/9091)
-    participant Tracker as ProducerStateTracker
-    participant Kernel as PartitionLog Kernel
-    participant Disk as Local SSD / NVMe
-    participant Controller as Go Raft Controller
+The end-to-end produce lifecycle depicted in the diagram above proceeds through four deterministic stages:
 
-    Producer->>Ingress: ProduceRequest (Topic, Partition, Batch, PID, Seq)
-    Ingress->>Tracker: check_and_update_sequence(PID, Epoch, Seq)
-    alt Duplicate Sequence (Retry)
-        Tracker-->>Ingress: Duplicate (Cached Last Offset)
-        Ingress-->>Producer: ProduceResponse (Offset ACK, No Disk Write)
-    else Out-of-Order Sequence
-        Tracker-->>Ingress: OutOfOrder (Error 45)
-        Ingress-->>Producer: ProduceResponse (Error: OutOfOrderSequenceNumber)
-    else Valid Sequential Sequence
-        Tracker-->>Kernel: Sequence Validated
-        Kernel->>Disk: write_all(Record) -> .log (Page Cache)
-        Kernel->>Disk: write_all(Offset + Pos) -> .idx (16 Bytes)
-        Kernel->>Kernel: next_offset++, update HighWatermark
-        Kernel-->>Ingress: Committed Offset
-        Ingress-->>Producer: ProduceResponse (Success, Assigned Offset)
-        Note over Ingress,Controller: Async Heartbeat reports new Offset to Controller
-    end
-```
+1. **Ingress & Sequence Validation**: The client sends a `ProduceRequest` over port 9092 (Kafka protocol) or port 9091 (Native protocol). The broker worker extracts the Producer ID (PID), Producer Epoch, and Sequence Number, passing them to [`ProducerStateTracker`](file:///home/uttam/projects/AeroMQ/rust-broker/src/txn/tracker.rs).
+2. **Duplicate & Out-of-Order Detection**: If the sequence number is a duplicate retry, the cached last offset is immediately acknowledged without disk I/O. If out of order, status code 45 (`OutOfOrderSequenceNumber`) is returned.
+3. **Paced Writeback & Indexing**: For sequential records, the partition engine appends the payload to the active `.log` segment in Linux page cache, immediately writes the 16-byte sparse offset/position index entry into `.idx`, and periodically invokes `sync_file_range` to smooth disk I/O pressure.
+4. **Offset Assignment & Telemetry**: The log end offset ($LEO$) and High Watermark ($HW$) are advanced, and the committed base offset is returned to the client in the `ProduceResponse`. The broker's periodic 2-second heartbeat asynchronously transmits the updated $LEO$ telemetry to the Go Raft Controller.
 
 ### 4.2 End-to-End Zero-Copy Fetch Flow
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Consumer as Consumer Client
-    participant NetServer as DataServer / KafkaServer
-    participant LogMgr as PartitionLog Engine
-    participant PageCache as Linux Page Cache
-    participant NIC as Network Interface (Socket)
+The consumer read path minimizes CPU memory copies by leveraging direct kernel DMA:
 
-    Consumer->>NetServer: FetchRequest(Topic, Partition, StartOffset, MaxBytes)
-    NetServer->>LogMgr: read_from_offset(StartOffset, MaxBytes)
-    LogMgr->>LogMgr: Verify StartOffset < HighWatermark
-    alt StartOffset >= HighWatermark
-        LogMgr-->>NetServer: Empty / Wait for Replication
-        NetServer-->>Consumer: FetchResponse (0 Records)
-    else StartOffset < HighWatermark
-        LogMgr->>LogMgr: Binary Search .idx for StartOffset
-        LogMgr->>LogMgr: Resolve Physical Position & Byte Length
-        LogMgr-->>NetServer: File Descriptor, Position, BytesToRead
-        NetServer->>NetServer: Write Protocol Response Header
-        NetServer->>PageCache: libc::sendfile(socket_fd, file_fd, offset, bytes)
-        PageCache->>NIC: DMA Direct Transfer (Zero Userspace Copies)
-        NIC-->>Consumer: Raw Partition Stream Bytes
-    end
-```
+1. **Request Ingestion & High Watermark Gate**: The consumer issues a `FetchRequest` specifying topic, partition, starting offset, and maximum byte budget. The broker verifies that $\text{StartOffset} < HW$; requests beyond the High Watermark return 0 records without blocking.
+2. **Binary Index Lookup**: The partition engine performs a fast binary search on the memory-mapped `.idx` file to pinpoint the exact segment and physical byte offset corresponding to the requested log offset.
+3. **Zero-Copy DMA Transfer**: The broker writes the protocol response header into the socket buffer and invokes `libc::sendfile(socket_fd, file_fd, offset, bytes)`. The Linux kernel transfers data directly from page cache into the network interface controller (NIC) ring buffer via DMA, bypassing userspace entirely.
 
 ### 4.3 Control Plane Raft Quorum & Broker Failover Flow
 
+![AeroStream Controller-Broker Orchestration](images/controller_broker_orchestration.png)
+
 ![AeroStream Cluster Topology & Zero-Downtime Scale-Down](images/cluster_topology_scale_down.png)
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Controller1 as Controller 1 (Leader)
-    participant Controller2 as Controller 2 (Follower)
-    participant Broker1 as Broker 1 (Leader of P0)
-    participant Broker2 as Broker 2 (Replica of P0)
+Leader election, membership consensus, and automated broker failover are orchestrated through the following sequence:
 
-    Broker1--xController1: Heartbeat Stalls (> brokerInactiveTimeout)
-    Note over Controller1: Failure Detection Ticker Fires
-    Controller1->>Controller1: Propose(CmdCleanInactive)
-    Controller1->>Controller2: AppendEntries (Raft Log)
-    Controller2-->>Controller1: Quorum ACK (Majority Reached)
-    Controller1->>Controller1: FSM.Apply(CmdCleanInactive)
-    Note over Controller1: Mark Broker 1 Inactive; Elect Broker 2 new Leader for P0
-    Controller1->>Controller1: updateISRAndHW()
-    Broker2->>Controller1: Heartbeat()
-    Controller1-->>Broker2: HeartbeatResponse (Assigned Leader: P0)
-    Note over Broker2: Broker 2 assumes active leadership for Partition 0
-```
+1. **Heartbeat Monitoring**: The Go Raft Controller tracks periodic 2-second heartbeats from all active brokers.
+2. **Lease Expiry Detection**: If a broker fails to heartbeat within the 8-second lease window, the failure detector triggers `CmdCleanInactive`.
+3. **Raft Quorum Commit**: The Raft leader proposes the membership update to all follower controller nodes. Once a quorum majority acknowledges via `AppendEntries`, the state machine commits the transition.
+4. **ISR Recalculation & Failover**: The controller removes the dead broker from the In-Sync Replicas (ISR) set, promotes an eligible surviving in-sync replica as the new partition leader, and pushes the updated cluster topology to the remaining brokers on their next heartbeat poll.
 
 ### 4.4 Tiered Storage Segment Rollover & Offload Pipeline
 
 ![AeroStream Multi-Cloud Tiered Storage Pipeline](images/tiered_storage_pipeline.png)
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Log as PartitionLog
-    participant Channel as Offload Queue (mpsc)
-    participant Offloader as TieredStorageOffloader
-    participant Cloud as AWS S3 / GCS / Azure Blob
-
-    Note over Log: Segment size exceeds max_segment_size
-    Log->>Log: roll_over(): Flush active .log and .idx
-    Log->>Log: Copy segment to cold_storage/ directory
-    Log->>Log: Initialize new 000...<next_offset>.log
-    Log->>Channel: try_send(OffloadTask{Topic, Partition, Offset, Paths})
-    Channel-->>Offloader: recv(OffloadTask)
-    Offloader->>Offloader: Read .log and .idx bytes from disk
-    Offloader->>Cloud: put_segment("tiered/.../000000000000.log", log_bytes)
-    Offloader->>Cloud: put_segment("tiered/.../000000000000.idx", idx_bytes)
-    Cloud-->>Offloader: 200 OK (Uploaded)
-    Note over Offloader: Segment securely preserved in Cloud Object Store
-```
+1. **Active Segment Rollover**: When the active log segment reaches `max_segment_size` (default: 1 GB) or the roll timeout elapses, the broker seals the current `.log` and `.idx` files, copies them to the cold storage stage, and creates a fresh active segment starting at the next offset.
+2. **Asynchronous Offload Queue**: An `OffloadTask` containing segment coordinates is submitted to a lock-free background channel, decoupled from the hot produce path.
+3. **Multi-Cloud Upload**: The background offloader streams `.log` and `.idx` objects directly to AWS S3, MinIO, Google Cloud Storage, or Azure Blob Storage.
+4. **Transparent Tiered Read**: When historical consumers request offsets that have been rolled to object storage, the broker fetches the cold chunk transparently, caches it locally in the LRU read cache, and streams records back to the consumer.
 
 ---
 
@@ -754,7 +636,7 @@ sequenceDiagram
 
 ### 5.1 Angular Web Console UI Architecture
 
-The AeroStream Web Console resides in [`ui/src/app/`](file:///home/uttam/projects/AeroMQ/ui/src/app/). It is an enterprise Single Page Application built with Angular 18+, TypeScript, Tailwind CSS, and SCSS:
+The AeroStream Web Console resides in [`ui/src/app/`](file:///home/uttam/projects/AeroMQ/ui/src/app/). It is an enterprise Single Page Application built with **Angular 21**, TypeScript, Tailwind CSS, and SCSS:
 
 * **Real-Time Reactive Architecture**: Consumes the Go Controller REST API via Angular injectable services:
   * [`AeromqService`](file:///home/uttam/projects/AeroMQ/ui/src/app/services/aeromq.service.ts): Cluster topology visualizer, live broker heartbeats, partition distribution, topic metrics.
@@ -768,18 +650,57 @@ The AeroStream Web Console resides in [`ui/src/app/`](file:///home/uttam/project
   * [`MessagesComponent`](file:///home/uttam/projects/AeroMQ/ui/src/app/components/messages/messages.component.ts): Real-time message streaming viewer, JSON pretty printer, offset seek inspector.
   * [`ConsumerGroupsComponent`](file:///home/uttam/projects/AeroMQ/ui/src/app/components/consumer-groups/consumer-groups.component.ts): Lag monitoring per topic-partition ($HW - \text{Committed Offset}$).
 
-### 5.2 Client CLI & Kafka Client Ecosystem
+### 5.2 Client SDK Ecosystem (Native Protocol Port 9091 & Kafka Port 9092)
 
-1. **AeroStream Native CLI ([`client/main.go`](file:///home/uttam/projects/AeroMQ/client/main.go))**:
+1. **Official AeroStream Native Client SDKs (`github.com/gradientgeeks/aerostream-sdk`)**:
+   Production-grade native binary protocol client libraries (`0xAE 0x01` framing, sub-millisecond tail latency):
+   * 🦫 **Go**: [`github.com/gradientgeeks/aerostream-sdk/go`](file:///home/uttam/projects/AeroMQ/sdks/go/) (`v0.1.0-preview`)
+   * 🦀 **Rust**: [`aerostream-client`](file:///home/uttam/projects/AeroMQ/sdks/rust/) (`v0.1.0-preview`)
+   * ☕ **Java**: [`org.gradientgeeks.aerostream:aerostream-client`](file:///home/uttam/projects/AeroMQ/sdks/java/) (`v0.1.0-preview`)
+   * 🔷 **.NET (C#)**: [`GradientGeeks.AeroStream.Client`](file:///home/uttam/projects/AeroMQ/sdks/dotnet/) (`v0.1.0-preview`)
+   * 🟩 **Node.js / TypeScript**: [`@gradientgeeks/aerostream-client`](file:///home/uttam/projects/AeroMQ/sdks/nodejs/) (`v0.1.0-preview`)
+
+2. **AeroStream Native CLI ([`client/main.go`](file:///home/uttam/projects/AeroMQ/client/main.go))**:
    * Commands: `metadata`, `create-topic`, `produce`, `consume`, `benchmark`.
    * Directly interfaces with the gRPC Control Plane for discovery and opens high-speed TCP connections to storage brokers with framing:
      `[0xAE 0x01 (Magic)][Cmd: 1 byte][Length: 4 bytes BE][Payload]`
-2. **Universal Kafka Client Compatibility**:
+
+3. **Universal Apache Kafka Client Compatibility (Port 9092)**:
    Any standard Apache Kafka client connects seamlessly to port `9092`:
-   * **Python**: `kafka-python`, `confluent-kafka`
-   * **Go**: `segmentio/kafka-go`, `confluent-kafka-go`
-   * **Java**: `org.apache.kafka.clients.producer.KafkaProducer`, Spring Kafka
+   * **Java**: `org.apache.kafka:kafka-clients`, `Spring Kafka`
+   * **Python**: `confluent-kafka` (librdkafka), `kafka-python`
+   * **Go**: `github.com/segmentio/kafka-go`, `github.com/twmb/franz-go`
+   * **.NET**: `Confluent.Kafka`
    * **Node.js**: `kafkajs`
+   * **Rust**: `rdkafka`
+   * **CLI**: `kcat` (`kafkacat`), console producer/consumer scripts
+
+### 5.2.1 Native Client SDK Architecture & Zero-Copy Wire Mechanics
+
+The official AeroStream Client SDKs under [`github.com/gradientgeeks/aerostream-sdk`](https://github.com/gradientgeeks/aerostream-sdk) provide first-party client runtimes engineered for maximum throughput, predictable sub-millisecond tail latency, and minimal CPU overhead:
+
+1. **Architectural Parity Across Ecosystems**:
+   Each SDK adheres to a unified internal architecture tailored to the concurrency primitives of its host runtime:
+   * 🦫 **Go (`github.com/gradientgeeks/aerostream-sdk/go`)**: Leverages Go channels and lock-free rings for high-throughput goroutine message dispatch with zero GC allocation in steady state.
+   * 🦀 **Rust (`aerostream-client`)**: Pure async implementation built on Tokio and `bytes::Bytes`, employing lock-free atomics and zero-copy slice borrowing.
+   * ☕ **Java (`org.gradientgeeks.aerostream:aerostream-client`)**: Optimized for Java 21+ Project Loom virtual threads and off-heap `ByteBuffer` pools (`sun.misc.Unsafe` / foreign memory API).
+   * 🔷 **.NET (`GradientGeeks.AeroStream.Client`)**: Built on modern C# 13 and .NET 9 using `System.Threading.Channels`, `ValueTask`, and `Memory<byte>` memory pooling.
+   * 🟩 **Node.js / TypeScript (`@gradientgeeks/aerostream-client`)**: Written in TypeScript with native Node.js buffer pools, stream backpressure (`drain`), and high-performance libuv asynchronous I/O.
+
+2. **Native Wire Protocol Framing (`0xAE 0x01`)**:
+   Clients bypass Kafka protocol conversion overhead by speaking directly to the storage broker daemon on port `9091`. The native frame consists of a deterministic binary layout:
+   * **Magic Byte Prefix (2 bytes)**: `0xAE 0x01` identifies the packet as an AeroStream native frame.
+   * **Command ID (1 byte)**: Identifies the operation (`0x01` Produce, `0x02` Fetch, `0x03` Replicate, `0x04` Metadata, `0x05` Heartbeat, `0x06` ShareFetch, `0x07` ShareAck).
+   * **Correlation ID (4 bytes, Big-Endian)**: Opaque identifier echoed back in responses for non-blocking asynchronous pipelining.
+   * **Payload Length (4 bytes, Big-Endian uint32)**: Byte length of the following payload.
+   * **Payload**: Compact binary serialized request or response body.
+
+3. **Client-Side Record Accumulator & Batching Engine**:
+   To minimize network system call overhead, client SDK producers aggregate individual records into partition batches:
+   * **Batch Formation**: In-memory ring buffers buffer incoming records up to `batch.size` (default: 64 KiB) or until `linger.ms` (default: 5 ms) expires.
+   * **Non-Blocking Ingress**: If producer queues fill up under heavy load, backpressure is exerted via channel blocking or bounded promises, preventing unconstrained memory growth.
+   * **Adaptive Connection Multiplexing**: A thread-safe connection pool maintains persistent TCP keepalive sockets to each storage broker in the cluster, dynamically load-balancing partitions across socket channels.
+
 
 ### 5.3 Cloud-Native Kubernetes & Docker Compose Topology
 
@@ -834,4 +755,14 @@ The AeroStream Web Console resides in [`ui/src/app/`](file:///home/uttam/project
 | **Data Plane** | [`append_batch_slice`](file:///home/uttam/projects/AeroMQ/rust-broker/src/log/manager.rs#L367) | `rust-broker/src/log/manager.rs` | In-place disk base offset patching avoiding heap clones on produce |
 | **Data Plane** | [`handle_fetch_with_topo`](file:///home/uttam/projects/AeroMQ/rust-broker/src/net/kafka_server.rs#L686) | `rust-broker/src/net/kafka_server.rs` | Long-polling Kafka fetch engine with out-of-lock reads and lazy Notify |
 | **Data Plane** | [`archive_sealed_segment`](file:///home/uttam/projects/AeroMQ/rust-broker/src/log/manager.rs#L519) | `rust-broker/src/log/manager.rs` | Fast-path hard-linking (`fs::hard_link`) of sealed segments to cold storage |
+| **Data Plane** | [`SharePartitionState`](file:///home/uttam/projects/AeroMQ/rust-broker/src/share/state.rs) | `rust-broker/src/share/state.rs` | Cooperative record leasing and acquisition lock coordinator (KIP-932) |
+| **Data Plane** | [`IcebergOffloader`](file:///home/uttam/projects/AeroMQ/rust-broker/src/storage/iceberg.rs) | `rust-broker/src/storage/iceberg.rs` | Streaming Apache Parquet vectorization and Iceberg v2 manifest committer |
+| **Data Plane** | [`TxnCoordinator`](file:///home/uttam/projects/AeroMQ/rust-broker/src/txn/coordinator.rs) | `rust-broker/src/txn/coordinator.rs` | Two-Phase Commit coordinator managing Producer IDs, epochs, and markers |
+| **Data Plane** | [`TxnMarkerBatch`](file:///home/uttam/projects/AeroMQ/rust-broker/src/txn/marker.rs) | `rust-broker/src/txn/marker.rs` | Commit and Abort control batch records enforcing Log Stable Offset ($LSO$) |
+| **Client SDK** | [`AeroStreamClient` (Go)](file:///home/uttam/projects/AeroMQ/sdks/go/) | `sdks/go/client.go` | Official Go native client runtime with zero-allocation message pipelines |
+| **Client SDK** | [`AeroStreamClient` (Rust)](file:///home/uttam/projects/AeroMQ/sdks/rust/) | `sdks/rust/src/client.rs` | Official Rust client library with async Tokio record accumulators |
+| **Client SDK** | [`AeroStreamClient` (Java)](file:///home/uttam/projects/AeroMQ/sdks/java/) | `sdks/java/src/main/java/org/gradientgeeks/aerostream/` | Official Java client optimized for Project Loom virtual threads |
+| **Client SDK** | [`AeroStreamClient` (.NET)](file:///home/uttam/projects/AeroMQ/sdks/dotnet/) | `sdks/dotnet/src/GradientGeeks.AeroStream/` | Official C# .NET client leveraging `System.Threading.Channels` |
+| **Client SDK** | [`AeroStreamClient` (Node.js)](file:///home/uttam/projects/AeroMQ/sdks/nodejs/) | `sdks/nodejs/src/index.ts` | Official TypeScript client with native buffer streaming backpressure |
+
 

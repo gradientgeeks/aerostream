@@ -34,19 +34,7 @@ The embedded registry implements the standard Confluent Schema Registry HTTP int
 
 AeroStream automatically validates proposed schemas before accepting registration, safeguarding downstream consumers from breaking deserialization errors:
 
-```mermaid
-flowchart TD
-    NEW["Producer Proposes New Schema v(N+1)"]
-    COMPAT{"Validate Compatibility Mode"}
-    ACCEPT["Assign Global Schema ID<br/>Replicate to Raft FSM"]
-    REJECT["HTTP 409 Conflict<br/>Schema Incompatible"]
-
-    NEW --> COMPAT
-    COMPAT -->|BACKWARD: Can read old events?| ACCEPT
-    COMPAT -->|FORWARD: Old consumer can read new?| ACCEPT
-    COMPAT -->|FULL: Bidirectional valid?| ACCEPT
-    COMPAT -->|Validation Fails| REJECT
-```
+![Dual Engine Architecture](images/dual_engine_architecture.png)
 
 * **`BACKWARD` (Default)**: Consumers using the new schema can deserialize data written by producers using previous versions. Fields may only be deleted, or optional fields (with defaults) may be added.
 * **`FORWARD`**: Consumers using previous schema versions can deserialize data produced by the new schema. Fields may only be added, or optional fields deleted.
@@ -99,11 +87,8 @@ curl -X POST http://localhost:9001/compatibility/subjects/orders-value/versions/
 
 AeroStream follows the standard Confluent framing standard for schema-encoded record payloads:
 
-```text
-┌───────────────┬──────────────────────────┬─────────────────────────────┐
-│ Magic Byte (0)│ 4-Byte Global Schema ID │ Avro / Protobuf Binary Body │
-│   (1 byte)    │   (32-bit big-endian)    │       (Variable length)     │
-└───────────────┴──────────────────────────┴─────────────────────────────┘
-```
+| Magic Byte (`0x00`) | 4-Byte Global Schema ID | Avro / Protobuf / JSON Binary Body |
+|:---:|:---:|:---:|
+| 1 byte | 4 bytes (32-bit big-endian) | Variable length payload |
 
 Standard serialization libraries (e.g. `confluent_kafka.schema_registry`) automatically prepend and decode this header seamlessly when communicating with `http://localhost:9001`.

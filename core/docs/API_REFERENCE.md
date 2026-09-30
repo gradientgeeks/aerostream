@@ -822,12 +822,9 @@ AeroStream brokers listen for binary Kafka frames on TCP port `9093`. The protoc
 
 All requests and responses use **Big-Endian (network byte order)** and are delimited by a 4-byte frame length prefix:
 
-```
-+------------------------------------+----------------------------------------+
-| 4 Bytes                            | Variable Size (1 to 64 MiB)           |
-| Frame Length (int32)               | Packet Payload (Header + Request/Resp) |
-+------------------------------------+----------------------------------------+
-```
+| Length (4 Bytes) | Packet Payload (1 to 64 MiB) |
+|:---|:---|
+| Frame Length (`int32` BE) | Encoded Header + API-specific Request/Response Body |
 
 1. **Length**: An `int32` specifying the total size of the message following this field. Maximum supported frame size is **67,108,864 bytes (64 MiB)**.
 2. **Payload**: Header followed by the API-specific body.
@@ -837,19 +834,25 @@ All requests and responses use **Big-Endian (network byte order)** and are delim
 ### 2.2 Headers & Envelope Types
 
 #### Request Header (Classic v0 – v1)
-```
-+---------------+---------------+--------------------+---------------------+
-| api_key (i16) | version (i16) | correlation_id(i32)| client_id (String)  |
-+---------------+---------------+--------------------+---------------------+
-```
+
+| Field | Type | Wire Size | Description |
+|:---|:---|:---|:---|
+| `api_key` | `int16` | 2 Bytes | Identifies API operation (e.g., 0=Produce, 1=Fetch) |
+| `api_version` | `int16` | 2 Bytes | Wire schema version of request body |
+| `correlation_id` | `int32` | 4 Bytes | Echoed in corresponding response |
+| `client_id` | `NullableString` | 2+N Bytes | Logical client application identifier |
 
 #### Flexible Request Header (v2+)
+
 Modern Kafka versions (e.g. `ApiVersions v3+`, `Produce v9+`, `ShareGroup`) include tagged fields:
-```
-+---------------+---------------+--------------------+---------------------+------------------+
-| api_key (i16) | version (i16) | correlation_id(i32)| client_id (String)  | Tagged Fields (U)|
-+---------------+---------------+--------------------+---------------------+------------------+
-```
+
+| Field | Type | Wire Size | Description |
+|:---|:---|:---|:---|
+| `api_key` | `int16` | 2 Bytes | Identifies API operation |
+| `api_version` | `int16` | 2 Bytes | Wire schema version of request body |
+| `correlation_id` | `int32` | 4 Bytes | Echoed in corresponding response |
+| `client_id` | `NullableString` | 2+N Bytes | Logical client application identifier |
+| `tagged_fields` | `UVarInt` | Varint | Extensible tagged field buffer (KIP-482) |
 
 #### Response Header (v0 – v1)
 - `v0`: `[correlation_id: int32]`

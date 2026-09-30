@@ -1,0 +1,292 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3200" height="2160" viewBox="0 0 3200 2160">
+<defs>
+
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.7" stroke-opacity="0.6"/>
+      <circle cx="40" cy="40" r="1.2" fill="#334155" opacity="0.4"/>
+    </pattern>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrow-emerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#a855f7"/>
+    </marker>
+    <marker id="arrow-rose" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#fb7185"/>
+    </marker>
+    <linearGradient id="grad-card" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.95"/>
+    </linearGradient>
+    <linearGradient id="grad-cyan-card" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0c4a6e" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="grad-emerald-card" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.9"/>
+    </linearGradient>
+        
+</defs>
+<rect width="3200" height="2160" fill="#0b0f19"/>
+<rect width="3200" height="2160" fill="url(#grid)"/>
+<rect x="60" y="40" width="3080" height="140" rx="14" fill="#0f172a" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<text x="96" y="98" fill="#f8fafc" font-size="34" font-family="sans-serif" font-weight="800">AeroStream Controller-Broker Control Plane Orchestration</text>
+<text x="96" y="142" fill="#94a3b8" font-size="18" font-family="sans-serif" font-weight="500">Bidirectional gRPC Streaming (Port 8001), 2s Heartbeat Telemetry, Dynamic Configs, and Automated Failover</text>
+<rect x="2874" y="92" width="210" height="36" rx="8" fill="#e11d48" stroke="#fb7185" stroke-width="1.5"/>
+<text x="2979.0" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Automated ISR Updates</text>
+<rect x="2631" y="92" width="227" height="36" rx="8" fill="#7c3aed" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="2744.5" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Dynamic Quotas &amp; Codecs</text>
+<rect x="2456" y="92" width="159" height="36" rx="8" fill="#b45309" stroke="#fbbf24" stroke-width="1.5"/>
+<text x="2535.5" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">8s Lease Expiry</text>
+<rect x="2247" y="92" width="193" height="36" rx="8" fill="#059669" stroke="#34d399" stroke-width="1.5"/>
+<text x="2343.5" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">2s Heartbeat Ticker</text>
+<rect x="2004" y="92" width="227" height="36" rx="8" fill="#0284c7" stroke="#38bdf8" stroke-width="1.5"/>
+<text x="2117.5" y="115" fill="#ffffff" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">gRPC Stream (Port 8001)</text>
+<rect x="60" y="220" width="1380" height="1400" rx="16" fill="url(#grad-cyan-card)" stroke="#0284c7" stroke-width="3" filter="url(#shadow)"/>
+<text x="96" y="274" fill="#38bdf8" font-size="28" font-family="sans-serif" font-weight="800">GO CONTROLLER (RAFT LEADER)</text>
+<text x="96" y="306" fill="#94a3b8" font-size="16" font-family="sans-serif" font-weight="500">Cluster Authority: Consensus Leader, Topology Manager, Lease Sweeper, Quota Enforcer</text>
+<rect x="1252" y="252" width="152" height="32" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5"/>
+<text x="1328.0" y="273" fill="#38bdf8" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Port 8001 Server</text>
+<rect x="100" y="350" width="620" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 112 350 L 708 350" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="124" y="386" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">Raft Consensus FSM State</text>
+<rect x="608" y="368" width="92" height="26" rx="6" fill="#0369a1"/>
+<text x="654.0" y="386" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">FSM State</text>
+<text x="124" y="416" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Port 7001 • Raft Log FSM</text>
+<circle cx="126" cy="439" r="3" fill="#38bdf8"/>
+<text x="138" y="444" fill="#cbd5e1" font-size="15" font-family="sans-serif">Committed ClusterState in BoltDB</text>
+<circle cx="126" cy="467" r="3" fill="#38bdf8"/>
+<text x="138" y="472" fill="#cbd5e1" font-size="15" font-family="sans-serif">Active Brokers registry (id, host, ports, rack)</text>
+<circle cx="126" cy="495" r="3" fill="#38bdf8"/>
+<text x="138" y="500" fill="#cbd5e1" font-size="15" font-family="sans-serif">Topic partition layouts &amp; leader epochs</text>
+<circle cx="126" cy="523" r="3" fill="#38bdf8"/>
+<text x="138" y="528" fill="#cbd5e1" font-size="15" font-family="sans-serif">In-Sync Replicas (ISR) set membership</text>
+<circle cx="126" cy="551" r="3" fill="#38bdf8"/>
+<text x="138" y="556" fill="#cbd5e1" font-size="15" font-family="sans-serif">Quorum consensus on all topology mutations</text>
+<rect x="760" y="350" width="640" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 772 350 L 1388 350" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+<text x="784" y="386" fill="#fbbf24" font-size="20" font-family="sans-serif" font-weight="700">Failure Detector &amp; Lease Sweeper</text>
+<rect x="1256" y="368" width="124" height="26" rx="6" fill="#b45309"/>
+<text x="1318.0" y="386" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Lease Sweeper</text>
+<text x="784" y="416" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">8-Second Lease Expiry Watchdog</text>
+<circle cx="786" cy="439" r="3" fill="#fbbf24"/>
+<text x="798" y="444" fill="#cbd5e1" font-size="15" font-family="sans-serif">Sweep Ticker fires every 3 seconds</text>
+<circle cx="786" cy="467" r="3" fill="#fbbf24"/>
+<text x="798" y="472" fill="#cbd5e1" font-size="15" font-family="sans-serif">Inspects last_heartbeat timestamp per broker</text>
+<circle cx="786" cy="495" r="3" fill="#fbbf24"/>
+<text x="798" y="500" fill="#cbd5e1" font-size="15" font-family="sans-serif">Lease Expiry: time.Since(last_hb) &gt; 8s</text>
+<circle cx="786" cy="523" r="3" fill="#fbbf24"/>
+<text x="798" y="528" fill="#cbd5e1" font-size="15" font-family="sans-serif">Automatically triggers CmdCleanInactive</text>
+<circle cx="786" cy="551" r="3" fill="#fbbf24"/>
+<text x="798" y="556" fill="#cbd5e1" font-size="15" font-family="sans-serif">Elects new leader from surviving ISR set</text>
+<rect x="100" y="750" width="1300" height="380" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 112 750 L 1388 750" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="124" y="786" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">gRPC ControlService Handler (Server)</text>
+<rect x="1272" y="768" width="108" height="26" rx="6" fill="#0284c7"/>
+<text x="1326.0" y="786" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">gRPC Server</text>
+<text x="124" y="816" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">proto/control.proto • Multiplexed HTTP/2 Service</text>
+<circle cx="126" cy="839" r="3" fill="#38bdf8"/>
+<text x="138" y="844" fill="#cbd5e1" font-size="15" font-family="sans-serif">1. RegisterBroker(RegisterBrokerRequest) -&gt; RegisterBrokerResponse</text>
+<circle cx="126" cy="867" r="3" fill="#38bdf8"/>
+<text x="138" y="872" fill="#cbd5e1" font-size="15" font-family="sans-serif">   • Validates broker_id, host, data_port (9091), kafka_port (9092), rack ID</text>
+<circle cx="126" cy="895" r="3" fill="#38bdf8"/>
+<text x="138" y="900" fill="#cbd5e1" font-size="15" font-family="sans-serif">   • Proposes CmdRegisterBroker to Raft log; responds with cluster ID and assigned partitions</text>
+<circle cx="126" cy="923" r="3" fill="#38bdf8"/>
+<text x="138" y="928" fill="#cbd5e1" font-size="15" font-family="sans-serif">2. Heartbeat(HeartbeatRequest) -&gt; HeartbeatResponse</text>
+<circle cx="126" cy="951" r="3" fill="#38bdf8"/>
+<text x="138" y="956" fill="#cbd5e1" font-size="15" font-family="sans-serif">   • Receives disk_usage_bytes and per-partition Log End Offsets (LEO)</text>
+<circle cx="126" cy="979" r="3" fill="#38bdf8"/>
+<text x="138" y="984" fill="#cbd5e1" font-size="15" font-family="sans-serif">   • Computes High Watermark = min(LEO of all in-sync replicas)</text>
+<circle cx="126" cy="1007" r="3" fill="#38bdf8"/>
+<text x="138" y="1012" fill="#cbd5e1" font-size="15" font-family="sans-serif">   • Piggybacks updated partition leader assignments (assigned_leaders, assigned_followers)</text>
+<circle cx="126" cy="1035" r="3" fill="#38bdf8"/>
+<text x="138" y="1040" fill="#cbd5e1" font-size="15" font-family="sans-serif">   • Piggybacks dynamic client quotas (byte rate limits) and topic compression rules (zstd, lz4)</text>
+<rect x="100" y="1170" width="1300" height="420" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 112 1170 L 1388 1170" stroke="#818cf8" stroke-width="3" stroke-linecap="round"/>
+<text x="124" y="1206" fill="#818cf8" font-size="20" font-family="sans-serif" font-weight="700">Dynamic Cluster Management Policies</text>
+<rect x="1248" y="1188" width="132" height="26" rx="6" fill="#4338ca"/>
+<text x="1314.0" y="1206" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Dynamic Config</text>
+<text x="124" y="1236" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Live Push to All Connected Storage Brokers</text>
+<circle cx="126" cy="1259" r="3" fill="#818cf8"/>
+<text x="138" y="1264" fill="#cbd5e1" font-size="15" font-family="sans-serif">Client Quotas Subsystem: per-user and per-client-id produce/fetch rate throttles</text>
+<circle cx="126" cy="1287" r="3" fill="#818cf8"/>
+<text x="138" y="1292" fill="#cbd5e1" font-size="15" font-family="sans-serif">Topic Compression Codec Overrides: dynamically enforces zstd, lz4, or snappy without broker restarts</text>
+<circle cx="126" cy="1315" r="3" fill="#818cf8"/>
+<text x="138" y="1320" fill="#cbd5e1" font-size="15" font-family="sans-serif">Automated High Watermark Advancement: notifies brokers when replicas catch up</text>
+<circle cx="126" cy="1343" r="3" fill="#818cf8"/>
+<text x="138" y="1348" fill="#cbd5e1" font-size="15" font-family="sans-serif">Graceful Drain Orchestrator: intercepts scale-down requests and gracefully migrates partitions</text>
+<rect x="1760" y="220" width="1380" height="1400" rx="16" fill="url(#grad-emerald-card)" stroke="#059669" stroke-width="3" filter="url(#shadow)"/>
+<text x="1796" y="274" fill="#34d399" font-size="28" font-family="sans-serif" font-weight="800">RUST STORAGE BROKER (DATA PLANE)</text>
+<text x="1796" y="306" fill="#94a3b8" font-size="16" font-family="sans-serif" font-weight="500">High-Speed Storage Node: Background Orchestrator, Heartbeat Ticker, Partition Log Engine</text>
+<rect x="2952" y="252" width="152" height="32" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+<text x="3028.0" y="273" fill="#34d399" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Port 8001 Client</text>
+<rect x="1800" y="350" width="620" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1812 350 L 2408 350" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="1824" y="386" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">Broker Startup Lifecycle</text>
+<rect x="2308" y="368" width="92" height="26" rx="6" fill="#047857"/>
+<text x="2354.0" y="386" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Join Flow</text>
+<text x="1824" y="416" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Startup &amp; Cluster Join Flow</text>
+<circle cx="1826" cy="439" r="3" fill="#34d399"/>
+<text x="1838" y="444" fill="#cbd5e1" font-size="15" font-family="sans-serif">Spawns background orchestration task</text>
+<circle cx="1826" cy="467" r="3" fill="#34d399"/>
+<text x="1838" y="472" fill="#cbd5e1" font-size="15" font-family="sans-serif">Connects persistent gRPC channel to Controller</text>
+<circle cx="1826" cy="495" r="3" fill="#34d399"/>
+<text x="1838" y="500" fill="#cbd5e1" font-size="15" font-family="sans-serif">Sends RegisterBrokerRequest with capabilities</text>
+<circle cx="1826" cy="523" r="3" fill="#34d399"/>
+<text x="1838" y="528" fill="#cbd5e1" font-size="15" font-family="sans-serif">Mounts assigned topic partition directories</text>
+<circle cx="1826" cy="551" r="3" fill="#34d399"/>
+<text x="1838" y="556" fill="#cbd5e1" font-size="15" font-family="sans-serif">Initializes Shard-per-Core engine threads</text>
+<rect x="2460" y="350" width="640" height="360" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2472 350 L 3088 350" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="2484" y="386" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">2s Heartbeat Ticker Loop</text>
+<rect x="2948" y="368" width="132" height="26" rx="6" fill="#047857"/>
+<text x="3014.0" y="386" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Heartbeat Loop</text>
+<text x="2484" y="416" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Continuous Telemetry Ticker</text>
+<circle cx="2486" cy="439" r="3" fill="#34d399"/>
+<text x="2498" y="444" fill="#cbd5e1" font-size="15" font-family="sans-serif">tokio::time::interval(Duration::from_secs(2))</text>
+<circle cx="2486" cy="467" r="3" fill="#34d399"/>
+<text x="2498" y="472" fill="#cbd5e1" font-size="15" font-family="sans-serif">Collects current disk usage across volumes</text>
+<circle cx="2486" cy="495" r="3" fill="#34d399"/>
+<text x="2498" y="500" fill="#cbd5e1" font-size="15" font-family="sans-serif">Gathers Log End Offset (LEO) for all partitions</text>
+<circle cx="2486" cy="523" r="3" fill="#34d399"/>
+<text x="2498" y="528" fill="#cbd5e1" font-size="15" font-family="sans-serif">Calculates consumer replica lag metrics</text>
+<circle cx="2486" cy="551" r="3" fill="#34d399"/>
+<text x="2498" y="556" fill="#cbd5e1" font-size="15" font-family="sans-serif">Transmits HeartbeatRequest over gRPC stream</text>
+<rect x="1800" y="750" width="1300" height="380" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1812 750 L 3088 750" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="1824" y="786" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">Piggybacked Response Handler</text>
+<rect x="2980" y="768" width="100" height="26" rx="6" fill="#047857"/>
+<text x="3030.0" y="786" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">State Sync</text>
+<text x="1824" y="816" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Zero-Restart In-Flight Configuration Updates</text>
+<circle cx="1826" cy="839" r="3" fill="#34d399"/>
+<text x="1838" y="844" fill="#cbd5e1" font-size="15" font-family="sans-serif">Applies leadership changes: transitions partitions between Leader and Follower roles</text>
+<circle cx="1826" cy="867" r="3" fill="#34d399"/>
+<text x="1838" y="872" fill="#cbd5e1" font-size="15" font-family="sans-serif">Updates Client Quotas table in shared memory Swiss Tables</text>
+<circle cx="1826" cy="895" r="3" fill="#34d399"/>
+<text x="1838" y="900" fill="#cbd5e1" font-size="15" font-family="sans-serif">Updates Topic Compression codecs (Zstd, Lz4, Snappy)</text>
+<circle cx="1826" cy="923" r="3" fill="#34d399"/>
+<text x="1838" y="928" fill="#cbd5e1" font-size="15" font-family="sans-serif">Follower partitions: starts Native Cmd 3 ReplicaFetch stream from assigned leader broker</text>
+<circle cx="1826" cy="951" r="3" fill="#34d399"/>
+<text x="1838" y="956" fill="#cbd5e1" font-size="15" font-family="sans-serif">Leader partitions: updates High Watermark based on controller min-LEO response</text>
+<rect x="1800" y="1170" width="1300" height="420" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1812 1170 L 3088 1170" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+<text x="1824" y="1206" fill="#fbbf24" font-size="20" font-family="sans-serif" font-weight="700">Replica Fetching &amp; Cluster Replication (Cmd 3)</text>
+<rect x="2972" y="1188" width="108" height="26" rx="6" fill="#b45309"/>
+<text x="3026.0" y="1206" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Replication</text>
+<text x="1824" y="1236" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Native Protocol Cmd 3 High-Performance Replication</text>
+<circle cx="1826" cy="1259" r="3" fill="#fbbf24"/>
+<text x="1838" y="1264" fill="#cbd5e1" font-size="15" font-family="sans-serif">Follower brokers issue Native Protocol Cmd 3 ReplicaFetch to leader broker on Port 9091</text>
+<circle cx="1826" cy="1287" r="3" fill="#fbbf24"/>
+<text x="1838" y="1292" fill="#cbd5e1" font-size="15" font-family="sans-serif">Leader streams raw log batches directly via Linux sendfile(2) zero-copy DMA</text>
+<circle cx="1826" cy="1315" r="3" fill="#fbbf24"/>
+<text x="1838" y="1320" fill="#cbd5e1" font-size="15" font-family="sans-serif">Follower appends to local PartitionLog and updates local LEO</text>
+<circle cx="1826" cy="1343" r="3" fill="#fbbf24"/>
+<text x="1838" y="1348" fill="#cbd5e1" font-size="15" font-family="sans-serif">Follower reports new LEO on next 2s heartbeat; Controller advances cluster High Watermark</text>
+<line x1="1440" y1="560" x2="1760" y2="560" stroke="#38bdf8" stroke-width="4"  marker-end="url(#arrow-cyan)"/>
+<rect x="1430.0" y="534.0" width="340" height="24" rx="6" fill="#0b0f19" stroke="#38bdf8" stroke-width="1.5"/>
+<text x="1600.0" y="551.0" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="700" text-anchor="middle">1. RegisterBroker(id, host, ports, rack)</text>
+<line x1="1760" y1="640" x2="1440" y2="640" stroke="#34d399" stroke-width="4"  marker-end="url(#arrow-emerald)"/>
+<rect x="1406.0" y="614.0" width="388" height="24" rx="6" fill="#0b0f19" stroke="#34d399" stroke-width="1.5"/>
+<text x="1600.0" y="631.0" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="700" text-anchor="middle">RegisterBrokerResponse(cluster_id, partitions)</text>
+<line x1="1760" y1="800" x2="1440" y2="800" stroke="#34d399" stroke-width="4"  marker-end="url(#arrow-emerald)"/>
+<rect x="1386.0" y="774.0" width="428" height="24" rx="6" fill="#0b0f19" stroke="#34d399" stroke-width="1.5"/>
+<text x="1600.0" y="791.0" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="700" text-anchor="middle">2. HeartbeatRequest(disk_usage, per-partition LEOs)</text>
+<line x1="1440" y1="880" x2="1760" y2="880" stroke="#38bdf8" stroke-width="4"  marker-end="url(#arrow-cyan)"/>
+<rect x="1374.0" y="854.0" width="452" height="24" rx="6" fill="#0b0f19" stroke="#38bdf8" stroke-width="1.5"/>
+<text x="1600.0" y="871.0" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="700" text-anchor="middle">3. HeartbeatResponse(assigned_leaders, quotas, codecs)</text>
+<rect x="60" y="1660" width="3080" height="450" rx="16" fill="url(#grad-card)" stroke="#e11d48" stroke-width="3" filter="url(#shadow)"/>
+<text x="96" y="1714" fill="#fb7185" font-size="28" font-family="sans-serif" font-weight="800">AUTOMATED FAILURE DETECTION &amp; LEADER RE-ELECTION LIFECYCLE</text>
+<text x="96" y="1746" fill="#94a3b8" font-size="16" font-family="sans-serif" font-weight="500">Sequence of events when a broker experiences a hardware failure or network partition</text>
+<rect x="2944" y="1692" width="160" height="32" rx="8" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+<text x="3024.0" y="1713" fill="#fb7185" font-size="14" font-family="sans-serif" font-weight="700" text-anchor="middle">Failover Timeline</text>
+<rect x="100" y="1766" width="470" height="310" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 112 1766 L 558 1766" stroke="#fb7185" stroke-width="3" stroke-linecap="round"/>
+<text x="124" y="1802" fill="#fb7185" font-size="20" font-family="sans-serif" font-weight="700">T = 0.0s</text>
+<rect x="474" y="1784" width="76" height="26" rx="6" fill="#0f172a"/>
+<text x="512.0" y="1802" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Phase 1</text>
+<text x="124" y="1832" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Broker Hardware Stall</text>
+<circle cx="126" cy="1855" r="3" fill="#fb7185"/>
+<text x="138" y="1860" fill="#cbd5e1" font-size="15" font-family="sans-serif">Broker 1 network disconnects or process crashes.</text>
+<circle cx="126" cy="1883" r="3" fill="#fb7185"/>
+<text x="138" y="1888" fill="#cbd5e1" font-size="15" font-family="sans-serif">In-flight requests fail or pause.</text>
+<circle cx="126" cy="1911" r="3" fill="#fb7185"/>
+<text x="138" y="1916" fill="#cbd5e1" font-size="15" font-family="sans-serif">Last successful heartbeat recorded.</text>
+<line x1="570" y1="1910" x2="606" y2="1910" stroke="#fb7185" stroke-width="2.5"  marker-end="url(#arrow-rose)"/>
+<rect x="606" y="1766" width="470" height="310" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 618 1766 L 1064 1766" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+<text x="630" y="1802" fill="#fbbf24" font-size="20" font-family="sans-serif" font-weight="700">T = 2.0s</text>
+<rect x="980" y="1784" width="76" height="26" rx="6" fill="#0f172a"/>
+<text x="1018.0" y="1802" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Phase 2</text>
+<text x="630" y="1832" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Heartbeat Missed</text>
+<circle cx="632" cy="1855" r="3" fill="#fbbf24"/>
+<text x="644" y="1860" fill="#cbd5e1" font-size="15" font-family="sans-serif">Controller expects periodic 2s heartbeat.</text>
+<circle cx="632" cy="1883" r="3" fill="#fbbf24"/>
+<text x="644" y="1888" fill="#cbd5e1" font-size="15" font-family="sans-serif">No packet received from Broker 1.</text>
+<circle cx="632" cy="1911" r="3" fill="#fbbf24"/>
+<text x="644" y="1916" fill="#cbd5e1" font-size="15" font-family="sans-serif">Controller increments missed beat counter.</text>
+<line x1="1076" y1="1910" x2="1112" y2="1910" stroke="#fb7185" stroke-width="2.5"  marker-end="url(#arrow-rose)"/>
+<rect x="1112" y="1766" width="470" height="310" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1124 1766 L 1570 1766" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+<text x="1136" y="1802" fill="#fbbf24" font-size="20" font-family="sans-serif" font-weight="700">T = 8.0s</text>
+<rect x="1486" y="1784" width="76" height="26" rx="6" fill="#0f172a"/>
+<text x="1524.0" y="1802" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Phase 3</text>
+<text x="1136" y="1832" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">8s Lease Expiry</text>
+<circle cx="1138" cy="1855" r="3" fill="#fbbf24"/>
+<text x="1150" y="1860" fill="#cbd5e1" font-size="15" font-family="sans-serif">Failure detection sweeper ticker fires.</text>
+<circle cx="1138" cy="1883" r="3" fill="#fbbf24"/>
+<text x="1150" y="1888" fill="#cbd5e1" font-size="15" font-family="sans-serif">time.Since(last_hb) exceeds 8.0s timeout.</text>
+<circle cx="1138" cy="1911" r="3" fill="#fbbf24"/>
+<text x="1150" y="1916" fill="#cbd5e1" font-size="15" font-family="sans-serif">Broker 1 marked as DEAD in active lease table.</text>
+<line x1="1582" y1="1910" x2="1618" y2="1910" stroke="#fb7185" stroke-width="2.5"  marker-end="url(#arrow-rose)"/>
+<rect x="1618" y="1766" width="470" height="310" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 1630 1766 L 2076 1766" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+<text x="1642" y="1802" fill="#38bdf8" font-size="20" font-family="sans-serif" font-weight="700">T = 8.1s</text>
+<rect x="1992" y="1784" width="76" height="26" rx="6" fill="#0f172a"/>
+<text x="2030.0" y="1802" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Phase 4</text>
+<text x="1642" y="1832" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Raft Proposal</text>
+<circle cx="1644" cy="1855" r="3" fill="#38bdf8"/>
+<text x="1656" y="1860" fill="#cbd5e1" font-size="15" font-family="sans-serif">Controller proposes CmdCleanInactive to Raft.</text>
+<circle cx="1644" cy="1883" r="3" fill="#38bdf8"/>
+<text x="1656" y="1888" fill="#cbd5e1" font-size="15" font-family="sans-serif">Follower controllers commit log entry.</text>
+<circle cx="1644" cy="1911" r="3" fill="#38bdf8"/>
+<text x="1656" y="1916" fill="#cbd5e1" font-size="15" font-family="sans-serif">Quorum majority (2/3) reached in &lt;10ms.</text>
+<line x1="2088" y1="1910" x2="2124" y2="1910" stroke="#fb7185" stroke-width="2.5"  marker-end="url(#arrow-rose)"/>
+<rect x="2124" y="1766" width="470" height="310" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2136 1766 L 2582 1766" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+<text x="2148" y="1802" fill="#34d399" font-size="20" font-family="sans-serif" font-weight="700">T = 8.2s</text>
+<rect x="2498" y="1784" width="76" height="26" rx="6" fill="#0f172a"/>
+<text x="2536.0" y="1802" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Phase 5</text>
+<text x="2148" y="1832" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Leader Re-Election</text>
+<circle cx="2150" cy="1855" r="3" fill="#34d399"/>
+<text x="2162" y="1860" fill="#cbd5e1" font-size="15" font-family="sans-serif">FSM evicts Broker 1 from active topology.</text>
+<circle cx="2150" cy="1883" r="3" fill="#34d399"/>
+<text x="2162" y="1888" fill="#cbd5e1" font-size="15" font-family="sans-serif">Surviving in-sync replica (Broker 2) elected Leader.</text>
+<circle cx="2150" cy="1911" r="3" fill="#34d399"/>
+<text x="2162" y="1916" fill="#cbd5e1" font-size="15" font-family="sans-serif">New leader epoch incremented in BoltDB.</text>
+<line x1="2594" y1="1910" x2="2630" y2="1910" stroke="#fb7185" stroke-width="2.5"  marker-end="url(#arrow-rose)"/>
+<rect x="2630" y="1766" width="470" height="310" rx="12" fill="url(#grad-card)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+<path d="M 2642 1766 L 3088 1766" stroke="#a855f7" stroke-width="3" stroke-linecap="round"/>
+<text x="2654" y="1802" fill="#a855f7" font-size="20" font-family="sans-serif" font-weight="700">T = 8.4s</text>
+<rect x="3004" y="1784" width="76" height="26" rx="6" fill="#0f172a"/>
+<text x="3042.0" y="1802" fill="#f8fafc" font-size="13" font-family="sans-serif" font-weight="600" text-anchor="middle">Phase 6</text>
+<text x="2654" y="1832" fill="#94a3b8" font-size="14" font-family="sans-serif" font-weight="500">Topology Push</text>
+<circle cx="2656" cy="1855" r="3" fill="#a855f7"/>
+<text x="2668" y="1860" fill="#cbd5e1" font-size="15" font-family="sans-serif">Surviving brokers receive assignment in HeartbeatResp.</text>
+<circle cx="2656" cy="1883" r="3" fill="#a855f7"/>
+<text x="2668" y="1888" fill="#cbd5e1" font-size="15" font-family="sans-serif">Kafka clients receive updated MetadataResponse.</text>
+<circle cx="2656" cy="1911" r="3" fill="#a855f7"/>
+<text x="2668" y="1916" fill="#cbd5e1" font-size="15" font-family="sans-serif">Producers resume writes to Broker 2 seamlessly.</text>
+<line x1="60" y1="2110" x2="3140" y2="2110" stroke="#1e293b" stroke-width="1"/>
+<text x="96" y="2135" fill="#64748b" font-size="14" font-family="sans-serif">AeroStream Next-Gen Distributed Streaming Platform • Excalidraw v2 Verified Architecture Spec</text>
+<text x="3104" y="2135" fill="#64748b" font-size="14" font-family="sans-serif" text-anchor="end">Production Engineered • High-Resolution 3200×2160</text>
+</svg>

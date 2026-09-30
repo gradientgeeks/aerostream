@@ -8,39 +8,7 @@ This guide explains how to deploy, operate, and scale **AeroStream** on Kubernet
 
 AeroStream runs on Kubernetes with a clean separation of concerns:
 
-```mermaid
-flowchart TD
-    subgraph K8s["Kubernetes Cluster (Namespace: aerostream)"]
-        subgraph Controllers["Controller StatefulSet (Raft Consensus Quorum)"]
-            CTL0["controller-0<br/>Raft :7001 | gRPC :8001 | HTTP :9001"]
-            CTL1["controller-1<br/>Raft :7001 | gRPC :8001 | HTTP :9001"]
-            CTL2["controller-2<br/>Raft :7001 | gRPC :8001 | HTTP :9001"]
-            CTL0 <--> CTL1
-            CTL1 <--> CTL2
-            CTL2 <--> CTL0
-        end
-
-        subgraph Brokers["Storage Broker StatefulSet (Zero-Copy Data Plane)"]
-            BRK0["broker-0<br/>Native :9091 | Kafka :9092"]
-            BRK1["broker-1<br/>Native :9091 | Kafka :9092"]
-            BRK2["broker-2<br/>Native :9091 | Kafka :9092"]
-        end
-
-        SVC_CTL["Service: controller-headless<br/>Internal Cluster DNS"]
-        SVC_BRK["Service: broker-headless<br/>Internal Data Routing"]
-        SVC_UI["Service: aerostream-ui-external<br/>Web Console :9001"]
-        SVC_KAFKA["Service: aerostream-kafka<br/>Kafka Wire Protocol :9092"]
-
-        Controllers --> SVC_CTL
-        Brokers --> SVC_BRK
-        BRK0 -.gRPC.-> CTL0
-        BRK1 -.gRPC.-> CTL0
-        BRK2 -.gRPC.-> CTL0
-    end
-
-    CLIENT_KAFKA["Standard Kafka Clients<br/>(Java, Python, Go, .NET)"] --> SVC_KAFKA
-    DEV_BROWSER["Developer Web Browser"] --> SVC_UI
-```
+![AeroStream Cluster Topology & Kubernetes Deployment](images/cluster_topology_scale_down.png)
 
 * **3 Go Controllers** form a Raft consensus quorum for metadata, Schema Registry, RBAC, Connectors, and Stream Transforms.
 * **N Rust Brokers** handle high-throughput zero-copy I/O (`sendfile(2)`, `mmap`), KIP-98 transactions, and Kafka wire protocol compatibility.

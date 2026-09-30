@@ -12,40 +12,10 @@ Modern distributed event streaming platforms are subjected to extreme throughput
 
 AeroStream resolves this dichotomy through a **Dual-Engine Architecture**:
 
-```
-+========================================================================================================+
-|                                    AeroStream Dual-Engine Topology                                     |
-+========================================================================================================+
-|                                                                                                        |
-|  [ Kafka Clients ]      [ Native TCP Clients ]      [ Web Console UI ]      [ HTTP REST API Clients ]  |
-|   (:9092 wire)               (:9091 data)              (:9001 Angular)              (:9001 REST)       |
-|         │                          │                          │                          │             |
-|         │                          │                          └────────────┬─────────────┘             |
-|         │                          │                                       │                           |
-|         ▼                          ▼                                       ▼                           |
-|  +────────────────────────────────────────────────+       +─────────────────────────────────────────+  |
-|  |            RUST STORAGE DATA PLANE             |       |         GO RAFT CONTROL PLANE           |  |
-|  |        (Storage Broker Kernel - Port 9091/9092)|       |       (Cluster Controller - Port 8001)  |  |
-|  +────────────────────────────────────────────────+       +─────────────────────────────────────────+  |
-|  | * Tokio Async I/O Runtime (Epoll Reactor)      |       | * HashiCorp Raft Quorum Consensus       |  |
-|  | * Pinned CPU Worker Threads (sched_setaffinity)|       | * Partition & Replica Metadata FSM      |  |
-|  | * Zero-Copy sendfile(2) Page-Cache Transfers   |◄─────►| * Schema Registry (Avro/Protobuf/JSON)  |  |
-|  | * Positioned Log I/O (FileExt::write_all_at)   | gRPC  | * Cooperative Sticky Rebalance Engine   |  |
-|  | * Hardware-Accelerated CRC32C (SSE4.2/ARMv8)   | Proto | * Sandboxed Stream Transforms (WASM)    |  |
-|  | * Transaction Coordinator (2PC, LSO Isolation) |       | * Fine-Grained RBAC & ACL Policy Engine |  |
-|  | * Active-Segment In-Memory Length Tracking     |       | * Cluster Topology & Health Telemetry   |  |
-|  +────────────────────────┬───────────────────────+       +─────────────────────────────────────────+  |
-|                           │                                                                            |
-|                           ▼                                                                            |
-|  +──────────────────────────────────────────────────────────────────────────────────────────────────+  |
-|  |                                  Tiered Storage Subsystem                                        |  |
-|  |       [ NVMe / SSD Hot Tier ] ──► [ AWS S3 / MinIO ] ──► [ Google Cloud GCS ] ──► [ Azure Blob ]  |  |
-|  +──────────────────────────────────────────────────────────────────────────────────────────────────+  |
-+========================================================================================================+
-```
+![AeroStream Dual-Engine Architecture](images/dual_engine_architecture.png)
 
-1. **Go Control Plane ([`go-controller`](file:///home/uttam/projects/AeroMQ/go-controller))**: Dedicated to metadata replication, distributed state coordination, Raft consensus quorum, schema management, and control APIs. Go’s garbage collector operates over a compact, low-turnover metadata heap, while goroutines provide lightweight concurrency for thousands of control requests.
-2. **Rust Data Plane ([`rust-broker`](file:///home/uttam/projects/AeroMQ/rust-broker))**: Dedicated exclusively to high-throughput, latency-critical socket read/write loops, disk-backed segmented commit logs, lock-free indexing, and zero-copy page cache transfers. Rust guarantees zero garbage collection, deterministic memory destruction, explicit cache line alignment, and direct Linux kernel interfaces (`sendfile(2)`, `pread(2)`, `pwrite(2)`).
+1. **Go Control Plane ([`go-controller`](file:///home/uttam/projects/AeroMQ/go-controller))**: Engineered in **Go 1.26** with **Green Tea GC** and **Swiss Tables** SIMD hash map intrinsics. Dedicated to metadata replication, distributed state coordination, Raft consensus quorum, schema management, Web Console UI backend, and control APIs. Go’s garbage collector operates over a compact, low-turnover metadata heap, while goroutines provide lightweight concurrency for thousands of control requests.
+2. **Rust Data Plane ([`rust-broker`](file:///home/uttam/projects/AeroMQ/rust-broker))**: Engineered in **Rust 1.98.1 (Edition 2024)**. Dedicated exclusively to high-throughput, latency-critical socket read/write loops, disk-backed segmented commit logs, lock-free indexing, and zero-copy page cache transfers. Rust guarantees zero garbage collection, deterministic memory destruction, explicit cache line alignment, and direct Linux kernel interfaces (`sendfile(2)`, `pread(2)`, `pwrite(2)`).
 
 ---
 
@@ -68,37 +38,7 @@ The separation of concerns between Go and Rust is grounded in the operational pr
 
 To achieve multi-gigabyte-per-second throughput per node, software must exhibit **mechanical sympathy**—designing algorithms that align with the physical reality of modern processor microarchitectures:
 
-```
-+---------------------------------------------------------------------------------------+
-|                                    CPU DIE TOPOLOGY                                   |
-+---------------------------------------------------------------------------------------+
-|  +-------------------------------------+     +-------------------------------------+  |
-|  |               CORE 0                |     |               CORE 1                |  |
-|  |  +-------------------------------+  |     |  +-------------------------------+  |  |
-|  |  | L1 Instruction Cache (32 KiB) |  |     |  | L1 Instruction Cache (32 KiB) |  |  |
-|  |  +-------------------------------+  |     |  +-------------------------------+  |  |
-|  |  | L1 Data Cache (48 KiB)        |  |     |  | L1 Data Cache (48 KiB)        |  |  |
-|  |  | ~4-5 cycles latency           |  |     |  | ~4-5 cycles latency           |  |  |
-|  |  +-------------------------------+  |     |  +-------------------------------+  |  |
-|  |  | L2 Unified Cache (1.25 MiB)   |  |     |  | L2 Unified Cache (1.25 MiB)   |  |  |
-|  |  | ~14 cycles latency            |  |     |  | ~14 cycles latency            |  |  |
-|  |  +-------------------------------+  |     |  +-------------------------------+  |  |
-|  +------------------┬------------------+     +------------------┬------------------+  |
-|                     │                                           │                     |
-|                     ▼                                           ▼                     |
-|  +─────────────────────────────────────────────────────────────────────────────────+  |
-|  |                        SHARED L3 CACHE (12 - 36 MiB)                            |  |
-|  |                        ~40 - 60 cycles latency                                  |  |
-|  |                        MESI / MOESI Coherence Protocol                          |  |
-|  +──────────────────────────────────────────┬──────────────────────────────────────+  |
-|                                             │                                         |
-+─────────────────────────────────────────────┼─────────────────────────────────────────+
-                                              ▼
-                             +─────────────────────────────────+
-                             |   MAIN MEMORY BUS (DRAM / NUMA) |
-                             |   150 - 250 cycles (~60-80 ns)  |
-                             +─────────────────────────────────+
-```
+![AeroStream Shard-per-Core CPU Cache Hierarchy](images/shard_per_core_architecture.png)
 
 #### Cache Line Granularity & False Sharing
 CPUs transfer memory between the L1/L2/L3 caches and main memory in discrete **64-byte cache lines**. When multiple threads running on distinct CPU cores read and write to unrelated variables that happen to reside within the same 64-byte boundary, hardware cache-coherency protocols (MESI/MOESI) invalidate the entire cache line across all participating cores:
@@ -310,30 +250,14 @@ func (w *BackgroundWorker) Start() {
 
 ### 2.3 Raft Consensus FSM Optimization
 
-The consensus core is implemented in [`RaftNode`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/consensus/raft.go#L16) and [`FSM`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/consensus/fsm.go#L84).
+The consensus core is implemented in [`RaftNode`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/consensus/raft.go#L16) and [`FSM`](file:///home/uttam/projects/AeroMQ/go-controller/pkg/consensus/fsm.go#L84):
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as Client / Broker
-    participant R as Raft Leader (RaftNode)
-    participant B as Durable Log (BoltDB)
-    participant F as State Machine (FSM)
-    participant Q as Raft Followers
+![AeroStream Controller-Broker Orchestration](images/controller_broker_orchestration.png)
 
-    C->>R: Apply(Command)
-    R->>B: Append Log Entry (WAL)
-    par Replicate to Quorum
-        R->>Q: AppendEntries RPC
-        Q-->>R: AppendEntries Response (Success)
-    end
-    Note over R: Quorum Reached (Majority ACK)
-    R->>F: Apply(raft.Log)
-    Note over F: Acquire Write Lock (mu.Lock)
-    F->>F: Mutate in-memory ClusterState
-    Note over F: Release Write Lock (mu.Unlock)
-    R-->>C: Propose Result (Success)
-```
+1. **Client / Broker Proposal**: Ingress commands are submitted to the Raft Leader via `Apply(Command)`.
+2. **BoltDB Write-Ahead Log**: The leader appends the entry to its durable BoltDB WAL log.
+3. **Quorum Replication**: The leader concurrently replicates the entry to follower nodes via `AppendEntries` RPC.
+4. **FSM Commit & State Mutation**: Once a majority ACK is received, the leader applies the log entry to the state machine under `mu.Lock()`, updating in-memory cluster state before returning success.
 
 #### Non-Blocking Atomic Snapshotting
 A critical hazard in consensus engines is holding a state machine lock while writing multi-megabyte snapshots to persistent disk, which stalls incoming consensus commands.
@@ -382,42 +306,17 @@ AeroStream supports in-line message filtering, PII redaction, and WebAssembly ex
 
 The [`rust-broker`](file:///home/uttam/projects/AeroMQ/rust-broker) implements the storage data plane. It processes Kafka wire-protocol requests (port `9092`) and native AeroStream framing (port `9091`).
 
-```
-+─────────────────────────────────────────────────────────────────────────────────────────────+
-|                                Rust Broker Data Plane Architecture                          |
-+─────────────────────────────────────────────────────────────────────────────────────────────+
-|                                                                                             |
-|        [ Kafka Protocol :9092 ]                               [ Native Protocol :9091 ]      |
-|                   │                                                       │                 |
-|                   ▼                                                       ▼                 |
-|       +───────────────────────────+                           +───────────────────────────+ |
-|       |       KafkaServer         |                           |      DataPlaneServer      | |
-|       |  (kafka_server.rs)        |                           |     (server.rs / TCP)     | |
-|       +─────────────┬─────────────+                           +─────────────┬─────────────+ |
-|                     │                                                       │               |
-|                     └──────────────────────────┬────────────────────────────┘               |
-|                                                │                                            |
-|                                                ▼                                            |
-|                            +───────────────────────────────────────+                        |
-|                            |              LogManager               |                        |
-|                            |  RwLock<HashMap<PartitionKey, Arc>>   |                        |
-|                            +───────────────────┬───────────────────+                        |
-|                                                │                                            |
-|                     ┌──────────────────────────┴──────────────────────────┐                 |
-|                     ▼                                                     ▼                 |
-|       +───────────────────────────+                         +───────────────────────────+   |
-|       |       PartitionLog        |                         |     TxnCoordinator (2PC)  |   |
-|       |     (topic, part 0)       |                         |  (coordinator.rs / WAL)   |   |
-|       +─────────────┬─────────────+                         +─────────────┬─────────────+   |
-|                     │                                                     │                 |
-|         ┌───────────┴───────────┐                             ┌───────────┴───────────┐     |
-|         ▼                       ▼                             ▼                       ▼     |
-|   Active Segment        Index (.idx)                   txn.journal             txn.index    |
-|   write_all_at()        16-byte fixed                  Producer Epoch          LSO Bounds   |
-|   (Linux Page Cache)    Binary Search                  2PC State Log           Pruning      |
-|                                                                                             |
-+─────────────────────────────────────────────────────────────────────────────────────────────+
-```
+![AeroStream Native and Kafka Dual Protocol](images/native_and_kafka_dual_protocol.png)
+
+The data plane execution flow coordinates ingress networking, partition routing, and disk persistence:
+* **Dual Ingress Handlers**:
+  * `KafkaServer`: Listens on port `9092` to process standard Apache Kafka binary request envelopes.
+  * `DataPlaneServer`: Listens on port `9091` to process AeroStream native binary frames (`0xAE 0x01`).
+* **Storage Kernel & Partition State**:
+  * `LogManager`: Thread-safe partition registry mapping `(Topic, Partition)` keys to active [`PartitionLog`](file:///home/uttam/projects/AeroMQ/rust-broker/src/log/manager.rs#L19) instances.
+  * `PartitionLog`: Encapsulates append-only active segments, historical closed segments, and sparse offset indices.
+  * `TxnCoordinator`: Manages two-phase commit write-ahead logs (`txn.journal`) and enforces Log Stable Offset ($LSO$) boundaries for transactional read isolation.
+
 
 ### 3.1 Asynchronous Runtime & Worker Thread Pinning
 
@@ -564,17 +463,10 @@ self.next_offset += 1;
 
 Every Kafka RecordBatch requires CRC32C (Castagnoli) checksum verification and generation.
 
-```
-+────────────────────────────────────────────────────────────────────────────────────+
-|                      CRC32C COMPUTATION EFFICIENCY COMPARISON                      |
-+────────────────────────────────────────────────────────────────────────────────────+
-| Software Table Lookup (Byte-at-a-time):                                            |
-| [ Byte 0 ] ──► [ Table Lookup ] ──► [ XOR ] ──► [ Byte 1 ] ──► ... (~500 MB/s)     |
-|                                                                                    |
-| Hardware SSE4.2 / ARMv8 Instruction (64-bit Pipelined):                            |
-| [ 8 Bytes Quadword ] ──► [ __builtin_ia32_crc32di / __crc32cd ] ──► (~10,500 MB/s) |
-+────────────────────────────────────────────────────────────────────────────────────+
-```
+| Implementation Strategy | Execution Mechanism | Throughput | CPU Overhead |
+|:---|:---|:---|:---|
+| **Software Slicing-by-8** | Byte-by-byte table lookup & XOR | ~500 MB/s | >50% Ingress Core Time |
+| **Hardware SSE4.2 / ARMv8** | 64-bit pipelined `crc32q` / `__crc32cd` | **~10,900 MB/s** | **<2.5% Ingress Core Time** |
 
 Prior to optimization, software table lookups achieved $\approx 474\text{--}504\,\text{MB/s}$, consuming $>50\%$ of broker CPU time during produce batch ingestion. AeroStream uses the hardware instruction via [`crc32c::crc32c`](file:///home/uttam/projects/AeroMQ/rust-broker/src/kafka/handlers.rs#L59-L61):
 
@@ -584,18 +476,14 @@ $$\text{Software CRC32C: } 0.5\,\text{GB/s} \quad \longleftrightarrow \quad \tex
 
 AeroStream implements cross-partition transactions following KIP-98 and KIP-890 semantics.
 
-```mermaid
-stateDiagram-v2
-    [*] --> Empty
-    Empty --> Ongoing: AddPartitionsToTxn / AddOffsetsToTxn
-    Ongoing --> Ongoing: Produce / TxnOffsetCommit
-    Ongoing --> PrepareCommit: EndTxn(commit=true)
-    Ongoing --> PrepareAbort: EndTxn(commit=false)
-    PrepareCommit --> CompleteCommit: Write Commit Markers to All Partitions
-    PrepareAbort --> CompleteAbort: Write Abort Markers to All Partitions
-    CompleteCommit --> [*]
-    CompleteAbort --> [*]
-```
+| Initial State | Triggering Event / RPC | Target State | Invariant Action |
+|:---|:---|:---|:---|
+| `Empty` | `AddPartitionsToTxn` / `AddOffsetsToTxn` | `Ongoing` | Transaction registered in coordinator WAL |
+| `Ongoing` | `Produce` / `TxnOffsetCommit` | `Ongoing` | Appends record batches with transactional PID & epoch |
+| `Ongoing` | `EndTxn(commit=true)` | `PrepareCommit` | Durable WAL marker persisted before 2PC broadcast |
+| `Ongoing` | `EndTxn(commit=false)` | `PrepareAbort` | Durable WAL marker persisted before 2PC broadcast |
+| `PrepareCommit` | 2PC Commit Marker Broadcast | `CompleteCommit` | `0x0000` control markers committed to all partition logs |
+| `PrepareAbort` | 2PC Abort Marker Broadcast | `CompleteAbort` | `0x0001` control markers committed to all partition logs |
 
 #### The Transaction Coordinator & WAL Journaling
 The [`TxnCoordinator`](file:///home/uttam/projects/AeroMQ/rust-broker/src/txn/coordinator.rs#L37) resides inside the broker because only the broker hosting a partition log can append control markers to it.

@@ -30,16 +30,12 @@ AeroStream organizes cluster authority around five enterprise roles:
 
 For fine-grained multi-tenant governance, AeroStream evaluates **Kafka-compatible ACL rules** using Go 1.26 SIMD Swiss Tables for sub-microsecond authorization decisions.
 
-```mermaid
-flowchart TD
-    Req["Incoming Produce/Fetch Request"] --> Auth{"Is Principal Authenticated?"}
-    Auth -->|No| Fail401["Reject: SASL Authentication Failed"]
-    Auth -->|Yes| DenyCheck{"Does Any Explicit DENY Rule Match?"}
-    DenyCheck -->|Yes| Fail403["Reject: Access Denied (Explicit Deny)"]
-    DenyCheck -->|No| AllowCheck{"Does Matching ALLOW Rule Exist?"}
-    AllowCheck -->|Yes| Permit["Accept: Request Processed"]
-    AllowCheck -->|No| FailDefault["Reject: Access Denied (Default Deny)"]
-```
+### ACL Evaluation Precedence
+
+1. **Authentication Check**: If SASL authentication fails or token is invalid, reject with 401 Unauthorized.
+2. **Explicit DENY Check**: If any rule explicitly denies access for the principal and operation, reject with 403 Forbidden (explicit DENY takes absolute precedence).
+3. **Explicit ALLOW Check**: If an explicit matching ALLOW rule or `SUPER_ADMIN` role matches, permit access.
+4. **Default Deny**: If no matching ALLOW rule exists, access is denied under zero-trust principles.
 
 ### Resource Types & Pattern Matching
 
@@ -86,22 +82,7 @@ In traditional streaming engines, partition reassignment follows the **Eager Reb
 
 AeroStream implements **Cooperative Sticky Rebalancing** (matching the modern KIP-848 specification):
 
-```mermaid
-sequenceDiagram
-    participant C1 as Consumer 1 (Partitions 0, 1)
-    participant C2 as Consumer 2 (Partition 2)
-    participant C3 as New Consumer 3 (Joining Group)
-    participant Coord as AeroStream Coordinator
-
-    Note over C1,C2: Steady State Processing
-    C3->>Coord: JoinGroup (Cooperative Sticky)
-    Coord-->>C1: Heartbeat: Revoke P1 only (Migration plan)
-    Coord-->>C2: Heartbeat: Keep P2 uninterrupted!
-    Note over C1: C1 continues processing P0 uninterrupted!
-    C1->>Coord: SyncGroup (Revoked P1)
-    Coord-->>C3: Assigned P1
-    Note over C3: C3 begins reading P1 with zero cluster-wide stall!
-```
+![Cluster Topology & Scale Down](images/cluster_topology_scale_down.png)
 
 1. **Non-Revoking Assignment**: Consumers not involved in migrating partitions continue streaming without pausing.
 2. **Minimal Partition Migration**: Only the exact partition shifting ownership is revoked and transferred.
