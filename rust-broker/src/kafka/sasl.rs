@@ -495,12 +495,8 @@ mod tests {
 
     #[test]
     fn mtls_pre_authenticated_connection_skips_sasl_credential_check() {
-        // Mirrors what `net::kafka_server::handle_kafka_connection` does when the connection's
-        // TLS handshake already verified an mTLS client certificate and `tls.client_cert_principal`
-        // is set: the connection starts life already `Authenticated`, with no SaslHandshake ever
-        // sent. A client (or an attacker who doesn't have the cert's private key but somehow got
-        // the connection this far) sending SaslAuthenticate with garbage credentials must not be
-        // able to knock the connection back out of its cert-derived identity.
+        // Connections pre-authenticated via mTLS retain their identity and ignore
+        // subsequent SaslAuthenticate attempts.
         let mut state = SaslState::Authenticated {
             user: "mtls-cert-user".to_string(),
         };

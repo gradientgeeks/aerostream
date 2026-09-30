@@ -57,7 +57,7 @@ done
 echo "[2/2] Starting Rust Zero-Copy Storage Broker..."
 rust-broker \
     --id "${BROKER_ID}" \
-    --host "0.0.0.0" \
+    --host "${ADVERTISED_HOST:-0.0.0.0}" \
     --data-port "${DATA_PORT}" \
     --kafka-port "${KAFKA_PORT}" \
     --controller "http://127.0.0.1:${GRPC_PORT}" \

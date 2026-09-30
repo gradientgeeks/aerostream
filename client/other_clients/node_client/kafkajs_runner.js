@@ -1,12 +1,5 @@
 /**
- * AeroStream Kafka Wire Protocol End-to-End Test Suite for Node.js (kafkajs)
- * 
- * Verifies KafkaJS compatibility against AeroStream running on 127.0.0.1:9092:
- *  - Test 1: AdminClient Operations (connect, createTopics, listTopics, fetchTopicMetadata)
- *  - Test 2: Producer Operations (keys, partition routing across 3 partitions, headers, GZIP & Snappy compression)
- *  - Test 3: Consumer Group Operations (connect, subscribe, dynamic rebalance/assignment, auto/manual offset commits)
- *  - Test 4: Transactional Producer & Isolation (transaction(), commit(), abort(), read_committed vs read_uncommitted)
- *  - Test 5: Payload Checksum Verification (SHA-256 byte-level data integrity across variable payload sizes)
+ * AeroStream Kafka Wire Protocol E2E Test Suite for Node.js (kafkajs).
  */
 
 'use strict';
@@ -76,8 +69,7 @@ function createKafkaClient(customClientId = CLIENT_ID) {
 }
 
 /**
- * Test 1: AdminClient operations
- * Verifies admin.connect(), admin.createTopics(), admin.listTopics(), and admin.fetchTopicMetadata()
+ * Test 1: AdminClient operations (topic creation, discovery, and metadata).
  */
 async function testAdminOperations(kafka, topicName) {
   logStep('1. AdminClient Operations (Metadata, Topic Creation, Inspection)');
@@ -157,8 +149,7 @@ async function testAdminOperations(kafka, topicName) {
 }
 
 /**
- * Test 2: Producer operations
- * Verifies partition routing across 3 partitions, custom headers, keys, and compression (None, GZIP, Snappy)
+ * Test 2: Producer operations (partition routing, headers, and compression).
  */
 async function testProducerBatches(kafka, topicName) {
   logStep('2. Producer Operations (Partition Routing, Custom Headers, Compression Codecs)');
@@ -309,9 +300,7 @@ async function testProducerBatches(kafka, topicName) {
 }
 
 /**
- * Test 3: Consumer Group operations
- * Verifies consumer.connect(), dynamic partition assignment, eachMessage consumption,
- * header decoding, auto offset commits, and manual offset commits
+ * Test 3: Consumer Group operations (rebalance, consumption, offset commits).
  */
 async function testConsumerGroup(kafka, topicName, expectedInfo) {
   logStep('3. Consumer Group Operations (Dynamic Assignment, EachMessage, Headers & Commits)');
@@ -442,9 +431,7 @@ async function testConsumerGroup(kafka, topicName, expectedInfo) {
 }
 
 /**
- * Test 4: Transactional Producer & Read-Committed Isolation
- * Verifies producer.transaction(), send(), commit(), and abort()
- * Confirms read_committed consumer filters aborted messages, while read_uncommitted sees them.
+ * Test 4: Transactional Producer & Read-Committed Isolation (commit and abort).
  */
 async function testTransactions(kafka) {
   logStep('4. Transactional Producer & Isolation Level (commit, abort, read_committed)');
@@ -587,9 +574,7 @@ async function testTransactions(kafka) {
 }
 
 /**
- * Test 5: Payload Checksum Verification (SHA-256 byte integrity)
- * Generates payloads of multiple sizes (256B, 4KB, 16KB, 64KB), produces them,
- * consumes them, and confirms exact SHA-256 byte-for-byte equality.
+ * Test 5: Payload Checksum Verification (SHA-256 byte integrity).
  */
 async function testPayloadChecksum(kafka) {
   logStep('5. Payload Checksum Verification (SHA-256 Byte Integrity)');

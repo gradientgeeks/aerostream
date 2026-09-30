@@ -1,13 +1,5 @@
-//! Version-aware Kafka wire codec supporting both classic and "flexible" encodings.
-//!
-//! Flexible versions (KIP-482) change the encoding as follows:
-//!   * strings/bytes use an unsigned-varint length + 1 (0 = null) ("compact"),
-//!   * arrays use an unsigned-varint length + 1 (0 = null),
-//!   * every struct (and the request/response header) ends with a tagged-field section,
-//!   * request header is v2 (client_id stays a classic nullable string, followed by tagged fields),
-//!     response header is v1 (correlation id + tagged fields; ApiVersions always uses header v0).
-//!
-//! `Rd` and `Wr` carry a `flex` flag so a handler can be written once for all versions.
+//! Kafka wire protocol codec supporting classic and flexible (KIP-482) encodings.
+//! Compact types use unsigned-varint prefixes and structs include tagged fields.
 
 use bytes::{BufMut, BytesMut};
 

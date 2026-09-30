@@ -1,14 +1,5 @@
-//! Striped LRU pool of open active-segment file handles (Phase 10: massive partition density).
-//!
-//! Without it every `PartitionLog` pins two file descriptors (`.log` + `.idx`) for its whole lifetime, so 10k
-//! partitions need 20k fds. With it, a partition only holds a cheap `SlotId` plus the paths; the descriptors live
-//! here, capped at `capacity`, and are reopened transparently on the next append/fetch after eviction.
-//!
-//! * Handles are `Arc<File>`: evicting only drops the pool's reference, so an in-flight positioned write/read on
-//!   an evicted handle stays valid and the fd closes when the last user finishes.
-//! * The pool is split into stripes (by slot id) so the single short critical section is not a global lock;
-//!   each stripe evicts independently at `capacity / stripes`.
-//! * LRU is O(log n): `tick -> slot` BTreeMap gives the oldest entry, a HashMap gives the entry for a slot.
+//! Striped LRU pool for active-segment file descriptors.
+//! Partitions acquire cached file handles on demand with O(log n) eviction.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{File, OpenOptions};

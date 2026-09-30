@@ -1,17 +1,5 @@
 //! Share-partition state machine (KIP-932).
-//!
-//! Per (group, topic, partition) the broker tracks a *share-partition start
-//! offset* (SPSO), a *share-partition end offset* (SPEO) and, for offsets in
-//! `[SPSO, SPEO)` that are not yet finalised, an in-flight record:
-//!
-//! ```text
-//!   Available --acquire--> Acquired --ACCEPT--> Acknowledged
-//!        ^                    |  \--REJECT--------> Archived
-//!        |                    |  \--RELEASE / lock timeout--> Available
-//!        +--------------------+          (or Archived once delivery_count >= max)
-//! ```
-//! `delivery_count` increments on every acquisition. Leading Acknowledged /
-//! Archived records are trimmed, advancing the SPSO.
+//! Manages in-flight record acquisition, acknowledgement, rejection, and SPSO advancement.
 
 use std::collections::BTreeMap;
 

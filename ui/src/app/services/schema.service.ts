@@ -106,10 +106,7 @@ export class SchemaService {
   }
 
   /**
-   * Resolves the API endpoint URL.
-   * If running in development (e.g. localhost:4200), defaults to http://localhost:9001
-   * unless overridden by localStorage. In production or behind a reverse proxy,
-   * uses relative paths.
+   * Resolves the API endpoint URL based on environment or localStorage overrides.
    */
   private getApiUrl(path: string): string {
     const custom =
@@ -133,8 +130,7 @@ export class SchemaService {
   }
 
   /**
-   * Loads all registered subjects and fetches their latest schema definition from
-   * the real Go Controller Schema Registry REST API.
+   * Loads registered subjects and schema definitions from Schema Registry REST API.
    */
   loadSchemas(): Observable<RegisteredSchema[]> {
     this._loading.set(true);
@@ -266,8 +262,7 @@ export class SchemaService {
   }
 
   /**
-   * Registers a new schema or schema evolution version with the Go Controller Schema Registry.
-   * Calls POST /subjects/{subject}/versions and reloads the schemas catalog upon success.
+   * Registers a new schema or schema evolution version with the Schema Registry.
    */
   registerSchema(req: RegisterSchemaRequest): Observable<RegisteredSchema> {
     const trimmedSubject = req.subject.trim();
@@ -322,7 +317,6 @@ export class SchemaService {
 
   /**
    * Tests schema compatibility against a subject and version.
-   * Calls POST /compatibility/subjects/{subject}/versions/{version}
    */
   checkCompatibility(
     subject: string,
@@ -341,7 +335,6 @@ export class SchemaService {
 
   /**
    * Deletes a subject from the Schema Registry.
-   * Calls DELETE /subjects/{subject} and reloads schemas.
    */
   deleteSubject(subject: string): Observable<boolean> {
     const url = this.getApiUrl(`/subjects/${encodeURIComponent(subject.trim())}`);

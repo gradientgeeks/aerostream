@@ -126,10 +126,8 @@ enum Conn {
 }
 
 impl Conn {
-    /// Transfer `bytes` of `file` starting at `position` to the socket.
-    /// Plaintext connections use the `sendfile(2)` zero-copy fast path; TLS
-    /// connections read the region into memory and write it through the TLS
-    /// stream (zero-copy is impossible once encryption is in play).
+    /// Transfers `bytes` from `file` starting at `position` to socket.
+    /// Uses `sendfile(2)` for plaintext and buffered encryption for TLS.
     async fn send_file_region(
         &mut self,
         file: File,
@@ -853,11 +851,8 @@ mod tests {
         assert_eq!(resp, [0xAE, 0x01, 1]);
     }
 
-    /// Regression test for the cmd=1 (Produce) handler holding the partition's async `Mutex` across the ack's
-    /// network write. Two real connections produce concurrently, interleaved, to the SAME topic-partition; if the
-    /// lock were still held across `stream.write_all(...).await`, one connection's produce would serialize behind
-    /// the other's full request/response round trip instead of just its disk write, and this would not complete
-    /// within the deadline once enough interleaved requests are in flight.
+    /// Regression test ensuring concurrent Produce requests to the same partition
+    /// do not serialize socket writes under the partition lock.
     #[tokio::test]
     async fn produce_to_same_partition_on_two_connections_does_not_serialize_on_network_io() {
         let dir = tempfile::tempdir().unwrap();

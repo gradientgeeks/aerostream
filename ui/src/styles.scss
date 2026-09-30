@@ -106,10 +106,7 @@ html.light-theme, body.light-theme {
   --mat-select-focus-arrow-color: var(--app-primary);
 }
 
-/* ==========================================================================
-   Dual Engine Palette - Light Theme
-   (Darker rich Cyan for high contrast, no glow effects)
-   ========================================================================== */
+/* Dual Engine Palette - Light Theme */
 html.light-theme, body.light-theme {
   /* Brand Colors - Darker high-contrast Cyan and Ferrum */
   --app-primary: #0891b2;          /* Rich Cyan 600 - dark enough for high contrast */
@@ -903,10 +900,7 @@ mat-dialog-actions,
   flex-wrap: wrap;
 }
 
-/* ==========================================================================
-   Modern Web Guidance: Button Interactivity, Focus Rings & Touch Targets
-   (Baseline Widely Available CSS Architecture & WCAG 2.5.8 AA)
-   ========================================================================== */
+/* Button Interactivity, Focus Rings & Touch Targets (WCAG 2.5.8 AA) */
 button,
 a[mat-button],
 a[mat-flat-button],
@@ -1006,10 +1000,7 @@ a[mat-stroked-button],
 
 .border-app { border-color: var(--app-border) !important; }
 
-/* ==========================================================================
-   Modern Responsive Page Layout Standard (Modern Web Guidance)
-   Fluid padding via clamp(), clean full-width containers, and no double spacing
-   ========================================================================== */
+/* Responsive Page Layout Standard */
 .overview-container,
 .topics-page,
 .messages-page,

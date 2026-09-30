@@ -392,10 +392,7 @@ impl ShareCoordinator {
         result.unwrap()
     }
 
-    // --------------------------------------------------------------------
-    // Session handling
-    // --------------------------------------------------------------------
-    /// Validates the share session for `(group, member)`; returns whether the session was closed.
+    /// Validates share session for `(group, member)`; returns true if session closed.
     fn check_session(inner: &mut Inner, group: &str, member: &str, epoch: i32) -> Result<bool, i16> {
         let grp = inner.groups.get(group).ok_or(err::GROUP_ID_NOT_FOUND)?;
         if !grp.members.contains_key(member) {
@@ -564,10 +561,7 @@ impl ShareCoordinator {
         out
     }
 
-    // --------------------------------------------------------------------
-    // ShareAcknowledge (79)
-    // --------------------------------------------------------------------
-    /// Returns (top-level error, per-partition results with `ack_error`).
+    /// Handles ShareAcknowledge (79), returning top-level error and partition results.
     pub async fn share_acknowledge(
         &self,
         group_id: &str,
@@ -909,10 +903,7 @@ impl ShareCoordinator {
         Some((s.start_offset, s.end_offset, a, q, k, r))
     }
 
-    // --------------------------------------------------------------------
-    // Maintenance
-    // --------------------------------------------------------------------
-    /// Expires members past the session timeout, expires acquisition locks and flushes state.
+    /// Expires timed-out members and acquisition locks, then flushes state to disk.
     pub async fn sweep(&self, now: i64) {
         // 1. members
         let mut dead: Vec<(String, String)> = Vec::new();

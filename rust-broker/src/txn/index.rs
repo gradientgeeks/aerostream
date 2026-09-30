@@ -1,7 +1,5 @@
-//! Per-partition transaction index: tracks ongoing transactions (for the Last
-//! Stable Offset) and completed-aborted transactions (for the Fetch
-//! `aborted_transactions` list). Persisted as a tiny append-only journal
-//! (`txn.index`) inside the partition directory and replayed on open.
+//! Per-partition transaction index tracking ongoing transactions for LSO and aborted
+//! transactions for Fetch. Persisted as an append-only journal (`txn.index`).
 
 use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};

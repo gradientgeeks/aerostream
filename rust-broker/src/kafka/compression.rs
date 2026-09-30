@@ -1,16 +1,5 @@
-//! Record-batch compression codecs (Kafka magic v2 attribute bits 0-2, and the
-//! legacy magic 0/1 wrapper-message attribute bits 0-2).
-//!
-//! Codec ids (KIP-110 for zstd): 0 none, 1 gzip, 2 snappy, 3 lz4, 4 zstd.
-//! Wire formats match the Java client:
-//!   * gzip   - RFC 1952 gzip stream
-//!   * snappy - xerial snappy-java framing (raw snappy is also accepted on read)
-//!   * lz4    - LZ4 frame format
-//!   * zstd   - standard zstd frame
-//!
-//! Batch-level compression covers only the `records` section (everything after the
-//! 61-byte header), so a batch can be re-compressed by rewriting the attributes,
-//! batch length and CRC32C without touching any per-record bytes.
+//! Kafka record batch compression codecs: None (0), Gzip (1), Snappy (2), LZ4 (3), Zstd (4).
+//! Compression applies to batch records, preserving the 61-byte batch header.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -258,10 +247,8 @@ pub fn recompress_batch(batch: &[u8], target: Codec) -> Result<Vec<u8>, Compress
     Ok(out)
 }
 
-/// Validates every batch in a produce payload (known codec, decodable body) and, when
-/// `ctype` forces a codec, re-encodes batches to it. Legacy magic 0/1 data and any
-/// trailing partial batch are passed through untouched. Control batches are never
-/// re-compressed.
+/// Validates batch codecs in produce payloads and re-encodes if `ctype` requires it.
+/// Legacy magic 0/1 batches and control batches are preserved unchanged.
 pub fn normalize_produce_payload<'a>(data: &'a [u8], ctype: CompressionType) -> Result<std::borrow::Cow<'a, [u8]>, CompressionError> {
     let needs_recompression = match ctype {
         CompressionType::Codec(target) => {

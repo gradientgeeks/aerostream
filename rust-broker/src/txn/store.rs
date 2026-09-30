@@ -1,7 +1,5 @@
-//! Durable transaction-coordinator state (the moral equivalent of Kafka's
-//! `__transaction_state` topic): an append-only, last-writer-wins journal of
-//! per-transactional-id metadata records plus the producer-id block high-water
-//! mark. Compacted on load.
+//! Durable transaction-coordinator state: append-only, last-writer-wins journal of
+//! per-transactional-ID metadata records and producer-ID allocations.
 
 use std::collections::{BTreeSet, HashMap};
 use std::fs::{self, File, OpenOptions};

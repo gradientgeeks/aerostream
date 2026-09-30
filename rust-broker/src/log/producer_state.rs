@@ -78,13 +78,8 @@ impl ProducerStateTracker {
         self.producers.get(&producer_id)
     }
 
-    /// Checks the incoming sequence number for `producer_id` and updates the tracker state if valid.
-    ///
-    /// - `ValidNext`: `base_sequence == last_sequence + 1` (or first sequence from new PID).
-    ///   Update tracker, proceed with write.
-    /// - `Duplicate`: `base_sequence <= last_sequence`. Network retry!
-    ///   Return duplicate ACK with cached `last_offset` without appending to disk.
-    /// - `OutOfOrder`: `base_sequence > last_sequence + 1`. Return error code 45 (`OutOfOrderSequenceNumber`).
+    /// Validates sequence number against tracker state:
+    /// returns ValidNext for expected sequence, Duplicate for retry, or OutOfOrder.
     pub fn check_and_update_sequence(
         &mut self,
         producer_id: i64,

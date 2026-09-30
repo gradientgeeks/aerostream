@@ -12,11 +12,8 @@ use crate::kafka::quota::{self, RequestCtx};
 use crate::kafka::codec::{Rd, Wr};
 use crate::log::LogManager;
 
-/// Per-connection cache of resolved partitions, avoiding a `LogManager::get_partition` (async RwLock + hashmap
-/// lookup) on every Produce/Fetch request for a topic-partition this connection has already touched. A `Vec` is
-/// used rather than a `HashMap` since a connection touches at most a handful of distinct partitions in practice,
-/// making a linear scan cheaper than hashing and avoiding the allocation a `HashMap` key lookup would otherwise
-/// need for a borrowed `(&str, i32)` search key.
+/// Per-connection cache of resolved partition handles to eliminate repeated
+/// log manager lookup overhead on active connections.
 pub(crate) type PartitionCache = Vec<((String, i32), Arc<tokio::sync::Mutex<crate::log::manager::PartitionLog>>)>;
 
 async fn resolve_partition(

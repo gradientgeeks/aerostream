@@ -1,13 +1,5 @@
-//! Two-level sparse offset index (Phase 10).
-//!
-//! L2 is the on-disk `.idx` file: one 16-byte `(offset, position)` entry per log entry (unchanged format).
-//! L1 is this in-memory structure: the segment-relative offset of every `SAMPLE`-th entry as a `u32`, i.e.
-//! 4 bytes per `SAMPLE` entries. A lookup binary-searches L1 to narrow the answer to a window of at most
-//! `SAMPLE` entries, then does ONE positioned read of that window from L2 and finishes in memory — instead of
-//! `log2(n)` separate preads.
-//!
-//! L1 is built lazily, extended incrementally as the (active) index grows, and can be dropped at any time
-//! (dormant partitions) since it is fully derivable from L2.
+//! Two-level sparse offset index: L1 is an in-memory sample table (4 bytes per sample),
+//! and L2 is the on-disk 16-byte entry index (.idx file).
 
 use std::fs::File;
 use std::io;

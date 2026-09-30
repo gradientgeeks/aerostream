@@ -551,11 +551,8 @@ type groupPartitionState struct {
 	offset    uint64
 }
 
-// handleConsumeGroup joins a consumer group for a topic, fetches messages for
-// the partitions assigned to this member, and periodically commits progress
-// and heartbeats back to the controller to stay in the group. Without
-// --follow it performs a single join+fetch+commit pass and exits; with
-// --follow it keeps polling/heartbeating until interrupted.
+// handleConsumeGroup joins a consumer group, consumes partition messages,
+// and periodically commits offsets and heartbeats back to the controller.
 func handleConsumeGroup(controllerAddr string, topic string, groupID string, follow bool) {
 	client := connectController(controllerAddr)
 	ctx := context.Background()

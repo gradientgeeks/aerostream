@@ -1,12 +1,5 @@
-//! Kafka classic consumer-group coordinator (JoinGroup / SyncGroup / Heartbeat / LeaveGroup state machine).
-//!
-//! Group membership state lives in memory on the coordinator broker (chosen by hashing the group id over
-//! the live brokers, see `TopologyCache::coordinator_for`). Committed offsets are kept here as a cache and
-//! written through to the controller (Raft-replicated) by the wire layer (`group_api.rs`) so they survive
-//! coordinator moves and broker restarts.
-//!
-//! States follow Kafka: Empty -> PreparingRebalance -> CompletingRebalance -> Stable.
-//! JoinGroup and SyncGroup responses are delivered asynchronously through oneshot channels.
+//! Consumer group coordinator managing JoinGroup, SyncGroup, Heartbeat, and LeaveGroup.
+//! Group state is held in memory and committed offsets are replicated via Raft.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};

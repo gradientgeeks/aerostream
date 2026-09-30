@@ -49,9 +49,6 @@ pub struct S3StorageProvider {
 
 impl S3StorageProvider {
     /// Creates a new `S3StorageProvider` from the given `S3Config`.
-    ///
-    /// Configures the AWS S3 client with credentials, custom endpoints (for MinIO/LocalStack),
-    /// path-style addressing, and region.
     pub fn new(config: &S3Config) -> Result<Self, StorageError> {
         if config.bucket.trim().is_empty() {
             return Err(StorageError::Config(

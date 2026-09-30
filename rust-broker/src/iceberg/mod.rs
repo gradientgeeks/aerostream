@@ -1,11 +1,5 @@
-//! Iceberg topics: tails topic partitions, converts records to Parquet and
-//! commits Iceberg v2 snapshots to a warehouse. Zero external dependencies
-//! (hand-written Parquet/Avro/JSON); gated by cargo feature `iceberg`.
-//!
-//! Warehouse layout (Hadoop-style catalog, readable via `metadata/version-hint.text`
-//! or by pointing any engine at `metadata/v<N>.metadata.json`):
-//!   <warehouse>/<namespace>/<topic>/data/<uuid>.parquet
-//!   <warehouse>/<namespace>/<topic>/metadata/{v<N>.metadata.json, snap-*.avro, *-m0.avro}
+//! Iceberg topics: tails topic partitions, converts records to Parquet,
+//! and commits Iceberg v2 table metadata snapshots to object storage.
 
 use serde::Deserialize;
 

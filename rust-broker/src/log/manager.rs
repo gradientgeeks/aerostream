@@ -84,10 +84,7 @@ pub struct PartitionLog {
     // Configurations
     pub max_segment_size: u64,
     pub broker_id: u32,
-    // Root of the broker's configured storage directory (i.e. the `base_dir`
-    // passed into `PartitionLog::new`). Cold-storage segments are nested
-    // under this same root, rather than a hardcoded path relative to the
-    // process's current working directory.
+    // Root of broker storage directory; cold-storage segments are nested under this root.
     storage_base_dir: PathBuf,
     pub max_retention_size: Option<u64>,
     pub max_retention_age: Option<std::time::Duration>,
@@ -303,10 +300,8 @@ impl PartitionLog {
         )
     }
 
-    /// Validates sequence number for idempotent producer.
-    /// Returns Ok(None) if sequence is valid and should be appended.
-    /// Returns Ok(Some(last_offset)) if duplicate sequence (return duplicate ACK without appending).
-    /// Returns Err(45) if sequence gap detected (OutOfOrderSequenceNumber).
+    /// Validates idempotent producer sequence: Ok(None) to append, Ok(Some(last_offset))
+    /// for duplicates, or Err(45) for OutOfOrderSequenceNumber gaps.
     pub fn validate_idempotent_produce(&self, producer_id: i64, base_sequence: i32) -> Result<Option<i64>, i16> {
         if producer_id < 0 {
             return Ok(None);
@@ -397,15 +392,8 @@ impl PartitionLog {
         Ok(offset)
     }
 
-    /// Appends a raw record batch slice with in-place base-offset patching directly on disk.
-    /// This bypasses heap cloning of large multi-megabyte record batches.
-    ///
-    /// `record_count` is the number of Kafka records the batch actually contains (its offsets span
-    /// `[base_offset, base_offset + record_count)`), even though it is stored as a single log entry. Pass `1` for
-    /// a single-record batch; a caller storing a whole multi-record batch as one entry (skipping per-record
-    /// `append()`, safe only when nothing needs a distinct offset per record — see `txn::produce::append_payload`)
-    /// must pass the real count so `next_offset` advances correctly and `range_bounds` can find offsets inside the
-    /// batch, not just its base offset.
+    /// Appends a raw batch slice with in-place base-offset patching, advancing
+    /// `next_offset` by `record_count` to maintain accurate offset boundaries.
     pub fn append_batch_slice(&mut self, base_offset: i64, batch: &[u8], record_count: u64) -> io::Result<u64> {
         use std::os::unix::fs::FileExt;
 
@@ -478,13 +466,8 @@ impl PartitionLog {
         crate::log::compactor::compute_dirty_ratio(closed, self.tombstone_retention)
     }
 
-    /// Paced writeback of the active segment (like RocksDB's `bytes_per_sync`).
-    ///
-    /// Appends only dirty the page cache. Left alone, dirty pages pile up until the kernel (or, in a container, the
-    /// memory cgroup limit) forces the writer to wait for a large flush, which shows up as multi-second stalls. Every
-    /// `writeback_bytes` we ask the kernel to start writing the newly appended range (`SYNC_FILE_RANGE_WRITE`, does not
-    /// wait). With `drop_cache_after_writeback`, the range started on the previous step is waited for and dropped from
-    /// the page cache, which caps the broker's page-cache footprint and throttles the writer to the disk's speed.
+    /// Initiates paced writeback on the active segment using `sync_file_range`
+    /// to prevent dirty page accumulation and writeback stalls.
     fn write_back_progress(&mut self) {
         if self.writeback_bytes == 0 || self.active_len - self.writeback_start < self.writeback_bytes {
             return;
@@ -514,25 +497,8 @@ impl PartitionLog {
         self.writeback_start = self.active_len;
     }
 
-    /// Archives a sealed segment into `cold_dir`. A hard link shares the file's data blocks, so this costs no copy and
-    /// no extra page cache, and the archived copy survives retention deleting the local name (compaction replaces
-    /// segment files by rename, so the link keeps the segment exactly as it was sealed). If linking is not possible
-    /// (different filesystem), the segment is copied on a background thread instead of on the append path.
-    /// Archives a just-sealed segment into cold storage (hard link, or a copy if that fails, e.g. across
-    /// filesystems). All of the filesystem work — `create_dir_all`, `hard_link`, and the copy fallback — runs on a
-    /// spawned OS thread, not inline: on a small container (e.g. the 2 vCPU boxes this broker is benchmarked on),
-    /// blocking a Tokio worker thread on directory/inode syscalls here, while `roll_over` still holds the
-    /// partition's lock, can stall every other partition's produce/fetch too if enough segments roll around the
-    /// same time. Nothing here needs to finish before the roll completes: the sealed segment's original path stays
-    /// valid and readable until retention removes it later.
-    ///
-    /// The two source files are opened *synchronously*, before returning, exactly as the old copy-fallback path
-    /// already did: retention (running under the same partition lock on a later append) could delete the sealed
-    /// segment's path before the spawned thread gets to it, and an open file descriptor keeps the underlying data
-    /// readable even after its directory entry is removed (standard POSIX unlink-after-open semantics), so the
-    /// copy fallback stays correct regardless of the race. `hard_link` itself needs the path to still exist, so
-    /// it's attempted first inside the spawned thread and only falls back to copying via the open handles if that
-    /// path is already gone.
+    /// Archives a sealed segment into `cold_dir` asynchronously.
+    /// Attempts a zero-copy hard link first, falling back to background file copy.
     fn archive_sealed_segment(&self, seg: &LogSegment) -> io::Result<()> {
         let src_log = File::open(&seg.log_path)?;
         let src_idx = File::open(&seg.idx_path)?;
@@ -892,12 +858,8 @@ impl PartitionLog {
         self.find_cold_segment(offset)
     }
 
-    /// Reads a contiguous run of log entries for a Fetch: from the entry holding the first offset >= `start_offset`
-    /// up to (excluding) `end_offset` (high watermark / LSO), limited to `max_bytes` but always including at least
-    /// the whole first entry (Kafka semantics since KIP-74). Stays within one segment; the next Fetch continues.
-    ///
-    /// Entries for consecutive offsets are stored back to back in the segment file, so the result is one byte range.
-    /// Returns (file, position, length, length of the first entry).
+    /// Reads a contiguous byte range of log entries in `[start_offset, end_offset)`,
+    /// bounded by `max_bytes` while guaranteeing at least the full first entry.
     pub fn read_range(
         &mut self,
         start_offset: u64,
@@ -945,10 +907,7 @@ impl PartitionLog {
     /// `[start_offset, end_offset)`, total size within `max_bytes` (at least one entry).
     fn range_bounds(&mut self, start_offset: u64, end_offset: u64, max_bytes: u32) -> io::Result<Option<RangeBounds>> {
         use std::os::unix::fs::FileExt;
-        // start_offset >= next_offset means nothing has been written there yet: with the "last entry <= start_offset"
-        // search below, that would otherwise wrongly match the log's last real entry (its offset is < next_offset
-        // <= start_offset) and return stale data instead of "no data available". The old ">= start_offset" search
-        // caught this case implicitly (no entry qualifies), so this keeps that behavior explicit under the new search.
+        // If start_offset exceeds end_offset or next_offset, no data is available yet.
         if start_offset >= end_offset || start_offset >= self.next_offset {
             return Ok(None);
         }
@@ -976,13 +935,7 @@ impl PartitionLog {
             idx.read_exact_at(&mut b, i * 16)?;
             Ok((u64::from_be_bytes(b[0..8].try_into().unwrap()), u64::from_be_bytes(b[8..16].try_into().unwrap())))
         };
-        // The last index entry with offset <= start_offset: the entry whose batch *contains* start_offset, whether
-        // or not it has its own exact entry. Every offset has an exact entry when 1 record == 1 entry (native
-        // protocol; idempotent/transactional or compacted-topic Kafka batches), where this picks the same entry a
-        // ">= start_offset" search would have — it only matters once a batch stores multiple records as one entry
-        // (see `append_batch_slice`'s `record_count`), where a ">= start_offset" search would skip past the
-        // containing entry to the next one and silently miss data for any offset that isn't the batch's base.
-        // (First entry with offset > start_offset, found via L1 window + one pread of L2.)
+        // Locate index entry containing start_offset using L1 window and L2 search.
         let mut lo = l1.first_at_or_after(&idx, n, start_offset.saturating_add(1))?;
         if lo == 0 {
             // start_offset is before the earliest entry in this segment: nothing to clamp to, fall back to the
@@ -998,11 +951,7 @@ impl PartitionLog {
         let log_len = log.metadata()?.len();
         let end_pos_of = |k: u64| -> io::Result<u64> { if k < n { Ok(entry(k)?.1) } else { Ok(log_len) } };
 
-        // entries [first, k_off) have offset < end_offset. Unlike `first`'s search above, this one can stay a
-        // ">= end_offset" search: `end_offset` is always an exact entry boundary, never mid-batch. With no other
-        // replicas, high_watermark == next_offset exactly (see recompute_high_watermark); with replicas, a
-        // follower's reported offset is always one it computed from whole entries read_range/read_range_entries
-        // handed it (they never return a partial entry), so it always lands on an entry boundary too.
+        // Upper bound index search: entries in [first, k_off) are strictly before end_offset.
         let k_off = l1.first_at_or_after(&idx, n, end_offset)?.max(first + 1);
         // largest k in (first, k_off] whose end position fits in max_bytes; at least first + 1
         let limit = pos + max_bytes as u64;
@@ -1456,11 +1405,7 @@ mod tests {
         let _off4 = log.append(&[5; 40]).unwrap(); // rollover! segment 2 starts at offset 4
         let _off5 = log.append(&[6; 40]).unwrap(); // segment 2 size = 80b
 
-        // Local segments:
-        // Segment 0 (offset 0): size is 80b log + 32b idx = 112b
-        // Segment 2 (offset 2): size is 80b log + 32b idx = 112b
-        // Segment 4 (offset 4): size is 80b log + 32b idx = 112b
-        // Total = 336b > 250b limit. So segment 0 should be deleted locally.
+        // Total segment size (336B) exceeds 250B limit; segment 0 is pruned locally.
         
         assert!(!log.segments.iter().any(|s| s.base_offset == 0));
         

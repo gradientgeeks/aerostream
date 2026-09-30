@@ -72,11 +72,8 @@ pub fn build_acceptor(
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
-/// Extract the Subject Common Name from a leaf certificate's raw DER bytes, for mapping an mTLS
-/// client certificate to a Kafka/AeroStream principal. Takes plain `&[u8]` (rather than a
-/// `rustls`-session-borrowed `CertificateDer`) so callers copy the cert out of the TLS session
-/// first, keeping this parsing step independent of that borrow. Returns `None` if the DER is
-/// unparseable or has no CN (both are treated as "no mTLS identity" by callers).
+/// Extracts Subject Common Name (CN) from leaf certificate DER bytes for mTLS identity.
+/// Returns None if certificate DER is invalid or does not contain a CN.
 pub fn common_name_from_der(der: &[u8]) -> Option<String> {
     let (_, cert) = x509_parser::parse_x509_certificate(der).ok()?;
     cert.subject()

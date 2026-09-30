@@ -1,13 +1,5 @@
-//! Kafka admin API breadth (stream C / #7).
-//!
-//! Implements, with proper classic *and* flexible (KIP-482) encodings:
-//!   CreateTopics(19) DeleteTopics(20) DescribeConfigs(32) AlterConfigs(33) IncrementalAlterConfigs(44)
-//!   CreatePartitions(37) ListOffsets(2) ElectLeaders(43) DescribeCluster(60)
-//! and, via `group_api`, the consumer-group APIs (FindCoordinator, JoinGroup, Heartbeat, LeaveGroup,
-//! SyncGroup, OffsetCommit, OffsetFetch, DescribeGroups, ListGroups, DeleteGroups).
-//!
-//! Topic/cluster mutations are mapped onto the controller's gRPC (`Controller` trait). Metadata reads use
-//! the broker's `TopologyCache`.
+//! Kafka Admin API handlers for topics, configs, partitions, and cluster metadata.
+//! Routes mutations through controller gRPC and serves reads from local topology cache.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};

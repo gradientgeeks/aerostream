@@ -1,9 +1,5 @@
-//! Cluster topology view for the Kafka shim: brokers (with racks), partition leaders/replicas/ISR,
-//! topic configs, plus KIP-392 "fetch from closest replica" selection and group-coordinator hashing.
-//!
-//! The controller (Go, Raft) stays the source of truth. Brokers keep a small cached `Snapshot`
-//! refreshed periodically (and on demand) through the `Controller` abstraction, which is also the
-//! seam used by unit tests.
+//! Cluster topology view for the Kafka shim: brokers, partition leaders/replicas/ISR,
+//! and KIP-392 closest-replica selection. Cached locally from the Go Raft controller.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -104,12 +100,8 @@ impl ReplicaSelector {
     }
 }
 
-/// Pick the broker a consumer in `client_rack` should read `p` from. Returns `p.leader` when the
-/// selector is `Leader`, the client rack is unknown/empty, or no suitable same-rack replica exists.
-///
-/// Rules (mirrors Kafka's RackAwareReplicaSelector): candidates are replicas in the client's rack
-/// that are in the ISR and have already replicated `fetch_offset`. If the leader is a candidate it
-/// wins; otherwise the candidate with the highest log end offset (ties: lowest id).
+/// Picks the replica for `client_rack` based on `ReplicaSelector`.
+/// Prefers same-rack ISR replicas matching `fetch_offset`, falling back to the partition leader.
 pub fn select_replica(
     selector: ReplicaSelector,
     client_rack: Option<&str>,

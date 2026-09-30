@@ -1,15 +1,6 @@
-//! Cross-partition transactions (KIP-98, KIP-890 "TV1" semantics).
-//!
-//! Where state lives (decision): the *transaction coordinator* runs inside the
-//! broker (`coordinator.rs`) because only the broker that owns a partition log
-//! can append commit/abort control markers to it, and there is no
-//! controller->broker command channel. Coordinator state is journaled to
-//! `<storage_dir>/__txn_state/txn.journal`; per-partition transaction indexes
-//! (ongoing txns for the LSO, aborted txns for Fetch) are journaled next to
-//! each partition (`txn.index`). Committed transactional consumer offsets are
-//! forwarded to the controller's Raft-backed offset store on commit.
-//! Producer ids are `(broker_id << 40) + counter`, allocated in persisted blocks,
-//! so they are cluster-unique and restart-safe.
+//! Cross-partition transactions (KIP-98, KIP-890 TV1 semantics).
+//! Coordinator runs in the broker with state journaled to `<storage_dir>/__txn_state/txn.journal`.
+//! Producer IDs are cluster-unique and restart-safe: `(broker_id << 40) + counter`.
 
 #![allow(dead_code)]
 

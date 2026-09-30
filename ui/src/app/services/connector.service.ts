@@ -120,8 +120,6 @@ export class ConnectorService {
 
   /**
    * Loads active connectors from the Go Controller Kafka Connect REST API.
-   * Uses /api/connectors-detail with fallback to /connectors?expand=status&expand=info.
-   * If no connectors exist, sets an empty array (no mock data).
    */
   loadConnectors(): Observable<Connector[]> {
     this._loading.set(true);

@@ -1,21 +1,5 @@
 //! Client quotas and throttling (KIP-13, KIP-124, KIP-219).
-//!
-//! Three quota types, keyed by user and/or client-id (each optionally `<default>`):
-//!   * `producer_byte_rate`  - bytes/sec accepted via Produce
-//!   * `consumer_byte_rate`  - bytes/sec served via Fetch
-//!   * `request_percentage`  - % of one request-handler thread (100 = one full thread)
-//!
-//! Rates are measured over a sliding window of `NUM_SAMPLES` one-second samples, the
-//! same shape as Kafka's `SampledStat`. When the observed rate O exceeds the quota T the
-//! client is throttled for `(O - T) / T * W` where W is the observed window length; the
-//! value is returned to the client in `throttle_time_ms` and the broker mutes the
-//! connection for that long (KIP-219: for old API versions the response itself is delayed).
-//!
-//! Lookup precedence for a request from (user U, client C), most specific first:
-//!   /users/U/clients/C, /users/U/clients/<default>, /users/U,
-//!   /users/<default>/clients/C, /users/<default>/clients/<default>, /users/<default>,
-//!   /clients/C, /clients/<default>
-//! Each metric is resolved independently (first entry that defines it wins).
+//! Tracks producer byte rate, consumer byte rate, and request percentage over sliding windows.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Mutex, OnceLock, RwLock};

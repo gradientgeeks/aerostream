@@ -1,16 +1,6 @@
-//! Share groups (KIP-932 "Queues for Kafka").
-//!
-//! Where state lives (decision): membership, sessions and per-partition
-//! delivery state live in the *broker* (`group.rs`), next to the partition logs
-//! they read from. Share-partition state (SPSO/SPEO, per-record state and
-//! delivery count) is journaled to `<storage_dir>/__share_state/` (snapshots,
-//! flushed every sweep) and reloaded on start; acquisition locks do not survive
-//! a restart (records return to Available with their delivery count kept), i.e.
-//! at-least-once delivery.
-//!
-//! Wire: ApiKeys 76 (ShareGroupHeartbeat), 77 (ShareGroupDescribe),
-//! 78 (ShareFetch), 79 (ShareAcknowledge). Topics are addressed by UUID; use
-//! [`topic_id`] to derive the id for a topic name (Metadata must expose the same id).
+//! Share groups (KIP-932): queue semantics over Kafka partition logs.
+//! State is journaled to `<storage_dir>/__share_state/` with at-least-once delivery.
+//! Implements ApiKeys 76 (Heartbeat), 77 (Describe), 78 (Fetch), and 79 (Acknowledge).
 
 #![allow(dead_code)]
 

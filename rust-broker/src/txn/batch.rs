@@ -148,13 +148,8 @@ pub fn split_batches(payload: &[u8]) -> Option<Vec<&[u8]>> {
     Some(out)
 }
 
-/// Converts one client batch into log entries, one per record, each a valid
-/// single-record batch whose base_offset equals its log offset.
-/// Producer id / epoch / transactional flag are preserved; sequence is base+i.
-/// Compressed batches are decompressed by `parse_records` and stored as uncompressed
-/// single-record entries, so that every record keeps its own log offset (a compressed batch
-/// stored whole would occupy one offset while its header claims `count` of them).
-/// Anything unparsable is stored as one entry.
+/// Converts a client batch into single-record entries where each base_offset equals its log offset.
+/// Preserves producer ID, epoch, and headers while expanding records for per-offset addressing.
 pub fn to_entries(batch: &[u8], first_offset: u64) -> Vec<Vec<u8>> {
     let (pid, epoch, base_seq, count) = match producer_info(batch) {
         Some(x) => x,

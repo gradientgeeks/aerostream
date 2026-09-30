@@ -112,11 +112,7 @@ func TestCreateTopic_RoundRobinAssignment(t *testing.T) {
 		t.Fatalf("expected %d partitions, got %d", numPartitions, len(topic.Partitions))
 	}
 
-	// The leader assignment cycles round-robin over the (map-order,
-	// non-deterministic) list of active brokers. Since there are 3
-	// brokers and 4 partitions, partition 0 and partition 3 must land
-	// on the same leader (index 0 mod 3), and partitions 0,1,2 must
-	// cover all three distinct brokers exactly once each.
+	// Verify round-robin partition leader distribution across distinct active brokers.
 	leaders := make(map[uint32]bool)
 	for i := uint32(0); i < 3; i++ {
 		p, ok := topic.Partitions[i]
@@ -365,10 +361,7 @@ func TestCleanInactive_MarksBrokerInactiveAndFailsOverLeader(t *testing.T) {
 		t.Fatalf("expected a follower replica, got replicas %v", p.ReplicaIDs)
 	}
 
-	// Let both brokers age a bit, then refresh only the follower so that,
-	// after another wait, the leader is stale (> inactiveTimeout) while the
-	// follower remains fresh. This makes which broker goes inactive
-	// deterministic (independent of Go's randomized map iteration order).
+	// Refresh follower heartbeat so only the leader expires, ensuring deterministic failover.
 	time.Sleep(inactiveTimeout * 3 / 5)
 	heartbeat(t, f, followerID)
 	time.Sleep(inactiveTimeout * 3 / 5)
@@ -497,10 +490,7 @@ func TestSnapshotRestore_RoundTrip(t *testing.T) {
 		t.Fatalf("Restore() failed: %v", err)
 	}
 
-	// Compare via JSON: encoding/json marshals map keys deterministically
-	// (sorted) and normalizes time.Time to its wall-clock representation,
-	// so this sidesteps map-iteration-order and monotonic-clock-reading
-	// differences between the two in-memory states.
+	// JSON marshaling normalizes map ordering and timestamps for deterministic comparison.
 	origJSON, err := json.Marshal(f.GetMetadata(nil))
 	if err != nil {
 		t.Fatalf("marshal original state: %v", err)

@@ -1,9 +1,5 @@
-// Package placement implements rack-aware replica placement (KIP-36 semantics).
-//
-// When every broker declares a rack, replicas of a partition are spread across
-// as many distinct racks as possible and leaders alternate between racks.
-// When any broker lacks a rack the classic round-robin placement is used so
-// existing (rack-less) clusters keep their behaviour.
+// Package placement implements rack-aware replica placement (KIP-36).
+// Distributes partition replicas across distinct racks; falls back to round-robin.
 package placement
 
 import (

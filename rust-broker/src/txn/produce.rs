@@ -12,14 +12,8 @@ pub struct ProduceOutcome {
     pub base_offset: i64,
 }
 
-/// Appends a produce payload made of magic-2 record batches to `log`.
-///
-/// Returns `None` if `payload` is not a clean sequence of magic-2 batches (caller
-/// falls back to the legacy raw path). Otherwise performs:
-///  * transactional verification against the coordinator,
-///  * epoch-aware idempotent sequence validation (duplicates return the cached offset),
-///  * splitting into single-record entries (1 record == 1 offset) and base-offset patching,
-///  * partition transaction index maintenance (ongoing txn tracking for LSO).
+/// Appends a produce payload of magic-2 record batches to `log`.
+/// Performs coordinator verification, sequence validation, and base-offset patching.
 pub fn append_payload(
     log: &mut PartitionLog,
     payload: &[u8],
@@ -66,10 +60,7 @@ pub fn append_payload(
             }
         }
         let first = log.next_offset;
-        // NOTE: collapsing a non-idempotent multi-record batch into one append_batch_slice entry (skipping the
-        // per-record `to_entries` explosion below) was tried here and reverted — it breaks share groups (KIP-932),
-        // whose acquire/ack/release tracking needs one offset per record, with no static way at produce time to
-        // know a topic will later be read by a share group. See the flagged discussion before reintroducing this.
+        // Retain 1 record == 1 offset splitting required for KIP-932 share group tracking.
         if count <= 1 {
             match log.append_batch_slice(first as i64, b, count.max(1) as u64) {
                 Ok(off) => {

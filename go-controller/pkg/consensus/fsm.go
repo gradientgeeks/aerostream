@@ -151,10 +151,7 @@ type Command struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
-// offsetKey builds the composite key used to store/look up a consumer
-// group's committed offset for a given topic-partition in f.state.Offsets.
-// Both Apply (CmdCommitOffset) and GetOffset must use this helper so the
-// write and read paths always agree on the key format.
+// offsetKey formats the composite map key for consumer group partition offsets.
 func offsetKey(groupID, topic string, partition uint32) string {
 	return fmt.Sprintf("%s/%s/%d", groupID, topic, partition)
 }
@@ -591,12 +588,8 @@ func (f *FSM) getActiveBrokerIDs() []uint32 {
 	return ids
 }
 
-// electLeader picks a new leader for p, never `exclude`. Preference order:
-//  1. live in-sync replicas, the one with the highest replicated offset (no acknowledged data is lost);
-//  2. otherwise a live replica with the highest offset (an unclean election, still a replica that holds data).
-//
-// It returns 0 when no live replica exists. A broker outside the replica set is never chosen: it has none of the
-// partition's data, so promoting it would silently truncate the log to empty.
+// electLeader selects a new partition leader from in-sync replicas with highest offset.
+// Falls back to live replicas if necessary; returns 0 if no candidate exists.
 func (f *FSM) electLeader(p *PartitionState, exclude uint32) uint32 {
 	live := func(id uint32) bool {
 		b, ok := f.state.Brokers[id]

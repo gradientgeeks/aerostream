@@ -1,9 +1,5 @@
 //! Transaction coordinator (KIP-98 / KIP-890 TV1 semantics).
-//!
-//! Lives in the broker: it owns the partition logs, so it can append commit /
-//! abort control markers directly. State is journaled to
-//! `<storage_dir>/__txn_state/txn.journal` and recovered on start; transactions
-//! caught in `Prepare*` at crash time are re-driven by `sweep`.
+//! Appends control markers directly to partition logs and journals state to disk.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
@@ -295,10 +291,7 @@ impl TxnCoordinator {
         0
     }
 
-    // ------------------------------------------------------------------
-    // TxnOffsetCommit (28)
-    // ------------------------------------------------------------------
-    /// Stages offsets; they become visible in the group only on commit.
+    /// TxnOffsetCommit (28): stages offsets until transaction commit.
     pub fn txn_offset_commit(
         &self,
         tid: &str,
@@ -332,10 +325,7 @@ impl TxnCoordinator {
         0
     }
 
-    // ------------------------------------------------------------------
-    // Produce-side verification
-    // ------------------------------------------------------------------
-    /// Verifies a transactional produce to `(topic, partition)` is legal. Returns an error code (0 = ok).
+    /// Verifies a transactional produce to `(topic, partition)` is legal. Returns 0 for success.
     pub fn verify_produce(&self, tid: Option<&str>, pid: i64, epoch: i16, topic: &str, partition: i32) -> i16 {
         let tid = match tid {
             Some(t) if !t.is_empty() => t,
@@ -453,11 +443,7 @@ impl TxnCoordinator {
         Ok(())
     }
 
-    // ------------------------------------------------------------------
-    // Background maintenance
-    // ------------------------------------------------------------------
-    /// Aborts timed-out transactions (fencing the zombie by bumping its epoch),
-    /// re-drives transactions stuck in Prepare*, and expires idle transactional ids.
+    /// Aborts timed-out transactions, re-drives prepared states, and expires idle transactional IDs.
     pub async fn sweep(&self, now: i64) {
         enum Action {
             Redrive(String, bool, Vec<(String, i32)>),

@@ -120,9 +120,7 @@ func checkAvroRecordFields(level CompatibilityLevel, oldFieldsRaw, newFieldsRaw 
 }
 
 // BACKWARD: consumer using new schema can read data written with old schema.
-// Rule 1: Every field in newFields NOT in oldFields (added field) MUST have a default.
-// Rule 2: Every field common to both must have compatible types.
-// Rule 3: Deleted fields are permitted.
+// Added fields must have defaults; common fields must have compatible types.
 func isAvroBackwardCompatible(oldFields, newFields map[string]avroField) bool {
 	for name, newF := range newFields {
 		oldF, exists := oldFields[name]
@@ -143,9 +141,7 @@ func isAvroBackwardCompatible(oldFields, newFields map[string]avroField) bool {
 }
 
 // FORWARD: consumer using old schema can read data written with new schema.
-// Rule 1: Every field in oldFields NOT in newFields (deleted field) MUST have had a default in old schema.
-// Rule 2: Every field common to both must have compatible types.
-// Rule 3: Added fields are permitted.
+// Deleted fields must have had defaults; common fields must have compatible types.
 func isAvroForwardCompatible(oldFields, newFields map[string]avroField) bool {
 	for name, oldF := range oldFields {
 		newF, exists := newFields[name]

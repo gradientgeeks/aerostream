@@ -1095,11 +1095,8 @@ impl FetchResponse {
         Ok(encode_response_envelope(correlation_id, &body))
     }
 
-    /// Splits the Fetch response into:
-    /// 1. Preamble bytes (up to and including records_len prefix)
-    /// 2. Optional `FileRegion` (file handle, position, length) for zero-copy `sendfile`
-    /// 3. Remaining response bytes
-    /// Enables true zero-copy OS page-cache transfer directly to TCP socket.
+    /// Splits Fetch response into preamble bytes, an optional zero-copy `FileRegion`,
+    /// and trailing response bytes for `sendfile(2)` transmission.
     pub fn encode_split_for_zero_copy(
         &self,
         version: i16,
@@ -1201,11 +1198,8 @@ pub enum ZeroCopyFetchEnvelope {
 // Business Logic Handlers: Produce (ApiKey 0) & Fetch (ApiKey 1)
 // ---------------------------------------------------------------------------
 
-/// Handles an incoming Kafka Produce request (ApiKey 0, versions 0 to 8).
-///
-/// 1. Decodes and parses RecordBatches or legacy MessageSets across topics/partitions.
-/// 2. Directly appends incoming records into AeroStream's `PartitionLog` via `append()`.
-/// 3. Returns standard Kafka Produce response with the assigned base offset.
+/// Handles Kafka Produce request (ApiKey 0, versions 0 to 8).
+/// Appends records to `PartitionLog` and returns the assigned base offset.
 pub async fn handle_produce(
     header: &RequestHeader,
     mut body: Bytes,
@@ -1403,11 +1397,8 @@ pub async fn handle_produce(
     })
 }
 
-/// Handles an incoming Kafka Fetch request (ApiKey 1, versions 0 to 11).
-///
-/// 1. Reads segments from AeroStream's `PartitionLog` via `read_from_offset()`.
-/// 2. Respects partition High-Watermark limits.
-/// 3. Returns a `FetchResponse` configured for zero-copy file region or buffer transfer.
+/// Handles Kafka Fetch request (ApiKey 1, versions 0 to 11).
+/// Reads records up to high watermark, returning buffers or zero-copy file regions.
 pub async fn handle_fetch(
     header: &RequestHeader,
     mut body: Bytes,

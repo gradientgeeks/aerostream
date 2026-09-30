@@ -752,13 +752,7 @@ mod tests {
         )
         .unwrap();
 
-        // Write 6 records:
-        // offset 0: K1 (will be superseded)
-        // offset 1: K2 (will be superseded)
-        // offset 2: K1 (will survive)
-        // offset 3: K3 (will survive)
-        // offset 4: K2 (will survive)
-        // offset 5: K4 (triggers rollover)
+        // Seed 6 records across keys K1-K4 to test deduplication and rollover.
         log.append(&encode_kv_record(b"K1", Some(b"v0"))).unwrap();
         log.append(&encode_kv_record(b"K2", Some(b"v1"))).unwrap();
         log.append(&encode_kv_record(b"K1", Some(b"v2"))).unwrap();

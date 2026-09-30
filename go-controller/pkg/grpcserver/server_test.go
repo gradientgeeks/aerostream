@@ -28,10 +28,7 @@ func freeTCPAddr(t *testing.T) string {
 	return addr
 }
 
-// newUnstartedRaftNode builds a RaftNode that is never bootstrapped, so it
-// remains a perpetual follower with no known leader. This is enough to
-// exercise the non-leader rejection path in the gRPC handlers without
-// standing up a full multi-node cluster or waiting on an election.
+// newUnstartedRaftNode creates an unbootstrapped RaftNode to test non-leader rejection.
 func newUnstartedRaftNode(t *testing.T) *consensus.RaftNode {
 	t.Helper()
 	cfg := appconfig.Default()

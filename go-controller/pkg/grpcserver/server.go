@@ -459,10 +459,7 @@ func (s *Server) CommitOffsets(ctx context.Context, req *pb.CommitOffsetsRequest
 	return &pb.CommitOffsetsResponse{Success: true}, nil
 }
 
-// ensureOffsetsReadable makes sure an empty FetchOffsets answer means "no committed offset" and not "state not
-// loaded yet". Right after a restart the FSM is empty until the Raft log is replayed: with no known leader the
-// cluster is not ready, and a fresh leader must apply everything committed before it serves reads (Barrier).
-// Followers with a known leader keep serving local state, as before.
+// ensureOffsetsReadable ensures Raft FSM replay has finished before answering offset fetches.
 func (s *Server) ensureOffsetsReadable() error {
 	if s.RaftNode.Raft.Leader() == "" {
 		return status.Errorf(codes.Unavailable, "no cluster leader elected yet; committed offsets not available")

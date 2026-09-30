@@ -18,10 +18,7 @@ export class ApiService {
   private http = inject(HttpClient);
 
   /**
-   * Resolves the API endpoint URL.
-   * If running in development (e.g. localhost:4200), defaults to http://localhost:9001
-   * unless overridden by localStorage. In production or behind a reverse proxy,
-   * uses relative paths.
+   * Resolves API endpoint URL based on environment or localStorage overrides.
    */
   private getApiUrl(path: string): string {
     const custom = typeof localStorage !== 'undefined'
@@ -41,8 +38,7 @@ export class ApiService {
   }
 
   /**
-   * Fetches all topics with partition details, leader broker ID, replicas, ISR,
-   * and high watermark.
+   * Fetches all topics with partition details, leader, replicas, ISR, and watermark.
    */
   getTopics(): Observable<TopicInfo[]> {
     const url = this.getApiUrl('/api/topics');
