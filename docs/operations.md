@@ -1,3 +1,6 @@
+---
+icon: material/tune-vertical
+---
 # Production Operations & Kubernetes
 
 <div class="doc-badge-row" markdown>

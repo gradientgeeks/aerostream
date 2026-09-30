@@ -1,3 +1,6 @@
+---
+icon: material/swap-horizontal-bold
+---
 # Apache Kafka Compatibility (Port 9092)
 
 <div class="doc-badge-row" markdown>

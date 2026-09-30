@@ -1,3 +1,6 @@
+---
+icon: material/database-outline
+---
 # Built-in Schema Registry
 
 <div class="doc-badge-row" markdown>

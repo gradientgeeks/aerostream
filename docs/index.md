@@ -1,3 +1,6 @@
+---
+icon: material/rocket-launch-outline
+---
 # Platform Overview & Quickstart
 
 <div class="doc-badge-row" markdown>
@@ -38,7 +41,7 @@ AeroStream pairs two purpose-built runtimes, each used where it excels: **Go 1.2
 
 ---
 
-## ⚡ Verified Benchmark Results (OpenMessaging Benchmark)
+## Verified Benchmark Results (OpenMessaging Benchmark)
 
 AeroStream was evaluated using the official **[Linux Foundation OpenMessaging Benchmark (OMB)](https://github.com/openmessaging/benchmark)** suite through its Kafka wire protocol port (`9092`) on an AWS `c6id.2xlarge` instance (8 vCPUs, 16 GiB RAM, local NVMe SSD):
 
@@ -54,7 +57,7 @@ AeroStream was evaluated using the official **[Linux Foundation OpenMessaging Be
 
 ---
 
-## 🐳 Quickstart: Launch AeroStream in 30 Seconds
+## Quickstart: Launch AeroStream in 30 Seconds
 
 Launch the complete AeroStream stack (Go Controller, Rust Storage Broker, and Angular 21 Web Console) using the official container image:
 
@@ -146,7 +149,7 @@ The integrated **Angular 21 Web Console** allows real-time inspection of cluster
 
 ---
 
-## 🚀 Client Quickstarts
+## Client Quickstarts
 
 ### 1. Official AeroStream Native SDKs (Port 9091, `0xAE 0x01`)
 

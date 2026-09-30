@@ -1,8 +1,11 @@
+---
+icon: material/vector-triangle
+---
 # AeroStream Architecture Diagrams & Vector Assets
 
 This directory contains the official architecture diagrams and Excalidraw vector source files for the **AeroStream Distributed Streaming Platform**.
 
-## 🎨 Diagram Directory Index
+## Diagram Directory Index
 
 | # | Diagram Identifier | Formats Available | Description |
 |---|---|---|---|
@@ -16,7 +19,7 @@ This directory contains the official architecture diagrams and Excalidraw vector
 
 ---
 
-## 🛠️ Regenerating Diagrams
+## Regenerating Diagrams
 
 To regenerate all Excalidraw JSON source files, SVG vector diagrams, and rendered high-resolution 3200 × 2160 PNGs:
 

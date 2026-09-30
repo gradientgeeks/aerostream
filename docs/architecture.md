@@ -1,3 +1,6 @@
+---
+icon: material/layers-triple-outline
+---
 # Dual-Engine Architecture Deep-Dive
 
 <div class="doc-badge-row" markdown>

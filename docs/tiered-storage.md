@@ -1,3 +1,6 @@
+---
+icon: material/cloud-upload-outline
+---
 # Multi-Cloud Tiered Storage Pipeline
 
 <div class="doc-badge-row" markdown>

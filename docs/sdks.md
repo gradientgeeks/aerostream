@@ -1,3 +1,6 @@
+---
+icon: material/package-variant-closed
+---
 # AeroStream Client SDKs
 
 [![SDK Repo](https://img.shields.io/badge/SDK_Repo-gradientgeeks%2Faerostream--sdk-blue?logo=github)](https://github.com/gradientgeeks/aerostream-sdk)
@@ -14,7 +17,7 @@ Source: [github.com/gradientgeeks/aerostream-sdk](https://github.com/gradientgee
 
 | | Port 9091 (Native) | Port 9092 (Kafka Wire) |
 |:--|:--|:--|
-| **Use these SDKs** | ✅ Yes | ❌ Use standard Kafka clients |
+| **Use these SDKs** | :material-check: Yes | :material-close: Standard Kafka clients |
 | **Overhead** | 7-byte header only | Full Kafka envelope |
 | **Tail latency** | Sub-millisecond | ~1–5 ms |
 | **Auth** | Bearer token (Cmd 0) | SASL mechanisms |
@@ -41,11 +44,11 @@ Header (7 bytes):
 
 | Language | Package | Install | Status |
 |:--|:--|:--|:---:|
-| 🦫 Go | `github.com/gradientgeeks/aerostream-sdk/go` | `go get github.com/gradientgeeks/aerostream-sdk/go` | ✅ Preview |
-| 🦀 Rust | `aerostream-client` | `cargo add aerostream-client` | ✅ Preview |
-| ☕ Java | `org.gradientgeeks.aerostream:aerostream-client` | Maven / Gradle | ✅ Preview |
-| 🔷 .NET | `GradientGeeks.AeroStream.Client` | `dotnet add package GradientGeeks.AeroStream.Client` | ✅ Preview |
-| 🟩 Node.js | `@gradientgeeks/aerostream-client` | `npm install @gradientgeeks/aerostream-client` | ✅ Preview |
+| :simple-go: **Go** | `github.com/gradientgeeks/aerostream-sdk/go` | `go get github.com/gradientgeeks/aerostream-sdk/go` | `v0.1.0` Preview |
+| :simple-rust: **Rust** | `aerostream-client` | `cargo add aerostream-client` | `v0.1.0` Preview |
+| :simple-openjdk: **Java** | `org.gradientgeeks.aerostream:aerostream-client` | Maven / Gradle | `v0.1.0-preview` |
+| :simple-dotnet: **.NET** | `GradientGeeks.AeroStream.Client` | `dotnet add package GradientGeeks.AeroStream.Client` | `v0.1.0-preview` |
+| :simple-nodedotjs: **Node.js** | `@gradientgeeks/aerostream-client` | `npm install @gradientgeeks/aerostream-client` | `v0.1.1-preview` |
 
 ---
 

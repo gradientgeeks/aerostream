@@ -1,3 +1,6 @@
+---
+icon: material/lightning-bolt
+---
 # In-Broker Stream Transforms & WASM
 
 <div class="doc-badge-row" markdown>

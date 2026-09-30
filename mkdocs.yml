@@ -32,16 +32,26 @@ theme:
         icon: material/brightness-7
         name: Switch to dark mode
   features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.tracking
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
     - navigation.expand
+    - navigation.indexes
+    - navigation.path
     - navigation.top
-    - navigation.tracking
+    - navigation.footer
+    - toc.follow
     - search.suggest
     - search.highlight
     - search.share
     - content.code.copy
     - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
 
 markdown_extensions:
   - admonition
@@ -61,6 +71,9 @@ markdown_extensions:
       alternate_style: true
   - pymdownx.arithmatex:
       generic: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - tables
   - attr_list
   - md_in_html
@@ -80,13 +93,19 @@ extra:
 
 nav:
   - Home: https://aerostream.gradientgeeks.com/
-  - Overview: index.md
-  - Architecture: architecture.md
-  - Kafka Compatibility: kafka-protocol.md
-  - Schema Registry: schema-registry.md
-  - Stream Transforms: transforms.md
-  - Security & RBAC: security-rbac.md
-  - Tiered Storage: tiered-storage.md
-  - Operations: operations.md
-  - Benchmarks: benchmarks.md
-  - SDKs: sdks.md
+  - Getting Started:
+      - Platform Overview: index.md
+  - Architecture:
+      - System Architecture: architecture.md
+      - Performance Benchmarks: benchmarks.md
+      - Architecture Diagrams: diagrams/README.md
+  - Protocols & SDKs:
+      - Native Client SDKs: sdks.md
+      - Kafka Wire Compatibility: kafka-protocol.md
+  - Engine Capabilities:
+      - Schema Registry: schema-registry.md
+      - Stream Transforms: transforms.md
+      - Multi-Cloud Tiered Storage: tiered-storage.md
+  - Operations & Security:
+      - Security & RBAC: security-rbac.md
+      - Cluster Operations: operations.md

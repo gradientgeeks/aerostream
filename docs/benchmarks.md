@@ -1,3 +1,6 @@
+---
+icon: material/chart-line
+---
 # Performance Benchmarks
 
 <div class="doc-badge-row" markdown>

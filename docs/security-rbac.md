@@ -1,3 +1,6 @@
+---
+icon: material/shield-key-outline
+---
 # Enterprise Security, RBAC & ACLs
 
 <div class="doc-badge-row" markdown>
