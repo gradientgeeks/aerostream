@@ -29,7 +29,7 @@ Submit a private report through GitHub:
 
 ### 2. Alternative Method: Direct Security Email
 If GitHub Private Reporting is unavailable, send an encrypted or direct email to:
-* **`security@gradientgeeks.com`**
+* **`contact@gradientgeeks.com`**
 * CC: **`uttam-mahata-cs@outlook.com`**
 
 ### What to Include in Your Report
