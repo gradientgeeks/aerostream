@@ -39,25 +39,9 @@ AeroStream separates metadata consensus from data log persistence:
 
 ![AeroStream Dual-Engine Architecture](images/dual_engine_architecture.png)
 
-```
-                  ┌───────────────────────────────────────────────┐
-                  │           AeroStream Control Quorum           │
-                  │   [Controller 1] ── [Controller 2] (Leader)   │
-                  │             \            /                    │
-                  │             [Controller 3]                    │
-                  │          Raft: 7001 | gRPC: 8001              │
-                  │         HTTP / Console: 9001                  │
-                  └──────────────────────┬────────────────────────┘
-                                         │ gRPC Heartbeats & Metadata
-                     ┌───────────────────┴───────────────────┐
-                     ▼                                       ▼
-        ┌─────────────────────────┐             ┌─────────────────────────┐
-        │   AeroStream Broker 1   │             │   AeroStream Broker 2   │
-        │  Zero-Copy TCP: 9091    │◄───────────►│  Zero-Copy TCP: 9091    │
-        │  Kafka Protocol: 9093   │ Replication │  Kafka Protocol: 9093   │
-        │  Storage: NVMe /data/1  │             │  Storage: NVMe /data/2  │
-        └─────────────────────────┘             └─────────────────────────┘
-```
+* **Control Quorum (Go 1.26)**: 3-node HashiCorp Raft cluster (`controller-1`, `controller-2`, `controller-3`) managing state machine consensus on port `7001` (TCP transport), gRPC metadata service on port `8001` (HTTP/2), and REST API / Web Console on port `9001` (HTTP).
+* **Storage Layer (Rust 1.98.1 Edition 2024)**: High-performance storage brokers (`broker-1`, `broker-2`) providing dual-protocol ingress on port `9091` (native binary) and port `9092` (Apache Kafka wire protocol), mounting direct NVMe storage pools and replicating partitions over low-latency TCP channels.
+
 
 ---
 

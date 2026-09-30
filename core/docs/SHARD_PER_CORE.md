@@ -14,25 +14,11 @@ Modern multi-core processors present unprecedented levels of hardware parallelis
 
 In a conventional multi-threaded broker, network listener threads accept client TCP connections and hand them off to a global thread pool or Tokio worker pool. When multiple worker threads process concurrent produce or fetch requests for partitions hosted on the broker, they encounter severe physical and architectural penalties:
 
-```
-Traditional Multi-Threaded Model (High Contention & Cache Thrashing):
-┌────────────────────────────────────────────────────────────────────────┐
-│ Worker Thread 1 (Core 0) ──┐                                           │
-│ Worker Thread 2 (Core 1) ──┼──► [ Mutex<PartitionLog> ] ──► Disk I/O   │
-│ Worker Thread 3 (Core 2) ──┤        ▲ Atomic Lock                      │
-│ Worker Thread 4 (Core 3) ──┘        ▼ Contention                       │
-│                               Cache Line Bouncing across Cores         │
-└────────────────────────────────────────────────────────────────────────┘
+![AeroStream Shard-per-Core Architecture](images/shard_per_core_architecture.png)
 
-AeroStream Shard-per-Core Model (Shared-Nothing Zero Contention):
-┌────────────────────────────────────────────────────────────────────────┐
-│ Core 0: [ Shard 0 ] ──► flume queue ──► ShardEngine 0 ──► Partition 0 │
-│ Core 1: [ Shard 1 ] ──► flume queue ──► ShardEngine 1 ──► Partition 1 │
-│ Core 2: [ Shard 2 ] ──► flume queue ──► ShardEngine 2 ──► Partition 2 │
-│ Core 3: [ Shard 3 ] ──► flume queue ──► ShardEngine 3 ──► Partition 3 │
-│ No Mutex locks • No Cross-Core Synchronization • 100% Cache Locality   │
-└────────────────────────────────────────────────────────────────────────┘
-```
+* **Traditional Multi-Threaded Model**: High contention and cache thrashing. Worker threads across disparate CPU cores acquire shared `Mutex<PartitionLog>` or `RwLock` primitives, inducing atomic lock contention, Linux scheduler context switching, and continuous MESI cache-line invalidation across CPU sockets.
+* **AeroStream Shard-per-Core Model**: Shared-nothing, zero-contention architecture. Dedicated OS threads (`ShardEngine`) are hardware-pinned to isolated CPU cores, consuming request envelopes through bounded, lock-free flume channels. Partitions are strictly owned by specific shards—completely eliminating mutex locks, cross-core synchronization, and false sharing.
+
 
 1. **Lock Contention on Partition State**:
    Protecting partition structures with read-write locks (`RwLock`) or mutexes (`Mutex<PartitionLog>`) serializes operations. Under heavy concurrent ingress, threads spend significant CPU cycles spinning on atomic CAS (Compare-And-Swap) instructions rather than appending records.
@@ -347,7 +333,7 @@ Current results on AWS EC2 c6id.2xlarge (one broker, 32 partitions, 1 KB, 8 prod
 id          = 1
 host        = "0.0.0.0"
 data_port   = 9091
-kafka_port  = 9093
+kafka_port  = 9092
 controller  = "http://aerostream-controller:8001"
 storage_dir = "/var/lib/aerostream/data"
 

@@ -108,6 +108,14 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 ### 8. Connectors Ecosystem & Kafka Connect API (Phase 8)
 * **AeroStream Implementation**: Thread-safe Connector Manager (`go-controller/pkg/connect/manager.go`) exposing Kafka Connect-compatible REST API endpoints alongside built-in connectors (AWS S3 Archival, HTTP Webhooks, Database CDC, Elasticsearch) and a visual deployment dashboard (`/aerostream/console/connectors`).
 
+### 9. Official AeroStream Client SDKs (`github.com/gradientgeeks/aerostream-sdk`)
+* **AeroStream Implementation**: First-party, production-grade native client libraries with binary framing (`0xAE 0x01` on port 9091), sub-millisecond tail latencies, zero-allocation serialization, and automatic connection pooling:
+  * 🦫 **Go**: [`github.com/gradientgeeks/aerostream-sdk/go`](https://github.com/gradientgeeks/aerostream-sdk/tree/main/go) (`v0.1.0-preview`)
+  * 🦀 **Rust**: [`aerostream-client`](https://github.com/gradientgeeks/aerostream-sdk/tree/main/rust) (`v0.1.0-preview`)
+  * ☕ **Java**: [`org.gradientgeeks.aerostream:aerostream-client`](https://github.com/gradientgeeks/aerostream-sdk/tree/main/java) (`v0.1.0-preview`)
+  * 🔷 **.NET (C#)**: [`GradientGeeks.AeroStream.Client`](https://github.com/gradientgeeks/aerostream-sdk/tree/main/dotnet) (`v0.1.0-preview`)
+  * 🟩 **Node.js / TypeScript**: [`@gradientgeeks/aerostream-client`](https://github.com/gradientgeeks/aerostream-sdk/tree/main/nodejs) (`v0.1.0-preview`)
+
 ---
 
 ## 5. Strategic Roadmap for AeroStream
@@ -122,14 +130,16 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
 | **Phase 6** | Stream Transforms | Inline filtering, masking & WASM | **Completed** |
 | **Phase 7** | Enterprise RBAC & ACLs | Principal roles & Swiss Tables lookup | **Completed** |
 | **Phase 8** | Connectors Ecosystem | Kafka Connect REST API & native tasks | **Completed** |
-| **Phase 9** | Distributed 2PC Transactions | Multi-topic atomic commits & WAL | **Completed** |
-| **Phase 10** | Massive Partition Density | Shard-per-core partition routing | **Active / In Progress** |
-| **Phase 11** | Enterprise Wire Security | SASL/PLAIN, SASL/SCRAM-SHA-256 | **Completed** |
-| **Phase 12** | Stateful Stream Processing | Windows & KTable state stores | Planned |
-| **Phase 13** | Geo-Replication | Active-Active cross-DC mirroring | Planned |
-| **Phase 14** | Chaos & Jepsen Hardening | Failure injection & soak verification | Planned |
+| **Phase 9** | Official Native Client SDKs | Go, Rust, Java, .NET, Node.js libraries | **Completed** |
+| **Phase 10** | Distributed 2PC Transactions | Multi-topic atomic commits & WAL | **Completed** |
+| **Phase 11** | Massive Partition Density | Shard-per-core partition routing | **Active / In Progress** |
+| **Phase 12** | Enterprise Wire Security | SASL/PLAIN, SASL/SCRAM-SHA-256 | **Completed** |
+| **Phase 13** | Stateful Stream Processing | Windows & KTable state stores | Planned |
+| **Phase 14** | Geo-Replication | Active-Active cross-DC mirroring | Planned |
+| **Phase 15** | Chaos & Jepsen Hardening | Failure injection & soak verification | Planned |
 
 ---
+
 
 ### Implemented Capabilities (Phases 1 – 8)
 
@@ -149,6 +159,8 @@ AeroStream implements a deterministic, multi-tiered retention policy engine insi
    * Zero-trust security governance with principal roles (Admin, Developer, Consumer, Producer), wildcard resource matching for topics and consumer groups, live authorization evaluation testing, and Web Console management.
 8. **Phase 8: Connectors Ecosystem & Kafka Connect Compatibility [IMPLEMENTED]**:
    * Kafka Connect compatible REST API endpoints alongside native thread-safe Connector Manager supporting source and sink streaming pipelines (S3 Archival, HTTP Webhooks, Database CDC, Elasticsearch) with full Web Console UI orchestrator.
+9. **Phase 9: Official AeroStream Native Client SDKs [IMPLEMENTED]**:
+   * Official native client SDK suite released under `github.com/gradientgeeks/aerostream-sdk` (`v0.1.0-preview`) spanning Go, Rust, Java, .NET, and Node.js. Delivers binary protocol efficiency (`0xAE 0x01` framing), automated connection pooling, batch accumulators, and zero-allocation memory serialization.
 
 ---
 

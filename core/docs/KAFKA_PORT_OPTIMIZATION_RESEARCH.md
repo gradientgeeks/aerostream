@@ -39,13 +39,11 @@ The following table summarizes the median results across three independent runs 
 | **Active OS Threads (PIDs)** | **3 threads** |
 | **Peak CPU Utilization** | **107% - 151%** |
 
-```
-50 MB Payload Throughput (MB/s)
-════════════════════════════════════════════════════════════════════════════
-AeroStream Native  [██████████████████████████████████████████████████] 527.5 MB/s
-AeroStream Kafka   [████                                              ]  49.4 MB/s
-════════════════════════════════════════════════════════════════════════════
-```
+| Protocol Engine | 50 MB Payload Throughput | Relative Performance |
+| :--- | :--- | :--- |
+| **AeroStream Native (`:9091`)** | **527.5 MB/s** | 100.0% (Baseline) |
+| **AeroStream Kafka (`:9092`)** | **49.4 MB/s** | 9.4% (Bottlenecked) |
+
 
 ### The Central Paradox
 
@@ -221,24 +219,11 @@ pub fn to_entries(batch: &[u8], first_offset: u64) -> Vec<Vec<u8>> {
 }
 ```
 
-```
-Incoming Client Batch (N records)
-               │
-               ▼
-┌──────────────────────────────┐
-│ parse_records() [Full Decode]│ ──> Allocates Vec<KafkaRecord>, copies byte slices
-└──────────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│  Loop: encode_single_batch() │ ──> Re-encodes N batches, computes N hardware CRCs
-└──────────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│    N x guard.append()        │ ──> N disk writes + N x 16B index writes!
-└──────────────────────────────┘
-```
+* **Stage 1 (Client Ingestion)**: Incoming client batch arrives with $N$ records.
+* **Stage 2 (Full Decode)**: `parse_records()` allocates heap vectors (`Vec<KafkaRecord>`) and copies raw byte slices.
+* **Stage 3 (Batch Re-encoding)**: Loop over `encode_single_batch()` re-encodes $N$ batches, computing $N$ distinct hardware CRCs.
+* **Stage 4 (Disk Write Amplification)**: Invokes `guard.append()` $N$ times, causing $N$ physical disk writes and $N \times 16\text{B}$ index entries!
+
 
 #### Destructive Performance Impacts:
 1. **CPU Multiplication**: If a client sends a 1 MB batch containing 1,000 records of 1 KB each:
@@ -413,17 +398,12 @@ pub fn append_raw_batch_inplace(
 
 A sparse design pairs every segment log (`.log`) with an offset index (`.index`). Rather than recording every offset, an entry is written only when the segment has advanced by at least `index.interval.bytes` (default: 4,096 bytes).
 
-```
-Segment .log File:
-[Batch 0: Offsets 0..99 (4,200 bytes)] [Batch 1: Offsets 100..199 (4,150 bytes)] [Batch 2...]
- │                                      │
- └──────────────────────┐               └─────────────────────┐
-                        ▼                                     ▼
-Sparse .index File:
-┌───────────────────────────────┬───────────────────────────────┐
-│ Entry 0: RelOffset 0, Pos 0   │ Entry 1: RelOffset 100, Pos 4200│
-└───────────────────────────────┴───────────────────────────────┘
-```
+| Index Entry | Relative Offset (`u32`) | Physical File Position (`u32`) | Mapped Segment Byte Span |
+| :--- | :--- | :--- | :--- |
+| **Entry 0** | `0` (`RelOffset = 0`) | `0` (`Pos = 0`) | Batch 0: Offsets 0..99 (Bytes 0..4,199) |
+| **Entry 1** | `100` (`RelOffset = 100`) | `4,200` (`Pos = 4200`) | Batch 1: Offsets 100..199 (Bytes 4,200..8,349) |
+| **Entry 2** | `200` (`RelOffset = 200`) | `8,350` (`Pos = 8350`) | Batch 2: Offsets 200..299 (Bytes 8,350..) |
+
 
 #### Index Entry Format (8 Bytes):
 - **Relative Offset** (`u32`, 4 bytes): $\text{Offset} - \text{BaseOffset}$ (allows storing offsets up to $4\text{ billion}$ within a single segment using 4 bytes instead of 8).
@@ -662,19 +642,16 @@ Socket FD ──────(splice)──────> Pipe Buffer ────
 
 Based on the elimination of record decoding, sparse indexing, buffer pooling, and socket buffer tuning:
 
-```
-Benchmark Throughput Projection (Kafka Protocol Port)
-═════════════════════════════════════════════════════════════════════════════════
-Workload      Current Aero Kafka       Optimized Aero Kafka       Projected Gain
-─────────────────────────────────────────────────────────────────────────────────
-1 KB          70.3 MB/s (71,942 msg/s) 115.0 MB/s (117,760 msg/s)  +63%
-1 MB         330.7 MB/s                650.0 MB/s                  +96%
-10 MB        189.1 MB/s                320.0 MB/s                  +69%
-50 MB         49.4 MB/s (Client Bound)  58.0 MB/s (Java Client)    +17%
-50 MB         49.4 MB/s                550.0 MB/s (Multi-Conn)*   +1,013%
-═════════════════════════════════════════════════════════════════════════════════
-* When driven by modern multi-connection or Go/C++ clients.
-```
+| Workload | Current Aero Kafka | Optimized Aero Kafka | Projected Gain |
+| :--- | :--- | :--- | :--- |
+| **1 KB** | 70.3 MB/s (71,942 msg/s) | 115.0 MB/s (117,760 msg/s) | **+63%** |
+| **1 MB** | 330.7 MB/s | 650.0 MB/s | **+96%** |
+| **10 MB** | 189.1 MB/s | 320.0 MB/s | **+69%** |
+| **50 MB** | 49.4 MB/s (Client Bound) | 58.0 MB/s (Java Client) | **+17%** |
+| **50 MB (Multi-Conn)\*** | 49.4 MB/s | 550.0 MB/s | **+1,013%** |
+
+*\* When driven by modern multi-connection or Go/C++ clients.*
+
 
 ---
 
