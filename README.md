@@ -4,7 +4,7 @@
 [![Docker Image](https://img.shields.io/badge/docker-quay.io%2Fgradientgeeks%2Faerostream-blue?logo=docker&logoColor=white)](https://quay.io/repository/gradientgeeks/aerostream)
 [![Go](https://img.shields.io/badge/Go-1.26_Control_Plane-00ADD8?logo=go&logoColor=white)](go-controller/)
 [![Rust](https://img.shields.io/badge/Rust-1.98.1_Data_Plane-orange?logo=rust&logoColor=white)](rust-broker/)
-[![Protocol](https://img.shields.io/badge/protocol-Kafka_100%25_Wire_Compatible-black?logo=apachekafka&logoColor=white)](docs/kafka-protocol.md)
+[![Protocol](https://img.shields.io/badge/protocol-Kafka_Wire_Compatible-black?logo=apachekafka&logoColor=white)](https://aerostream.gradientgeeks.com/docs/kafka-protocol/)
 [![UI](https://img.shields.io/badge/UI-Angular_21-DD0031?logo=angular&logoColor=white)](console/)
 [![Docs](https://img.shields.io/badge/docs-MkDocs_Material-526CFE?logo=materialformkdocs&logoColor=white)](https://aerostream.gradientgeeks.com/docs/)
 [![Status](https://img.shields.io/badge/status-preview-orange)](https://aerostream.gradientgeeks.com/)
