@@ -323,59 +323,130 @@
     <div class="quickstart-box">
       <div class="quickstart-tabs">
         <button
+          type="button"
           class="tab-btn"
           [class.active]="selectedQuickstartTab() === 'docker'"
           (click)="selectTab('docker')">
-          <mat-icon>layers</mat-icon> Docker Compose
+          <svg class="tab-icon docker-color" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.186.185.186m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.887c0 .102.082.186.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.185.185 0 00-.185.185v1.887c0 .102.083.186.185.186m-2.954 0h2.119a.186.186 0 00.185-.186V6.29a.185.185 0 00-.185-.185H5.146a.186.186 0 00-.186.185v1.887c0 .102.084.186.186.186m5.884 2.714h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.083.185.185.185m-2.954 0h2.119a.185.185 0 00.185-.185V9.006a.185.185 0 00-.185-.186H5.146a.185.185 0 00-.186.185v1.888c0 .102.084.185.186.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.083.185.185.185M23.766 8.44c-.147-.099-.607-.272-1.393-.272-.27 0-.584.025-.922.083-.347-.798-.94-1.332-1.684-1.524l-.19-.05-.123.151c-.69.845-.98 1.956-.99 3.018-.01.996.345 1.943.957 2.617-.678.36-1.564.557-2.61.557H.947c-.207 0-.395.105-.504.281a.579.579 0 00-.029.578c.844 1.706 2.302 3.864 4.544 5.378C7.59 20.94 10.66 21.6 13.916 21.6c6.12 0 10.426-3.75 10.426-9.697 0-.898-.073-1.666-.214-2.285l-.048-.224-.314.046z"/>
+          </svg>
+          Docker Compose
         </button>
+
         <button
-          class="tab-btn"
-          [class.active]="selectedQuickstartTab() === 'python'"
-          (click)="selectTab('python')">
-          <mat-icon>code</mat-icon> Python (Kafka Client)
-        </button>
-        <button
+          type="button"
           class="tab-btn"
           [class.active]="selectedQuickstartTab() === 'go'"
           (click)="selectTab('go')">
-          <mat-icon>terminal</mat-icon> Go Native SDK
+          <svg class="tab-icon go-color" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M1.811 10.231c.176 0 .343.078.455.214l1.528 1.865a.584.584 0 0 1-.455.955H1.811a.584.584 0 0 1-.584-.584v-1.866c0-.323.261-.584.584-.584zm4.195 0c.176 0 .343.078.455.214l1.528 1.865a.584.584 0 0 1-.455.955H6.006a.584.584 0 0 1-.584-.584v-1.866c0-.323.262-.584.584-.584zm11.758-6.147c2.378 0 4.103 1.547 4.103 3.684 0 2.227-1.866 3.754-4.28 3.754-1.579 0-2.883-.69-3.486-1.803l1.836-1.026c.355.617.954.981 1.705.981 1.054 0 1.954-.64 1.954-1.821 0-1.09-.844-1.745-1.954-1.745-.853 0-1.444.423-1.848.972l-1.782-1.09c.805-1.127 2.053-1.906 3.752-1.906zm-7.669.091c3.606 0 5.86 2.457 5.86 5.688 0 3.23-2.254 5.687-5.86 5.687-3.605 0-5.86-2.457-5.86-5.687 0-3.231 2.255-5.688 5.86-5.688zm0 2.127c-2.228 0-3.487 1.637-3.487 3.561 0 1.924 1.259 3.56 3.487 3.56 2.227 0 3.486-1.636 3.486-3.56 0-1.924-1.259-3.561-3.486-3.561z"/>
+          </svg>
+          Go
         </button>
+
         <button
+          type="button"
           class="tab-btn"
           [class.active]="selectedQuickstartTab() === 'rust'"
           (click)="selectTab('rust')">
-          <mat-icon>memory</mat-icon> Rust Native SDK
+          <svg class="tab-icon rust-color" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M23.834 11.233a1.405 1.405 0 0 0-.256-.474l-1.597-1.749.273-.668a1.41 1.41 0 0 0 .044-.537 1.415 1.415 0 0 0-.273-.654l-1.472-1.854.492-.533a1.408 1.408 0 0 0 .341-.93 1.406 1.406 0 0 0-.583-.93l-2.039-1.214.154-.707a1.41 1.41 0 0 0-.417-1.328 1.41 1.41 0 0 0-1.328-.417l-.707.154L15.485.45a1.406 1.406 0 0 0-.93-.583 1.408 1.408 0 0 0-.93.341l-.533.492L11.238.427a1.415 1.415 0 0 0-.654-.273 1.41 1.41 0 0 0-.537.044l-.668.273L7.63.228a1.405 1.405 0 0 0-.474-.256 1.41 1.41 0 0 0-.542.062L4.316.89l-.36-.623a1.41 1.41 0 0 0-1.22-.686 1.41 1.41 0 0 0-1.22.686L.89 1.59l-.623-.36A1.41 1.41 0 0 0 0 2.45v19.1a1.41 1.41 0 0 0 .267 1.22l.623-.36 1.22 1.223a1.41 1.41 0 0 0 1.22.686 1.41 1.41 0 0 0 1.22-.686l.36-.623 2.298.856c.17.063.353.084.542.062.164-.02.327-.107.474-.256l1.749-1.597.668.273c.17.069.352.084.537.044.237-.05.464-.144.654-.273l1.854-1.472.533.492c.264.244.6.366.93.341.33-.025.642-.224.93-.583l1.214-2.039.707.154c.48.105 1.002-.036 1.328-.417.326-.381.467-.903.417-1.328l-.154-.707 1.624-1.043c.359-.288.558-.6.583-.93.025-.33-.097-.666-.341-.93l-.492-.533.273-.668c.069-.17.084-.352.044-.537a1.415 1.415 0 0 0-.273-.654l1.597-1.749c.149-.147.236-.31.256-.474a1.41 1.41 0 0 0-.062-.542zM12 18.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zm-3.5-6.5a3.5 3.5 0 1 0 7 0 3.5 3.5 0 0 0-7 0z"/>
+          </svg>
+          Rust
         </button>
+
         <button
+          type="button"
           class="tab-btn"
           [class.active]="selectedQuickstartTab() === 'java'"
           (click)="selectTab('java')">
-          <mat-icon>coffee</mat-icon> Java / Spring
+          <svg class="tab-icon java-color" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8.85 16.34s-.54.34-.14.49c1.62.6 3.12.55 5.09-.16 0 0 .54-.27.27-.49-.27-.22-.54-.22-.54-.22-1.75.43-3.32.49-4.68.38zm-.33 1.96s-.49.33-.16.49c1.75.82 4.14.71 6.8-.49 0 0 .38-.27.16-.49-.22-.22-.49-.16-.49-.16-2.29.93-4.57.82-6.31.65zm5.55-9.15c.38 1.47-1.09 2.72-1.09 2.72s2.61-.98 1.96-2.94c-.65-1.91-2.94-2.83-2.94-2.83s.76 1.09 2.07 3.05zm-4.74 3.76s-1.85 1.04-1.85 2.51c0 1.91 2.34 2.88 5.17 2.88 2.61 0 4.63-.82 4.63-2.34 0-1.42-1.47-2.18-1.47-2.18s.71.65.27 1.36c-.44.71-1.63 1.09-3.43 1.09-2.07 0-3.32-.49-3.32-1.58 0-.93 0-1.74 0-1.74zm9.31 4.52c-.44-.22-.93-.16-.93-.16s.44.33.16.49c-1.36.82-3.87 1.36-6.75 1.36-2.61 0-5.12-.49-6.64-1.36-.27-.16.16-.49.16-.49s-.49-.05-.93.16c-.44.22-.05.49.16.6 2.07 1.14 5.01 1.47 7.46 1.47 2.78 0 5.77-.38 7.24-1.47.22-.11.55-.38.07-.6z"/>
+          </svg>
+          Java
         </button>
+
         <button
+          type="button"
           class="tab-btn"
           [class.active]="selectedQuickstartTab() === 'dotnet'"
           (click)="selectTab('dotnet')">
-          <mat-icon>lens</mat-icon> .NET SDK
+          <svg class="tab-icon dotnet-color" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.2l7.6 3.8L12 11.8 4.4 8 12 4.2zm-8 5.1l7 3.5v7.6l-7-3.5v-7.6zm9 11.1v-7.6l7-3.5v7.6l-7 3.5z"/>
+          </svg>
+          .NET
         </button>
+
         <button
+          type="button"
           class="tab-btn"
           [class.active]="selectedQuickstartTab() === 'nodejs'"
           (click)="selectTab('nodejs')">
-          <mat-icon>javascript</mat-icon> Node.js SDK
+          <svg class="tab-icon nodejs-color" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2a1.73 1.73 0 0 0-.86.23L2.89 7.15A1.73 1.73 0 0 0 2 8.65v9.83a1.73 1.73 0 0 0 .86 1.5l8.25 4.77a1.73 1.73 0 0 0 1.73 0l8.25-4.77a1.73 1.73 0 0 0 .86-1.5V8.65a1.73 1.73 0 0 0-.86-1.5L12.86 2.23A1.73 1.73 0 0 0 12 2zm-.05 2.15l7.55 4.36-7.55 4.36-7.55-4.36 7.55-4.36zm-8.45 6.07l7.45 4.3v8.58l-7.45-4.3v-8.58zm16.9 0v8.58l-7.45 4.3v-8.58l7.45-4.3z"/>
+          </svg>
+          Node.js
         </button>
+
         <button
+          type="button"
+          class="tab-btn"
+          [class.active]="selectedQuickstartTab() === 'python'"
+          (click)="selectTab('python')">
+          <svg class="tab-icon python-color" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M11.914 0C5.82 0 6.2 2.656 6.2 2.656l.006 2.75h5.818v.825H3.832S0 5.762 0 11.884c0 6.12 3.342 5.908 3.342 5.908h1.996v-2.81c-.027-3.23 2.756-3.23 2.756-3.23h5.717s2.613.045 2.613-2.55V3.34S16.994 0 11.914 0zm-2.023 1.69a1.05 1.05 0 1 1 0 2.1 1.05 1.05 0 0 1 0-2.1zM12.086 24c6.094 0 5.714-2.656 5.714-2.656l-.006-2.75H11.98v-.825h8.188s3.832.47 3.832-5.652c0-6.122-3.342-5.91-3.342-5.91h-1.996v2.812c.027 3.23-2.756 3.23-2.756 3.23H10.19s-2.613-.047-2.613 2.548v5.864s-.574 3.339 4.51 3.339zm2.023-1.69a1.05 1.05 0 1 1 0-2.1 1.05 1.05 0 0 1 0 2.1z"/>
+          </svg>
+          Python
+        </button>
+
+        <button
+          type="button"
           class="tab-btn"
           [class.active]="selectedQuickstartTab() === 'rest'"
           (click)="selectTab('rest')">
-          <mat-icon>http</mat-icon> cURL / REST API
+          <svg class="tab-icon curl-color" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+          </svg>
+          REST / cURL
         </button>
+      </div>
+
+      <!-- Protocol Switcher Bar for Language SDKs -->
+      <div class="protocol-bar" *ngIf="isLanguageTab(selectedQuickstartTab())">
+        <div class="protocol-info">
+          <span class="protocol-tag">WIRE PROTOCOL</span>
+          <span class="protocol-desc">Choose between high-speed native protocol or Kafka wire compatibility:</span>
+        </div>
+        <div class="protocol-toggle">
+          <button
+            type="button"
+            class="proto-btn"
+            [class.active]="selectedProtocol() === 'native'"
+            (click)="selectProtocol('native')">
+            <span class="proto-badge native-badge">TCP 9091</span>
+            <div class="proto-meta">
+              <span class="proto-title">⚡ Native Binary SDK</span>
+              <span class="proto-sub">7-byte frame • Sub-ms tail</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            class="proto-btn"
+            [class.active]="selectedProtocol() === 'kafka'"
+            (click)="selectProtocol('kafka')">
+            <span class="proto-badge kafka-badge">TCP 9092</span>
+            <div class="proto-meta">
+              <span class="proto-title">🔌 Kafka Wire Protocol</span>
+              <span class="proto-sub">100% compatible • Standard clients</span>
+            </div>
+          </button>
+        </div>
       </div>
 
       <!-- Docker Compose Snippet -->
       <div class="code-container" *ngIf="selectedQuickstartTab() === 'docker'">
         <div class="code-header">
-          <span>docker-compose.yml</span>
+          <span>docker-compose.yml (Dual-Protocol Ports: 9091 Native, 9092 Kafka, 9001 REST)</span>
           <button class="snippet-copy" (click)="copySnippet(dockerSnippet, 'docker')">
             <mat-icon>{{ copiedSnippet() === 'docker' ? 'check' : 'content_copy' }}</mat-icon>
             {{ copiedSnippet() === 'docker' ? 'Copied' : 'Copy' }}
@@ -384,82 +455,82 @@
         <pre class="code-content"><code [textContent]="dockerSnippet"></code></pre>
       </div>
 
-      <!-- Python Snippet -->
-      <div class="code-container" *ngIf="selectedQuickstartTab() === 'python'">
-        <div class="code-header">
-          <span>producer.py (Standard Kafka Python Client)</span>
-          <button class="snippet-copy" (click)="copySnippet(pythonSnippet, 'python')">
-            <mat-icon>{{ copiedSnippet() === 'python' ? 'check' : 'content_copy' }}</mat-icon>
-            {{ copiedSnippet() === 'python' ? 'Copied' : 'Copy' }}
-          </button>
-        </div>
-        <pre class="code-content"><code [textContent]="pythonSnippet"></code></pre>
-      </div>
-
-      <!-- Go Native Snippet -->
+      <!-- Go Snippets -->
       <div class="code-container" *ngIf="selectedQuickstartTab() === 'go'">
         <div class="code-header">
-          <span>main.go (AeroStream Native High-Speed Client)</span>
-          <button class="snippet-copy" (click)="copySnippet(goSnippet, 'go')">
+          <span>{{ selectedProtocol() === 'native' ? 'main.go (AeroStream Go Native SDK • Port 9091)' : 'main.go (Go franz-go Kafka Client • Port 9092)' }}</span>
+          <button class="snippet-copy" (click)="copySnippet(selectedProtocol() === 'native' ? goNativeSnippet : goKafkaSnippet, 'go')">
             <mat-icon>{{ copiedSnippet() === 'go' ? 'check' : 'content_copy' }}</mat-icon>
             {{ copiedSnippet() === 'go' ? 'Copied' : 'Copy' }}
           </button>
         </div>
-        <pre class="code-content"><code [textContent]="goSnippet"></code></pre>
+        <pre class="code-content"><code [textContent]="selectedProtocol() === 'native' ? goNativeSnippet : goKafkaSnippet"></code></pre>
       </div>
 
-      <!-- Rust Native Snippet -->
+      <!-- Rust Snippets -->
       <div class="code-container" *ngIf="selectedQuickstartTab() === 'rust'">
         <div class="code-header">
-          <span>main.rs (AeroStream Rust Native SDK)</span>
-          <button class="snippet-copy" (click)="copySnippet(rustSnippet, 'rust')">
+          <span>{{ selectedProtocol() === 'native' ? 'main.rs (AeroStream Rust Native SDK • Port 9091)' : 'main.rs (Rust rdkafka Client • Port 9092)' }}</span>
+          <button class="snippet-copy" (click)="copySnippet(selectedProtocol() === 'native' ? rustNativeSnippet : rustKafkaSnippet, 'rust')">
             <mat-icon>{{ copiedSnippet() === 'rust' ? 'check' : 'content_copy' }}</mat-icon>
             {{ copiedSnippet() === 'rust' ? 'Copied' : 'Copy' }}
           </button>
         </div>
-        <pre class="code-content"><code [textContent]="rustSnippet"></code></pre>
+        <pre class="code-content"><code [textContent]="selectedProtocol() === 'native' ? rustNativeSnippet : rustKafkaSnippet"></code></pre>
       </div>
 
-      <!-- Java / Spring Snippet -->
+      <!-- Java Snippets -->
       <div class="code-container" *ngIf="selectedQuickstartTab() === 'java'">
         <div class="code-header">
-          <span>application.yml (Spring Kafka Drop-In)</span>
-          <button class="snippet-copy" (click)="copySnippet(javaSnippet, 'java')">
+          <span>{{ selectedProtocol() === 'native' ? 'NativeApp.java (AeroStream Java Native SDK • Port 9091)' : 'KafkaApp.java (Apache Kafka Client / Spring • Port 9092)' }}</span>
+          <button class="snippet-copy" (click)="copySnippet(selectedProtocol() === 'native' ? javaNativeSnippet : javaKafkaSnippet, 'java')">
             <mat-icon>{{ copiedSnippet() === 'java' ? 'check' : 'content_copy' }}</mat-icon>
             {{ copiedSnippet() === 'java' ? 'Copied' : 'Copy' }}
           </button>
         </div>
-        <pre class="code-content"><code [textContent]="javaSnippet"></code></pre>
+        <pre class="code-content"><code [textContent]="selectedProtocol() === 'native' ? javaNativeSnippet : javaKafkaSnippet"></code></pre>
       </div>
 
-      <!-- .NET SDK Snippet -->
+      <!-- .NET Snippets -->
       <div class="code-container" *ngIf="selectedQuickstartTab() === 'dotnet'">
         <div class="code-header">
-          <span>Program.cs (AeroStream .NET SDK)</span>
-          <button class="snippet-copy" (click)="copySnippet(dotnetSnippet, 'dotnet')">
+          <span>{{ selectedProtocol() === 'native' ? 'Program.cs (AeroStream .NET Native SDK • Port 9091)' : 'Program.cs (Confluent.Kafka Client • Port 9092)' }}</span>
+          <button class="snippet-copy" (click)="copySnippet(selectedProtocol() === 'native' ? dotnetNativeSnippet : dotnetKafkaSnippet, 'dotnet')">
             <mat-icon>{{ copiedSnippet() === 'dotnet' ? 'check' : 'content_copy' }}</mat-icon>
             {{ copiedSnippet() === 'dotnet' ? 'Copied' : 'Copy' }}
           </button>
         </div>
-        <pre class="code-content"><code [textContent]="dotnetSnippet"></code></pre>
+        <pre class="code-content"><code [textContent]="selectedProtocol() === 'native' ? dotnetNativeSnippet : dotnetKafkaSnippet"></code></pre>
       </div>
 
-      <!-- Node.js SDK Snippet -->
+      <!-- Node.js Snippets -->
       <div class="code-container" *ngIf="selectedQuickstartTab() === 'nodejs'">
         <div class="code-header">
-          <span>client.ts (AeroStream Node.js SDK)</span>
-          <button class="snippet-copy" (click)="copySnippet(nodejsSnippet, 'nodejs')">
+          <span>{{ selectedProtocol() === 'native' ? 'client.ts (AeroStream Node.js Native SDK • Port 9091)' : 'client.ts (KafkaJS Client • Port 9092)' }}</span>
+          <button class="snippet-copy" (click)="copySnippet(selectedProtocol() === 'native' ? nodejsNativeSnippet : nodejsKafkaSnippet, 'nodejs')">
             <mat-icon>{{ copiedSnippet() === 'nodejs' ? 'check' : 'content_copy' }}</mat-icon>
             {{ copiedSnippet() === 'nodejs' ? 'Copied' : 'Copy' }}
           </button>
         </div>
-        <pre class="code-content"><code [textContent]="nodejsSnippet"></code></pre>
+        <pre class="code-content"><code [textContent]="selectedProtocol() === 'native' ? nodejsNativeSnippet : nodejsKafkaSnippet"></code></pre>
+      </div>
+
+      <!-- Python Snippets -->
+      <div class="code-container" *ngIf="selectedQuickstartTab() === 'python'">
+        <div class="code-header">
+          <span>{{ selectedProtocol() === 'native' ? 'native_client.py (TCP Port 9091 Raw Framing)' : 'producer.py (Standard Kafka Python Client • Port 9092)' }}</span>
+          <button class="snippet-copy" (click)="copySnippet(selectedProtocol() === 'native' ? pythonNativeSnippet : pythonKafkaSnippet, 'python')">
+            <mat-icon>{{ copiedSnippet() === 'python' ? 'check' : 'content_copy' }}</mat-icon>
+            {{ copiedSnippet() === 'python' ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <pre class="code-content"><code [textContent]="selectedProtocol() === 'native' ? pythonNativeSnippet : pythonKafkaSnippet"></code></pre>
       </div>
 
       <!-- REST API Snippet -->
       <div class="code-container" *ngIf="selectedQuickstartTab() === 'rest'">
         <div class="code-header">
-          <span>cURL (HTTP REST Ingestion & Schema Registry)</span>
+          <span>cURL (HTTP REST Ingestion & Schema Registry • Port 9001)</span>
           <button class="snippet-copy" (click)="copySnippet(restSnippet, 'rest')">
             <mat-icon>{{ copiedSnippet() === 'rest' ? 'check' : 'content_copy' }}</mat-icon>
             {{ copiedSnippet() === 'rest' ? 'Copied' : 'Copy' }}
@@ -474,51 +545,94 @@
   <section class="section sdk-section" id="sdks">
     <div class="section-header">
       <span class="section-tag">CLIENT SDKs</span>
-      <h2 class="section-title">Official Native SDKs</h2>
+      <h2 class="section-title">Official Client Libraries</h2>
       <p class="section-desc">
-        Ultra-low-latency client SDKs for AeroStream's native binary protocol (<code>0xAE 0x01</code> on port 9091).
-        Sub-millisecond tail latency with zero Kafka envelope overhead.
+        Ultra-low-latency client SDKs for AeroStream's native binary protocol (<code>0xAE 0x01</code> on port 9091),
+        alongside seamless support for standard Apache Kafka ecosystem drivers on port 9092.
       </p>
     </div>
     <div class="sdk-grid">
+      <!-- Go SDK -->
       <a class="sdk-card" href="/docs/sdks/" target="_blank">
-        <div class="sdk-card-icon go-icon">🦫</div>
+        <div class="sdk-card-icon go-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M1.811 10.231c.176 0 .343.078.455.214l1.528 1.865a.584.584 0 0 1-.455.955H1.811a.584.584 0 0 1-.584-.584v-1.866c0-.323.261-.584.584-.584zm4.195 0c.176 0 .343.078.455.214l1.528 1.865a.584.584 0 0 1-.455.955H6.006a.584.584 0 0 1-.584-.584v-1.866c0-.323.262-.584.584-.584zm11.758-6.147c2.378 0 4.103 1.547 4.103 3.684 0 2.227-1.866 3.754-4.28 3.754-1.579 0-2.883-.69-3.486-1.803l1.836-1.026c.355.617.954.981 1.705.981 1.054 0 1.954-.64 1.954-1.821 0-1.09-.844-1.745-1.954-1.745-.853 0-1.444.423-1.848.972l-1.782-1.09c.805-1.127 2.053-1.906 3.752-1.906zm-7.669.091c3.606 0 5.86 2.457 5.86 5.688 0 3.23-2.254 5.687-5.86 5.687-3.605 0-5.86-2.457-5.86-5.687 0-3.231 2.255-5.688 5.86-5.688zm0 2.127c-2.228 0-3.487 1.637-3.487 3.561 0 1.924 1.259 3.56 3.487 3.56 2.227 0 3.486-1.636 3.486-3.56 0-1.924-1.259-3.561-3.486-3.561z"/>
+          </svg>
+        </div>
         <div class="sdk-card-body">
           <h4>Go SDK</h4>
           <code>go get github.com/gradientgeeks/aerostream-sdk/go</code>
-          <span class="sdk-badge">v0.1.0-preview</span>
+          <span class="sdk-badge">v0.1.0</span>
         </div>
       </a>
-      <a class="sdk-card" href="/docs/sdks/" target="_blank">
-        <div class="sdk-card-icon rust-icon">🦀</div>
+
+      <!-- Rust SDK -->
+      <a class="sdk-card" href="https://crates.io/crates/aerostream-client" target="_blank" rel="noopener">
+        <div class="sdk-card-icon rust-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M23.834 11.233a1.405 1.405 0 0 0-.256-.474l-1.597-1.749.273-.668a1.41 1.41 0 0 0 .044-.537 1.415 1.415 0 0 0-.273-.654l-1.472-1.854.492-.533a1.408 1.408 0 0 0 .341-.93 1.406 1.406 0 0 0-.583-.93l-2.039-1.214.154-.707a1.41 1.41 0 0 0-.417-1.328 1.41 1.41 0 0 0-1.328-.417l-.707.154L15.485.45a1.406 1.406 0 0 0-.93-.583 1.408 1.408 0 0 0-.93.341l-.533.492L11.238.427a1.415 1.415 0 0 0-.654-.273 1.41 1.41 0 0 0-.537.044l-.668.273L7.63.228a1.405 1.405 0 0 0-.474-.256 1.41 1.41 0 0 0-.542.062L4.316.89l-.36-.623a1.41 1.41 0 0 0-1.22-.686 1.41 1.41 0 0 0-1.22.686L.89 1.59l-.623-.36A1.41 1.41 0 0 0 0 2.45v19.1a1.41 1.41 0 0 0 .267 1.22l.623-.36 1.22 1.223a1.41 1.41 0 0 0 1.22.686 1.41 1.41 0 0 0 1.22-.686l.36-.623 2.298.856c.17.063.353.084.542.062.164-.02.327-.107.474-.256l1.749-1.597.668.273c.17.069.352.084.537.044.237-.05.464-.144.654-.273l1.854-1.472.533.492c.264.244.6.366.93.341.33-.025.642-.224.93-.583l1.214-2.039.707.154c.48.105 1.002-.036 1.328-.417.326-.381.467-.903.417-1.328l-.154-.707 1.624-1.043c.359-.288.558-.6.583-.93.025-.33-.097-.666-.341-.93l-.492-.533.273-.668c.069-.17.084-.352.044-.537a1.415 1.415 0 0 0-.273-.654l1.597-1.749c.149-.147.236-.31.256-.474a1.41 1.41 0 0 0-.062-.542zM12 18.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zm-3.5-6.5a3.5 3.5 0 1 0 7 0 3.5 3.5 0 0 0-7 0z"/>
+          </svg>
+        </div>
         <div class="sdk-card-body">
           <h4>Rust SDK</h4>
           <code>cargo add aerostream-client</code>
-          <span class="sdk-badge">v0.1.0-preview</span>
+          <span class="sdk-badge">v0.1.0</span>
         </div>
       </a>
+
+      <!-- Java SDK -->
       <a class="sdk-card" href="/docs/sdks/" target="_blank">
-        <div class="sdk-card-icon java-icon">☕</div>
+        <div class="sdk-card-icon java-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8.85 16.34s-.54.34-.14.49c1.62.6 3.12.55 5.09-.16 0 0 .54-.27.27-.49-.27-.22-.54-.22-.54-.22-1.75.43-3.32.49-4.68.38zm-.33 1.96s-.49.33-.16.49c1.75.82 4.14.71 6.8-.49 0 0 .38-.27.16-.49-.22-.22-.49-.16-.49-.16-2.29.93-4.57.82-6.31.65zm5.55-9.15c.38 1.47-1.09 2.72-1.09 2.72s2.61-.98 1.96-2.94c-.65-1.91-2.94-2.83-2.94-2.83s.76 1.09 2.07 3.05zm-4.74 3.76s-1.85 1.04-1.85 2.51c0 1.91 2.34 2.88 5.17 2.88 2.61 0 4.63-.82 4.63-2.34 0-1.42-1.47-2.18-1.47-2.18s.71.65.27 1.36c-.44.71-1.63 1.09-3.43 1.09-2.07 0-3.32-.49-3.32-1.58 0-.93 0-1.74 0-1.74zm9.31 4.52c-.44-.22-.93-.16-.93-.16s.44.33.16.49c-1.36.82-3.87 1.36-6.75 1.36-2.61 0-5.12-.49-6.64-1.36-.27-.16.16-.49.16-.49s-.49-.05-.93.16c-.44.22-.05.49.16.6 2.07 1.14 5.01 1.47 7.46 1.47 2.78 0 5.77-.38 7.24-1.47.22-.11.55-.38.07-.6z"/>
+          </svg>
+        </div>
         <div class="sdk-card-body">
           <h4>Java SDK</h4>
           <code>org.gradientgeeks.aerostream:aerostream-client</code>
           <span class="sdk-badge">v0.1.0-preview</span>
         </div>
       </a>
-      <a class="sdk-card" href="/docs/sdks/" target="_blank">
-        <div class="sdk-card-icon dotnet-icon">🔷</div>
+
+      <!-- .NET SDK -->
+      <a class="sdk-card" href="https://www.nuget.org/packages/GradientGeeks.AeroStream.Client" target="_blank" rel="noopener">
+        <div class="sdk-card-icon dotnet-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.2l7.6 3.8L12 11.8 4.4 8 12 4.2zm-8 5.1l7 3.5v7.6l-7-3.5v-7.6zm9 11.1v-7.6l7-3.5v7.6l-7 3.5z"/>
+          </svg>
+        </div>
         <div class="sdk-card-body">
           <h4>.NET SDK</h4>
           <code>dotnet add package GradientGeeks.AeroStream.Client</code>
           <span class="sdk-badge">v0.1.0-preview</span>
         </div>
       </a>
-      <a class="sdk-card" href="/docs/sdks/" target="_blank">
-        <div class="sdk-card-icon nodejs-icon">🟩</div>
+
+      <!-- Node.js SDK -->
+      <a class="sdk-card" href="https://www.npmjs.com/package/@gradientgeeks/aerostream-client" target="_blank" rel="noopener">
+        <div class="sdk-card-icon nodejs-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2a1.73 1.73 0 0 0-.86.23L2.89 7.15A1.73 1.73 0 0 0 2 8.65v9.83a1.73 1.73 0 0 0 .86 1.5l8.25 4.77a1.73 1.73 0 0 0 1.73 0l8.25-4.77a1.73 1.73 0 0 0 .86-1.5V8.65a1.73 1.73 0 0 0-.86-1.5L12.86 2.23A1.73 1.73 0 0 0 12 2zm-.05 2.15l7.55 4.36-7.55 4.36-7.55-4.36 7.55-4.36zm-8.45 6.07l7.45 4.3v8.58l-7.45-4.3v-8.58zm16.9 0v8.58l-7.45 4.3v-8.58l7.45-4.3z"/>
+          </svg>
+        </div>
         <div class="sdk-card-body">
           <h4>Node.js SDK</h4>
           <code>npm install @gradientgeeks/aerostream-client</code>
-          <span class="sdk-badge">v0.1.0-preview</span>
+          <span class="sdk-badge">v0.1.1-preview</span>
+        </div>
+      </a>
+
+      <!-- Python SDK -->
+      <a class="sdk-card" href="/docs/sdks/" target="_blank">
+        <div class="sdk-card-icon python-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M11.914 0C5.82 0 6.2 2.656 6.2 2.656l.006 2.75h5.818v.825H3.832S0 5.762 0 11.884c0 6.12 3.342 5.908 3.342 5.908h1.996v-2.81c-.027-3.23 2.756-3.23 2.756-3.23h5.717s2.613.045 2.613-2.55V3.34S16.994 0 11.914 0zm-2.023 1.69a1.05 1.05 0 1 1 0 2.1 1.05 1.05 0 0 1 0-2.1zM12.086 24c6.094 0 5.714-2.656 5.714-2.656l-.006-2.75H11.98v-.825h8.188s3.832.47 3.832-5.652c0-6.122-3.342-5.91-3.342-5.91h-1.996v2.812c.027 3.23-2.756 3.23-2.756 3.23H10.19s-2.613-.047-2.613 2.548v5.864s-.574 3.339 4.51 3.339zm2.023-1.69a1.05 1.05 0 1 1 0-2.1 1.05 1.05 0 0 1 0 2.1z"/>
+          </svg>
+        </div>
+        <div class="sdk-card-body">
+          <h4>Python SDK</h4>
+          <code>pip install confluent-kafka / kafka-python-ng</code>
+          <span class="sdk-badge">Dual-Wire</span>
         </div>
       </a>
     </div>

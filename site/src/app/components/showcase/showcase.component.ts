@@ -34,7 +34,8 @@ export class ShowcaseComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   readonly copiedCommand = signal<boolean>(false);
   readonly selectedNodeId = signal<string>('rust-storage');
-  readonly selectedQuickstartTab = signal<'docker' | 'python' | 'go' | 'rust' | 'java' | 'dotnet' | 'nodejs' | 'rest'>('docker');
+  readonly selectedQuickstartTab = signal<'docker' | 'go' | 'rust' | 'java' | 'dotnet' | 'nodejs' | 'python' | 'rest'>('docker');
+  readonly selectedProtocol = signal<'native' | 'kafka'>('native');
   readonly copiedSnippet = signal<string | null>(null);
 
   ngOnInit(): void {
@@ -69,19 +70,8 @@ services:
 volumes:
   aerostream_data:`;
 
-  readonly pythonSnippet = `from kafka import KafkaProducer
-import json
-
-producer = KafkaProducer(
-    bootstrap_servers=['localhost:9092'],
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')
-)
-
-future = producer.send('orders', {'order_id': 'ORD-9821', 'amount': 149.50})
-record_metadata = future.get(timeout=10)
-print(f"Delivered to {record_metadata.topic} partition {record_metadata.partition} offset {record_metadata.offset}")`;
-
-  readonly goSnippet = `package main
+  // Go Snippets
+  readonly goNativeSnippet = `package main
 
 import (
     "context"
@@ -92,6 +82,7 @@ import (
 )
 
 func main() {
+    // Connect to AeroStream native protocol on port 9091 (0xAE 0x01)
     c, err := client.NewClient("127.0.0.1:9091",
         client.WithAuthToken("secret-token"),
     )
@@ -104,10 +95,38 @@ func main() {
     fmt.Printf("Produced at offset %d\\n", offset)
 }`;
 
-  readonly rustSnippet = `use aerostream_client::{AeroClient, ClientConfig};
+  readonly goKafkaSnippet = `package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/twmb/franz-go/pkg/kgo"
+)
+
+func main() {
+    // Connect to AeroStream Kafka wire protocol on port 9092
+    client, err := kgo.NewClient(
+        kgo.SeedBrokers("localhost:9092"),
+        kgo.DefaultProduceTopic("orders"),
+    )
+    if err != nil { log.Fatal(err) }
+    defer client.Close()
+
+    record := &kgo.Record{Value: []byte(\`{"order_id": "ORD-9821", "amount": 149.50}\`)}
+    client.Produce(context.Background(), record, func(r *kgo.Record, err error) {
+        if err != nil { log.Fatal(err) }
+        fmt.Printf("Delivered to partition %d at offset %d\\n", r.Partition, r.Offset)
+    })
+}`;
+
+  // Rust Snippets
+  readonly rustNativeSnippet = `use aerostream_client::{AeroClient, ClientConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Connect to AeroStream native protocol on port 9091 (0xAE 0x01)
     let client = AeroClient::connect(
         ClientConfig::new("127.0.0.1:9091")
             .with_auth_token("secret-token")
@@ -126,9 +145,71 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }`;
 
-  readonly dotnetSnippet = `using System.Text;
+  readonly rustKafkaSnippet = `use rdkafka::config::ClientConfig;
+use rdkafka::producer::{FutureProducer, FutureRecord};
+use std::time::Duration;
+
+#[tokio::main]
+async fn main() {
+    // Connect to AeroStream Kafka wire protocol on port 9092
+    let producer: FutureProducer = ClientConfig::new()
+        .set("bootstrap.servers", "localhost:9092")
+        .set("message.timeout.ms", "5000")
+        .create()
+        .expect("Producer creation failed");
+
+    let record = FutureRecord::to("orders")
+        .payload("{\\"order_id\\": \\"ORD-9821\\"}")
+        .key("key-1");
+
+    let delivery = producer.send(record, Duration::from_secs(0)).await;
+    println!("Kafka delivery status: {:?}", delivery);
+}`;
+
+  // Java Snippets
+  readonly javaNativeSnippet = `import org.gradientgeeks.aerostream.client.AeroClient;
+import org.gradientgeeks.aerostream.client.AeroProducer;
+import java.nio.charset.StandardCharsets;
+
+public class NativeApp {
+    public static void main(String[] args) throws Exception {
+        // Connect to AeroStream native protocol on port 9091 (0xAE 0x01)
+        try (AeroClient client = AeroClient.connect("127.0.0.1:9091", "secret-token");
+             AeroProducer producer = client.producer()) {
+
+            long offset = producer.send("telemetry", 0,
+                "sensor-payload".getBytes(StandardCharsets.UTF_8));
+            System.out.printf("Produced at offset %d%n", offset);
+        }
+    }
+}`;
+
+  readonly javaKafkaSnippet = `import org.apache.kafka.clients.producer.*;
+import java.util.Properties;
+
+public class KafkaApp {
+    public static void main(String[] args) {
+        // Connect to AeroStream Kafka wire protocol on port 9092
+        Properties props = new Properties();
+        props.put("bootstrap.servers", "localhost:9092");
+        props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+
+        try (Producer<String, String> producer = new KafkaProducer<>(props)) {
+            producer.send(new ProducerRecord<>("orders", "key-1", "{\\"orderId\\":\\"ORD-9821\\"}"),
+                (metadata, err) -> {
+                    System.out.printf("Delivered to partition %d at offset %d%n",
+                        metadata.partition(), metadata.offset());
+                });
+        }
+    }
+}`;
+
+  // .NET Snippets
+  readonly dotnetNativeSnippet = `using System.Text;
 using GradientGeeks.AeroStream.Client;
 
+// Connect to AeroStream native protocol on port 9091 (0xAE 0x01)
 await using var client = await AeroClient.ConnectAsync(new AeroClientOptions {
     BootstrapServers = ["127.0.0.1:9091"],
     AuthToken = "secret-token"
@@ -146,8 +227,22 @@ await foreach (var record in consumer.StreamAsync("telemetry", 0, startOffset: 0
     Console.WriteLine($"offset={record.Offset}");
 }`;
 
-  readonly nodejsSnippet = `import { AeroClient } from '@gradientgeeks/aerostream-client';
+  readonly dotnetKafkaSnippet = `using System;
+using Confluent.Kafka;
 
+// Connect to AeroStream Kafka wire protocol on port 9092
+var config = new ProducerConfig { BootstrapServers = "localhost:9092" };
+using var producer = new ProducerBuilder<Null, string>(config).Build();
+
+var result = await producer.ProduceAsync("orders",
+    new Message<Null, string> { Value = "{\\"order_id\\": \\"ORD-9821\\"}" });
+
+Console.WriteLine($"Delivered to {result.TopicPartitionOffset}");`;
+
+  // Node.js Snippets
+  readonly nodejsNativeSnippet = `import { AeroClient } from '@gradientgeeks/aerostream-client';
+
+// Connect to AeroStream native protocol on port 9091 (0xAE 0x01)
 const client = await AeroClient.connect('127.0.0.1:9091', 'secret-token');
 
 // Produce
@@ -163,16 +258,66 @@ for await (const record of consumer.stream('telemetry', 0, 0n)) {
 
 await client.close();`;
 
-  readonly javaSnippet = `spring:
-  kafka:
-    bootstrap-servers: localhost:9092
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      acks: 1
-    consumer:
-      group-id: analytics-service
-      auto-offset-reset: earliest`;
+  readonly nodejsKafkaSnippet = `import { Kafka } from 'kafkajs';
+
+// Connect to AeroStream Kafka wire protocol on port 9092
+const kafka = new Kafka({
+  clientId: 'order-service',
+  brokers: ['localhost:9092']
+});
+
+const producer = kafka.producer();
+await producer.connect();
+
+const result = await producer.send({
+  topic: 'orders',
+  messages: [{ key: 'order-1', value: '{"order_id": "ORD-9821"}' }],
+});
+
+console.log('Delivered messages:', result);
+await producer.disconnect();`;
+
+  // Python Snippets
+  readonly pythonNativeSnippet = `import socket, struct
+
+# Connect to AeroStream Native Binary Protocol (TCP port 9091, 0xAE 0x01)
+# Sub-millisecond tail latency with 7-byte framing
+sock = socket.create_connection(('127.0.0.1', 9091))
+
+# Command 0: Auth Handshake
+token = b"secret-token"
+sock.sendall(struct.pack('>HBI', 0xAE01, 0, len(token)) + token)
+resp = sock.recv(3)  # [0xAE, 0x01, status]
+
+# Command 1: Append Record
+topic = b"telemetry"
+payload = b"sensor-payload"
+body = struct.pack('>H', len(topic)) + topic + struct.pack('>II', 0, len(payload)) + payload
+sock.sendall(struct.pack('>HBI', 0xAE01, 1, len(body)) + body)
+ack = sock.recv(11) # [0xAE, 0x01, status, offset: u64]
+status, offset = struct.unpack('>xBQ', ack)
+print(f"Produced at offset {offset}")`;
+
+  readonly pythonKafkaSnippet = `from kafka import KafkaProducer
+import json
+
+# Connect to AeroStream Kafka wire protocol on port 9092
+producer = KafkaProducer(
+    bootstrap_servers=['localhost:9092'],
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+
+future = producer.send('orders', {'order_id': 'ORD-9821', 'amount': 149.50})
+record_metadata = future.get(timeout=10)
+print(f"Delivered to {record_metadata.topic} partition {record_metadata.partition} offset {record_metadata.offset}")`;
+
+  // Backward-compatibility aliases
+  readonly goSnippet = this.goNativeSnippet;
+  readonly rustSnippet = this.rustNativeSnippet;
+  readonly javaSnippet = this.javaKafkaSnippet;
+  readonly dotnetSnippet = this.dotnetNativeSnippet;
+  readonly nodejsSnippet = this.nodejsNativeSnippet;
+  readonly pythonSnippet = this.pythonKafkaSnippet;
 
   readonly restSnippet = `# 1. Ingest record via HTTP
 curl -X POST http://localhost:9001/api/produce \\
@@ -281,7 +426,15 @@ curl -X POST http://localhost:9001/subjects/orders-value/versions \\
     this.selectedNodeId.set(id);
   }
 
-  selectTab(tab: 'docker' | 'python' | 'go' | 'rust' | 'java' | 'dotnet' | 'nodejs' | 'rest'): void {
+  selectTab(tab: 'docker' | 'go' | 'rust' | 'java' | 'dotnet' | 'nodejs' | 'python' | 'rest'): void {
     this.selectedQuickstartTab.set(tab);
+  }
+
+  selectProtocol(proto: 'native' | 'kafka'): void {
+    this.selectedProtocol.set(proto);
+  }
+
+  isLanguageTab(tab: string): boolean {
+    return ['go', 'rust', 'java', 'dotnet', 'nodejs', 'python'].includes(tab);
   }
 }
