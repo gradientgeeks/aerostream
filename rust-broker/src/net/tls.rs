@@ -45,6 +45,11 @@ fn load_root_store(ca_file: &Path) -> io::Result<RootCertStore> {
     Ok(roots)
 }
 
+/// Ensure the default process-level CryptoProvider is installed (ring).
+pub fn ensure_crypto_provider() {
+    let _ = tokio_rustls::rustls::crypto::ring::default_provider().install_default();
+}
+
 /// Build a `TlsAcceptor` for a server listener. When `require_client_cert` is set, clients must
 /// present a certificate signed by `ca_file` (mutual TLS) or the handshake fails; otherwise this
 /// is ordinary server-authenticated TLS.
@@ -54,6 +59,7 @@ pub fn build_acceptor(
     ca_file: Option<&Path>,
     require_client_cert: bool,
 ) -> Result<TlsAcceptor, Box<dyn Error + Send + Sync>> {
+    ensure_crypto_provider();
     let certs = load_certs(cert_file)?;
     let key = load_key(key_file)?;
 
@@ -142,6 +148,7 @@ mod tests {
     }
 
     fn client_config_no_auth(ca_pem: &str) -> ClientConfig {
+        ensure_crypto_provider();
         let mut roots = RootCertStore::empty();
         for c in rustls_pemfile::certs(&mut ca_pem.as_bytes()) {
             roots.add(c.unwrap()).unwrap();
@@ -152,6 +159,7 @@ mod tests {
     }
 
     fn client_config_with_cert(ca_pem: &str, client: &Pem) -> ClientConfig {
+        ensure_crypto_provider();
         let mut roots = RootCertStore::empty();
         for c in rustls_pemfile::certs(&mut ca_pem.as_bytes()) {
             roots.add(c.unwrap()).unwrap();

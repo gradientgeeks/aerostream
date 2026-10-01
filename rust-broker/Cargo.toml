@@ -15,8 +15,8 @@ tokio = { version = "1.35", features = ["full"] }
 futures-util = "0.3"
 mimalloc = { version = "0.1", default-features = false }
 crc32c = "0.6"        # hardware CRC32C (SSE4.2 / ARMv8) with runtime detection and a software fallback
-tonic = { version = "0.11", features = ["tls"] }
-prost = "0.12"
+tonic = { version = "0.12", features = ["tls"] }
+prost = "0.13"
 bytes = "1.5"
 clap = { version = "4.4", features = ["derive"] }
 tracing = "0.1"
@@ -24,7 +24,7 @@ tracing-subscriber = "0.3"
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
-tokio-rustls = "0.25"
+tokio-rustls = "0.26"
 rustls-pemfile = "2"
 aws-sdk-s3 = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-config = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
@@ -42,7 +42,7 @@ flume = "0.11"
 x509-parser = "0.16"
 
 [build-dependencies]
-tonic-build = "0.11"
+tonic-build = "0.12"
 
 [dev-dependencies]
 tempfile = "3"
