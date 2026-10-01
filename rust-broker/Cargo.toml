@@ -26,8 +26,8 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 tokio-rustls = "0.25"
 rustls-pemfile = "2"
-aws-sdk-s3 = { version = "1", default-features = false, features = ["rustls", "rt-tokio"] }
-aws-config = { version = "1", default-features = false, features = ["rustls", "rt-tokio"] }
+aws-sdk-s3 = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-config = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 async-trait = "0.1.92"
 flate2 = "1"
