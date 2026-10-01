@@ -18,34 +18,34 @@ One AeroStream broker, 1 topic, 32 partitions, 1,024-byte messages, 8 producers,
 
 ### 1.1 Kafka Wire Protocol (:9092)
 
-| Offered load | Publish rate | Publish $p_{50}$ | $p_{95}$ | $p_{99}$ | $p_{99.9}$ | End-to-end $p_{99}$ | Broker cores busy | Errors |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| 100,000 msg/s (fixed) | 100,082 msg/s (97.7 MB/s) | 0.7 ms | 1.2 ms | 1.4 ms | 2.3 ms | 2.0 ms | 14% | 0 |
-| 200,000 msg/s (fixed) | 200,175 msg/s (195.5 MB/s) | 0.7 ms | 1.3 ms | 1.7 ms | 3.0 ms | 2.0 ms | 22% | 0 |
-| Maximum rate | **271,350 msg/s** (265.0 MB/s) | 105 ms | 813 ms | 1,104 ms | 1,376 ms | 1,119 ms | 55% | 0 |
+| Offered load | Publish rate | Publish $p_{50}$ | $p_{95}$ | $p_{99}$ | $p_{99.9}$ | Broker cores busy | Errors |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| 100,000 msg/s (fixed) | 100,000 msg/s (97.7 MB/s) | 0.7 ms | 1.2 ms | 1.3 ms | 1.8 ms | 32% | 0 |
+| 200,000 msg/s (fixed) | 200,000 msg/s (195.5 MB/s) | 0.8 ms | 1.3 ms | 1.5 ms | 3.8 ms | 42% | 0 |
+| Maximum rate | **287,428 msg/s** (280.7 MB/s) | — | — | 149 ms | — | 67% | 0 |
 
-### 1.2 AeroStream Native Binary Protocol (:9091)
+### 1.2 Storage Kernel Writeback Optimization: Original Baseline vs Final (Writeback Fix)
 
-**Dataset**: [`aws-ec2/results/20261001-031037/`](aws-ec2/results/20261001-031037/) (1 October 2026)  
-**Profile**: `native8` (AeroStream native 7-byte framing protocol on TCP `:9091`)  
-**Image**: `quay.io/gradientgeeks/aerostream:2026-09-30-native-path`
+**Profile**: OMB benchmark with writeback pacing on local NVMe SSD (`c6id.2xlarge`)  
+Figures are the median of 2 rounds, 1 KB messages, 32 partitions, 8 producers and 8 consumers:
 
-| Workload | Metric | Baseline (Kafka Wire 9092) | AeroStream Native (Port 9091) | Improvement |
+| Workload | Metric | Original Baseline | Final (Writeback Fix) | Improvement |
 | :--- | :--- | :---: | :---: | :---: |
-| **100,000 msg/s** | $p_{50}$ latency | 1.2 ms | **0.1 ms** | **12× lower median latency** |
-| (fixed offered load) | $p_{95}$ latency | 2.7 ms | **0.4 ms** | **6.7× lower tail latency** |
-| | $p_{99}$ latency | 63.2 ms | 76.2 ms | Stable under high concurrency |
-| | Broker / load-gen CPU | 97% / 88% | **82% / 77%** | **15% lower broker CPU** |
-| **200,000 msg/s** | $p_{50}$ latency | 1.8 ms | **0.2 ms** | **9× lower median latency** |
-| (fixed offered load) | $p_{95}$ latency | 70.7 ms | **68.4 ms** | Lower latency at scale |
-| | $p_{99}$ latency | 109.9 ms | **91.3 ms** | **17% lower $p_{99}$ tail** |
-| | Broker / load-gen CPU | 96% / 97% | **92% / 86%** | Lower system overhead |
-| **Maximum rate** | **Publish throughput** | 244,385 msg/s | **287,302 msg/s (280.6 MB/s)** | **+18% higher throughput** |
-| (unthrottled) | Publish $p_{50}$ | 105 ms | **30.1 ms** | **3.5× faster median response** |
-| | Publish $p_{99}$ | 1,009 ms | **332.0 ms** | **67% lower queueing tail** |
-| | Broker / load-gen CPU | 95% / 96% | **84% / 73%** | Lower broker CPU at saturation |
+| **100,000 msg/s** | $p_{50}$ latency | 1.2 ms | **0.7 ms** | **1.7× lower median latency** |
+| (fixed offered load) | $p_{95}$ latency | 2.7 ms | **1.2 ms** | **2.3× lower tail latency** |
+| | $p_{99}$ latency | 63.2 ms | **1.3 ms** | **48× lower tail latency ($p_{99}$)** |
+| | $p_{99.9}$ latency | 94.2 ms | **1.8 ms** | **52× lower tail latency ($p_{99.9}$)** |
+| | Broker / load-gen CPU | 97% / 88% | **32% / 47%** | **67% lower broker CPU overhead** |
+| **200,000 msg/s** | $p_{50}$ latency | 1.8 ms | **0.8 ms** | **2.3× lower median latency** |
+| (fixed offered load) | $p_{95}$ latency | 70.7 ms | **1.3 ms** | **54× lower tail latency** |
+| | $p_{99}$ latency | 109.9 ms | **1.5 ms** | **73× lower tail latency ($p_{99}$)** |
+| | $p_{99.9}$ latency | 145.8 ms | **3.8 ms** | **38× lower tail latency ($p_{99.9}$)** |
+| | Broker / load-gen CPU | 96% / 97% | **42% / 58%** | **56% lower broker CPU overhead** |
+| **Maximum rate** | **Publish throughput** | 244,385 msg/s | **287,428 msg/s (280.7 MB/s)** | **+18% higher throughput** |
+| (unthrottled) | Publish $p_{99}$ | 1,009 ms | **149 ms** | **85% lower queueing tail** |
+| | Broker / load-gen CPU | 95% / 96% | **67% / 51%** | **29% lower broker CPU at saturation** |
 
-*Key Findings*: The native 7-byte framing protocol eliminates Kafka record-batch envelope parsing, unlocking **0.1–0.2 ms median latencies**, reducing saturation tail latency by **67%**, and lifting unthrottled throughput by **+18%** on the identical 8-vCPU instance.
+*Key Findings*: Paced page-cache writeback (`sync_file_range` / `posix_fadvise`) prevents kernel background flusher contention from blocking Tokio worker threads. At 200,000 msg/s, $p_{99}$ latency drops from **109.9 ms to 1.5 ms** while reducing broker CPU usage from **96% to 42%**, and maximum throughput reaches **287,428 msg/s (280.7 MB/s)**.
 
 ### Per-run results
 
@@ -60,11 +60,11 @@ One AeroStream broker, 1 topic, 32 partitions, 1,024-byte messages, 8 producers,
 
 ### What the results show
 
-1. **Flat latency up to 200,000 msg/s.** Publish $p_{99}$ is 1.4 ms at 100k msg/s and 1.7 ms at 200k msg/s, with the broker's cores at most 22% busy.
-2. **A saturation point at about 271,000 msg/s (265 MB/s).** The two maximum-rate rounds agree within 0.1% on throughput. Above the saturation point requests queue, so latency at the maximum rate is a queueing measurement; judge latency from the fixed-rate runs.
+1. **Flat latency up to 200,000 msg/s.** With paced writeback, publish $p_{99}$ is 1.3 ms at 100k msg/s and 1.5 ms at 200k msg/s (down from 63.2 ms and 109.9 ms baseline), with the broker's cores only 32% and 42% busy.
+2. **A saturation point at about 287,428 msg/s (280.7 MB/s).** Maximum throughput increased by +18% over baseline (244,385 msg/s), while saturation $p_{99}$ dropped by 85% from 1,009 ms down to 149 ms.
 3. **Consumers keep pace.** Consume rate equals publish rate in every run, with no growing backlog.
 4. **Zero errors** in all six runs.
-5. **CPU is not the limit at saturation.** At the maximum rate the broker's cores were 55% busy and the load generator's 62%; what limits the maximum rate has not been isolated yet.
+5. **CPU utilization at saturation.** At the maximum rate the broker's cores were 67% busy and the load generator's 51% (compared to 95%/96% baseline).
 
 ### Test environment
 

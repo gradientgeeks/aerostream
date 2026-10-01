@@ -8,6 +8,7 @@ brokerAddress: __BROKER__:9091
 replicationFactor: 1
 connectionsPerProducer: 1
 lingerMicros: 1000
+fetchLingerMicros: 1000
 maxInFlightPerConnection: 4096
 fetchMaxBytes: 1048576
 fetchMaxWaitMs: 500

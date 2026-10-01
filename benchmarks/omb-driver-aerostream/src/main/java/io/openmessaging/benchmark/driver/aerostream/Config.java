@@ -37,6 +37,9 @@ public class Config {
     /** max_bytes of a multi-entry Fetch per partition (like max.partition.fetch.bytes; at least one entry). */
     public int fetchMaxBytes = 1024 * 1024;
 
+    /** After data appears, the broker waits this long for more before answering a small fetch (0 = answer at once). */
+    public int fetchLingerMicros = 1000;
+
     /** How long the broker holds a Fetch that has no data (like fetch.max.wait.ms). */
     public int fetchMaxWaitMs = 500;
 }

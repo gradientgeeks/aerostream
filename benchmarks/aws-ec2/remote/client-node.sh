@@ -15,6 +15,8 @@ TASKSET=""; CLIENT_CPUSET=""; BROKER_CPUSET=""
 if [ "${PIN:-0}" = 1 ] && [ -f "$BENCH/cpusets.env" ]; then source "$BENCH/cpusets.env"; TASKSET="taskset -c $CLIENT_CPUSET"; fi
 nohup sar -P ALL -u -r -n DEV 5 -o "$OUT/sar.bin" >/dev/null 2>&1 &
 LIMIT=$(( (TEST + WARM + 12) * 60 ))
+# GC log of the load generator: stalls here show up as publish latency, so keep it next to the OMB result
+export HEAP_OPTS="${HEAP_OPTS:--Xms4G -Xmx4G} -Xlog:gc,safepoint:file=$OUT/gc.log:time,uptime"
 timeout "$LIMIT" $TASKSET ./bin/benchmark --drivers "$OUT/driver.yaml" "$OUT/workload.yaml" > "$OUT/omb.log" 2>&1 &
 BPID=$!
 # OMB sometimes keeps running after writing its result (lingering Kafka client thread): stop it once the JSON exists.

@@ -63,7 +63,13 @@ public class AeroStreamBenchmarkConsumer implements BenchmarkConsumer {
         try {
             while (!closed) {
                 NativeProtocol.writeFetchMulti(
-                        conn.out, topic, partition, offset, config.fetchMaxBytes, config.fetchMaxWaitMs);
+                        conn.out,
+                        topic,
+                        partition,
+                        offset,
+                        config.fetchMaxBytes,
+                        config.fetchMaxWaitMs,
+                        config.fetchLingerMicros);
                 conn.out.flush();
                 int status = NativeProtocol.readStatus(conn.in);
                 if (status == NativeProtocol.STATUS_NO_DATA) {

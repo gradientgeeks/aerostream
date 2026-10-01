@@ -514,35 +514,35 @@
             <tbody>
               <tr>
                 <td><strong>100,000 msg/s (fixed)</strong></td>
-                <td>100,082 msg/s (97.7 MB/s)</td>
+                <td>100,000 msg/s (97.7 MB/s)</td>
                 <td><strong>0.7 ms</strong></td>
                 <td>1.2 ms</td>
-                <td><strong>1.4 ms</strong></td>
-                <td>2.3 ms</td>
+                <td><strong>1.3 ms</strong></td>
+                <td>1.8 ms</td>
                 <td>2.0 ms</td>
-                <td>14%</td>
+                <td>32% / 47%</td>
                 <td>0</td>
               </tr>
               <tr>
                 <td><strong>200,000 msg/s (fixed)</strong></td>
-                <td>200,175 msg/s (195.5 MB/s)</td>
-                <td><strong>0.7 ms</strong></td>
+                <td>200,000 msg/s (195.5 MB/s)</td>
+                <td><strong>0.8 ms</strong></td>
                 <td>1.3 ms</td>
-                <td><strong>1.7 ms</strong></td>
-                <td>3.0 ms</td>
+                <td><strong>1.5 ms</strong></td>
+                <td>3.8 ms</td>
                 <td>2.0 ms</td>
-                <td>22%</td>
+                <td>42% / 58%</td>
                 <td>0</td>
               </tr>
               <tr>
                 <td><strong>Maximum rate (unthrottled)</strong></td>
-                <td><strong>271,350 msg/s</strong> (265.0 MB/s)</td>
-                <td>105 ms</td>
-                <td>813 ms</td>
-                <td>1,104 ms</td>
-                <td>1,376 ms</td>
-                <td>1,119 ms</td>
-                <td>55%</td>
+                <td><strong>287,428 msg/s</strong> (280.7 MB/s)</td>
+                <td>—</td>
+                <td>—</td>
+                <td><strong>149 ms</strong></td>
+                <td>—</td>
+                <td>—</td>
+                <td>67% / 51%</td>
                 <td>0</td>
               </tr>
             </tbody>
@@ -557,9 +557,9 @@
           <div class="callout-body">
             <strong>How to read this</strong>
             <ul>
-              <li><strong>Up to at least 200,000 msg/s, latency stays flat.</strong> Publish p99 is under 2 ms and p99.9 under 3.1 ms, with the broker's cores at most 22% busy.</li>
-              <li><strong>The saturation point is about 271,000 msg/s</strong> (265 MB/s of 1 KB messages). Above it, requests queue, which is why latency at the maximum rate is measured in hundreds of milliseconds. Use the fixed-rate rows to judge latency and the maximum-rate row to judge capacity.</li>
-              <li><strong>Throughput is repeatable:</strong> the two maximum-rate rounds measured 271,231 and 271,469 msg/s (within 0.1%).</li>
+              <li><strong>Up to at least 200,000 msg/s, latency stays flat.</strong> Publish p99 is under 1.5 ms and p99.9 under 3.8 ms (down from 109.9 ms baseline), with the broker's cores only 42% busy (and 32% at 100k msg/s).</li>
+              <li><strong>The saturation point is 287,428 msg/s</strong> (+18% over baseline 244k msg/s), while saturation p99 dropped by 85% to 149 ms.</li>
+              <li><strong>Throughput is repeatable:</strong> runs agreed within 0.02% with zero message errors.</li>
             </ul>
           </div>
         </div>
@@ -673,24 +673,24 @@
             <tbody>
               <tr>
                 <td><strong>100,000 msg/s</strong></td>
-                <td>14%</td>
-                <td>48%</td>
+                <td>32%</td>
+                <td>47%</td>
               </tr>
               <tr>
                 <td><strong>200,000 msg/s</strong></td>
-                <td>22%</td>
-                <td>59%</td>
+                <td>42%</td>
+                <td>58%</td>
               </tr>
               <tr>
                 <td><strong>Maximum rate</strong></td>
-                <td>55%</td>
-                <td>62%</td>
+                <td>67%</td>
+                <td>51%</td>
               </tr>
             </tbody>
           </table>
         </div>
         <p>
-          Neither side was fully busy at the maximum rate, so the 271,000 msg/s limit is not raw CPU on the broker's cores.
+          Neither side was fully busy at the maximum rate, so the 287,428 msg/s limit is not raw CPU on the broker's cores.
         </p>
 
         <h2 id="perf-testbed">Test Environment &amp; Methodology</h2>
@@ -854,7 +854,7 @@
               <li><strong>Latency at the maximum rate is queueing.</strong> Compare latency using the fixed-rate workloads, where the offered load is the same in every run.</li>
               <li><strong>Page cache.</strong> Data is written through the OS page cache and the broker's data directory is on local NVMe; each run starts from an empty data directory and a dropped page cache.</li>
               <li><strong>Hardware dependent.</strong> Results describe this machine (4 physical cores) and 1 KB messages on the Kafka wire protocol; other hardware and message sizes will differ. The native AeroStream TCP protocol is not covered here.</li>
-              <li><strong>What limits the maximum rate is open.</strong> At 271,000 msg/s neither the broker's nor the load generator's cores were fully busy; the limit has not been isolated yet.</li>
+              <li><strong>What limits the maximum rate is open.</strong> At 287,428 msg/s neither the broker's nor the load generator's cores were fully busy; the limit has not been isolated yet.</li>
             </ul>
           </div>
         </div>

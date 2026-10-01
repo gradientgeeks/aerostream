@@ -32,7 +32,7 @@ import java.nio.charset.StandardCharsets;
  *                                                             -> [AE 01][status=0][offset(8)] | [AE 01][status]
  *   cmd 2 FETCH   body = [topic_len(2)][topic][partition(4)][offset(8)][max_bytes(4)]
  *                                                             -> [AE 01][2][len(4)][entry] | [AE 01][1] (no data)
- *   cmd 4 FETCH_MULTI body = [topic_len(2)][topic][partition(4)][offset(8)][max_bytes(4)][max_wait_ms(4)]
+ *   cmd 4 FETCH_MULTI body = [topic_len(2)][topic][partition(4)][offset(8)][max_bytes(4)][max_wait_ms(4)][linger_us(4), optional]
  *                    -> [AE 01][2][count(4)] count x [offset(8)][len(4)] [entries...] | [AE 01][1] (no data by max_wait)
  * </pre>
  *
@@ -124,15 +124,22 @@ final class NativeProtocol {
     }
 
     static void writeFetchMulti(
-            DataOutputStream out, byte[] topic, int partition, long offset, int maxBytes, int maxWaitMs)
+            DataOutputStream out,
+            byte[] topic,
+            int partition,
+            long offset,
+            int maxBytes,
+            int maxWaitMs,
+            int lingerMicros)
             throws IOException {
-        writeHeader(out, CMD_FETCH_MULTI, 2 + topic.length + 4 + 8 + 4 + 4);
+        writeHeader(out, CMD_FETCH_MULTI, 2 + topic.length + 4 + 8 + 4 + 4 + 4);
         out.writeShort(topic.length);
         out.write(topic);
         out.writeInt(partition);
         out.writeLong(offset);
         out.writeInt(maxBytes);
         out.writeInt(maxWaitMs);
+        out.writeInt(lingerMicros);
     }
 
     /** Reads [AE 01][status] and returns the status. */

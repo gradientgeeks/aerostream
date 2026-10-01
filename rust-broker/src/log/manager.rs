@@ -117,6 +117,50 @@ pub struct ProducerState {
     pub last_offset: i64,
 }
 
+/// Advisory page-cache writeback of one byte range of a segment file, executed off the append path.
+#[cfg(target_os = "linux")]
+struct WritebackJob {
+    file: Arc<File>,
+    start: u64,
+    len: u64,
+    /// Previous range to wait for, write out and then drop from the page cache (`drop_cache_after_writeback`).
+    drop_prev: Option<(u64, u64)>,
+}
+
+#[cfg(target_os = "linux")]
+fn submit_writeback(job: WritebackJob) {
+    use std::os::unix::io::AsRawFd;
+    use std::sync::{mpsc, OnceLock};
+    static TX: OnceLock<mpsc::SyncSender<WritebackJob>> = OnceLock::new();
+    let tx = TX.get_or_init(|| {
+        let (tx, rx) = mpsc::sync_channel::<WritebackJob>(4096);
+        let spawned = std::thread::Builder::new().name("aero-writeback".into()).spawn(move || {
+            for job in rx {
+                let fd = job.file.as_raw_fd();
+                // SAFETY: plain syscalls on a file descriptor kept open by `job.file`; failures are only advisory.
+                unsafe {
+                    libc::sync_file_range(fd, job.start as libc::off64_t, job.len as libc::off64_t, libc::SYNC_FILE_RANGE_WRITE);
+                    if let Some((ps, pl)) = job.drop_prev {
+                        libc::sync_file_range(
+                            fd,
+                            ps as libc::off64_t,
+                            pl as libc::off64_t,
+                            libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER,
+                        );
+                        libc::posix_fadvise(fd, ps as libc::off_t, pl as libc::off_t, libc::POSIX_FADV_DONTNEED);
+                    }
+                }
+            }
+        });
+        if let Err(e) = spawned {
+            tracing::warn!("[AeroMQ Broker] could not start the writeback thread: {e}");
+        }
+        tx
+    });
+    // Advisory: if the queue is full (the device cannot keep up) the range is simply picked up by the kernel's own writeback.
+    let _ = tx.try_send(job);
+}
+
 impl PartitionLog {
     pub fn new(
         base_dir: &Path,
@@ -533,24 +577,13 @@ impl PartitionLog {
         }
         #[cfg(target_os = "linux")]
         {
-            use std::os::unix::io::AsRawFd;
             let Ok(log_file) = self.active_log.get() else { return };
-            let fd = log_file.as_raw_fd();
             let (start, len) = (self.writeback_start, self.active_len - self.writeback_start);
-            // SAFETY: plain syscalls on a valid, open file descriptor; failures are only advisory.
-            unsafe {
-                libc::sync_file_range(fd, start as libc::off64_t, len as libc::off64_t, libc::SYNC_FILE_RANGE_WRITE);
-                if self.drop_cache_after_writeback && self.writeback_prev_start < start {
-                    let (ps, pl) = (self.writeback_prev_start, start - self.writeback_prev_start);
-                    libc::sync_file_range(
-                        fd,
-                        ps as libc::off64_t,
-                        pl as libc::off64_t,
-                        libc::SYNC_FILE_RANGE_WAIT_BEFORE | libc::SYNC_FILE_RANGE_WRITE | libc::SYNC_FILE_RANGE_WAIT_AFTER,
-                    );
-                    libc::posix_fadvise(fd, ps as libc::off_t, pl as libc::off_t, libc::POSIX_FADV_DONTNEED);
-                }
-            }
+            let drop_prev = (self.drop_cache_after_writeback && self.writeback_prev_start < start)
+                .then(|| (self.writeback_prev_start, start - self.writeback_prev_start));
+            // The syscalls run on the writeback thread: sync_file_range can block (block allocation, a full request
+            // queue) and this runs under the partition lock on a runtime worker.
+            submit_writeback(WritebackJob { file: log_file, start, len, drop_prev });
             self.writeback_prev_start = start;
         }
         self.writeback_start = self.active_len;
@@ -640,14 +673,12 @@ impl PartitionLog {
         if self.writeback_bytes > 0 && self.active_len > self.writeback_start {
             #[cfg(target_os = "linux")]
             if let Ok(log_file) = self.active_log.get() {
-                use std::os::unix::io::AsRawFd;
-                // SAFETY: plain syscall on a valid, open file descriptor; failure is only advisory.
-                unsafe { libc::sync_file_range(
-                    log_file.as_raw_fd(),
-                    self.writeback_start as libc::off64_t,
-                    (self.active_len - self.writeback_start) as libc::off64_t,
-                    libc::SYNC_FILE_RANGE_WRITE,
-                ); }
+                submit_writeback(WritebackJob {
+                    file: log_file,
+                    start: self.writeback_start,
+                    len: self.active_len - self.writeback_start,
+                    drop_prev: None,
+                });
             }
         }
         self.archive_sealed_segment(&old_active_seg)?;

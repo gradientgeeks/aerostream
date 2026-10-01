@@ -460,6 +460,7 @@ async fn handle_connection(
                 let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(req.max_wait_ms as u64);
                 // This partition's own notify: a fetch on one partition must not be woken by appends elsewhere.
                 let notify = part_log.lock().await.append_notify.clone().expect("partition always has a notify");
+                let mut lingered = req.linger_us == 0;
                 let data_opt = loop {
                     // Register for the wakeup before checking, so an append between the check and the wait is seen.
                     let notified = notify.notified();
@@ -470,6 +471,15 @@ async fn handle_connection(
                         let hw = log_guard.high_watermark;
                         log_guard.read_range_entries(req.start_offset, hw, req.max_bytes.max(1))?
                     };
+                    if let Some((_, _, bytes, _)) = &res {
+                        if !lingered && *bytes < LINGER_BELOW_BYTES {
+                            // A small amount of data: let more appends accumulate, then read again (once).
+                            lingered = true;
+                            let wake = (tokio::time::Instant::now() + tokio::time::Duration::from_micros(req.linger_us as u64)).min(deadline);
+                            tokio::time::sleep_until(wake).await;
+                            continue;
+                        }
+                    }
                     if res.is_some() || tokio::time::Instant::now() >= deadline {
                         break res;
                     }
@@ -729,7 +739,11 @@ fn parse_fetch_body(body: &[u8]) -> Result<FetchRequest<'_>, Box<dyn std::error:
 }
 
 /// Parsed fields of a Multi Fetch (cmd=4) request body:
-/// `[topic_len(2)][topic][partition(4)][start_offset(8)][max_bytes(4)][max_wait_ms(4)]`
+/// `[topic_len(2)][topic][partition(4)][start_offset(8)][max_bytes(4)][max_wait_ms(4)][linger_us(4) optional]`
+///
+/// `linger_us` (optional, 0 when absent): once data is available and it is smaller than `LINGER_BELOW_BYTES`, the broker
+/// waits this long for more appends before answering, so a consumer tailing a busy partition receives a few larger
+/// responses instead of one response per message (the fetch-side counterpart of a producer's linger).
 #[derive(Debug)]
 struct FetchMultiRequest<'a> {
     topic: &'a str,
@@ -737,7 +751,13 @@ struct FetchMultiRequest<'a> {
     start_offset: u64,
     max_bytes: u32,
     max_wait_ms: u32,
+    linger_us: u32,
 }
+
+/// Responses at least this large are sent at once: the consumer is catching up and batching has nothing to add.
+const LINGER_BELOW_BYTES: u32 = 32 * 1024;
+/// Upper bound for a requested linger, so a client cannot hold responses for long.
+const MAX_LINGER_US: u32 = 50_000;
 
 fn parse_fetch_multi_body(body: &[u8]) -> Result<FetchMultiRequest<'_>, Box<dyn std::error::Error>> {
     if body.len() < 22 {
@@ -753,7 +773,12 @@ fn parse_fetch_multi_body(body: &[u8]) -> Result<FetchMultiRequest<'_>, Box<dyn 
     let max_bytes = u32::from_be_bytes(body[14 + topic_len..18 + topic_len].try_into().unwrap());
     let max_wait_ms = u32::from_be_bytes(body[18 + topic_len..22 + topic_len].try_into().unwrap());
 
-    Ok(FetchMultiRequest { topic, partition, start_offset, max_bytes, max_wait_ms })
+    let linger_us = match body.get(22 + topic_len..26 + topic_len) {
+        Some(b) => u32::from_be_bytes(b.try_into().unwrap()).min(MAX_LINGER_US),
+        None => 0,
+    };
+
+    Ok(FetchMultiRequest { topic, partition, start_offset, max_bytes, max_wait_ms, linger_us })
 }
 
 /// Parsed fields of a Replica Fetch (cmd=3) request body:
@@ -1030,7 +1055,13 @@ mod tests {
         let mut body = encode_fetch_body("orders", 3, 42, 65536);
         body.extend_from_slice(&500u32.to_be_bytes());
         let req = parse_fetch_multi_body(&body).unwrap();
-        assert_eq!((req.topic, req.partition, req.start_offset, req.max_bytes, req.max_wait_ms), ("orders", 3, 42, 65536, 500));
+        assert_eq!((req.topic, req.partition, req.start_offset, req.max_bytes, req.max_wait_ms, req.linger_us), ("orders", 3, 42, 65536, 500, 0));
+        // optional trailing linger_us, capped
+        body.extend_from_slice(&1000u32.to_be_bytes());
+        assert_eq!(parse_fetch_multi_body(&body).unwrap().linger_us, 1000);
+        let n = body.len();
+        body[n - 4..].copy_from_slice(&u32::MAX.to_be_bytes());
+        assert_eq!(parse_fetch_multi_body(&body).unwrap().linger_us, MAX_LINGER_US);
         // a plain Fetch body (no max_wait_ms) is too short
         assert!(parse_fetch_multi_body(&encode_fetch_body("orders", 3, 42, 65536)).is_err());
     }
@@ -1187,6 +1218,33 @@ mod tests {
         conn.write_all(&frame(2, &encode_fetch_body("pipe", 0, 250, 1 << 20))).await.unwrap();
         let entry = read_fetch_entry(&mut conn).await;
         assert_eq!(entry, b"msg-0350");
+    }
+
+    /// A long-poll fetch with a linger answers with every append made during the linger, not just the first one.
+    #[tokio::test]
+    async fn fetch_multi_linger_collects_appends_made_while_waiting() {
+        let (addr, _dir, _lm) = spawn_test_server(None).await;
+        let mut producer = TcpStream::connect(addr).await.unwrap();
+        // create the partition so the fetch can attach to it
+        producer.write_all(&frame(1, &encode_produce_body("lng", 0, b"seed"))).await.unwrap();
+        assert_eq!(read_ack(&mut producer).await, 0);
+
+        let mut consumer = TcpStream::connect(addr).await.unwrap();
+        let mut body = encode_fetch_body("lng", 0, 1, 1 << 20);
+        body.extend_from_slice(&5_000u32.to_be_bytes()); // max_wait_ms
+        body.extend_from_slice(&40_000u32.to_be_bytes()); // linger_us: 40 ms
+        consumer.write_all(&frame(4, &body)).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await; // fetch is now parked, nothing to read
+
+        for i in 0..5 {
+            producer.write_all(&frame(1, &encode_produce_body("lng", 0, format!("m{i}").as_bytes()))).await.unwrap();
+            read_ack(&mut producer).await;
+            tokio::time::sleep(std::time::Duration::from_millis(3)).await;
+        }
+        let mut head = [0u8; 11];
+        consumer.read_exact(&mut head).await.unwrap();
+        assert_eq!((head[0], head[1], head[2]), (0xAE, 0x01, 2));
+        assert_eq!(u32::from_be_bytes(head[3..7].try_into().unwrap()), 5, "all five appends fall inside the linger window");
     }
 
     /// A produce and a fetch in the same write are answered in request order: the ack first, then the data.
