@@ -63,3 +63,7 @@ obj/
 **/obj/
 benchmarks/comparison/results
 benchmarks/openmessaging-benchmark/
+
+# Helm packaging
+.helm-packages/
+
