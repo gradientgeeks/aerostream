@@ -10,6 +10,31 @@ Deploys AeroStream on Kubernetes as two StatefulSets built from the single all-i
 
 ## Install
 
+### Option A: Install from OCI Registry (Recommended)
+
+Helm 3.8+ supports installing charts directly from OCI registries without adding a repo:
+
+```bash
+# Production install (3 controllers + 3 brokers with persistent volumes)
+helm install aerostream oci://ghcr.io/gradientgeeks/charts/aerostream --version 0.1.0
+
+# With custom values or dev profile
+helm install aerostream oci://ghcr.io/gradientgeeks/charts/aerostream --version 0.1.0 -f values-dev.yaml
+```
+
+### Option B: Install from Traditional Helm Repository
+
+```bash
+# Add the Gradient Geeks repository
+helm repo add gradientgeeks https://gradientgeeks.github.io/aerostream
+helm repo update
+
+# Install chart
+helm install aerostream gradientgeeks/aerostream
+```
+
+### Option C: Install from Local Source
+
 ```bash
 # production-shaped: 3 controllers + 3 brokers with persistent volumes
 helm install aero deploy/helm/aerostream --set image.tag=<immutable-tag>
@@ -145,3 +170,28 @@ whenever a CA is configured, so `ca.crt` is only written into `controller.toml` 
 `tls.requireClientCert` is set. The Rust broker's `ca.crt` is always included once
 `tls.existingSecret` is set (it also needs the CA to verify the controller's own server
 certificate when TLS is enabled, independent of mTLS).
+
+---
+
+## Publishing the Chart
+
+### 1. Automated CI/CD (GitHub Actions)
+
+The repository includes [`.github/workflows/release-helm.yml`](../../.github/workflows/release-helm.yml) which automatically:
+- Lints and tests templates on every PR and commit touching `deploy/helm/**`.
+- Pushes OCI artifacts to GitHub Container Registry (`ghcr.io/gradientgeeks/charts/aerostream`) on tag releases or `main` push.
+- Generates GitHub Releases with chart packages and updates GitHub Pages via Chart Releaser.
+
+### 2. Manual CLI Publishing (OCI to GHCR or Quay)
+
+```bash
+# 1. Package the chart
+helm package deploy/helm/aerostream -d .helm-packages
+
+# 2. Authenticate to GitHub Container Registry (or quay.io)
+echo "$GITHUB_TOKEN" | helm registry login ghcr.io -u "<your-username>" --password-stdin
+
+# 3. Push OCI artifact
+helm push .helm-packages/aerostream-0.1.0.tgz oci://ghcr.io/gradientgeeks/charts
+```
+

@@ -12,5 +12,11 @@ keywords:
   - event-streaming
   - raft
 home: https://quay.io/repository/gradientgeeks/aerostream
+icon: https://raw.githubusercontent.com/gradientgeeks/gradientgeeks.com/main/src/assets/logo.svg
+maintainers:
+  - name: Gradient Geeks
+    email: uttam-mahata-cs@outlook.com
+    url: https://gradientgeeks.com
 sources:
   - https://github.com/gradientgeeks/aerostream
+

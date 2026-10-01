@@ -1,0 +1,94 @@
+name: Release Helm Chart
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'deploy/helm/**'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Lint Chart
+        run: |
+          helm lint deploy/helm/aerostream
+
+      - name: Template Chart (Default Values)
+        run: |
+          helm template test-release deploy/helm/aerostream > /dev/null
+
+      - name: Template Chart (Dev Values)
+        run: |
+          helm template test-release deploy/helm/aerostream -f deploy/helm/aerostream/values-dev.yaml > /dev/null
+
+  release-oci:
+    needs: lint-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Login to GitHub Container Registry (GHCR)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Package Helm Chart
+        run: |
+          mkdir -p .helm-packages
+          helm package deploy/helm/aerostream -d .helm-packages
+
+      - name: Push Chart to GHCR OCI
+        run: |
+          for pkg in .helm-packages/*.tgz; do
+            helm push "$pkg" "oci://ghcr.io/${{ github.repository_owner }}/charts"
+          done
+
+  release-pages:
+    needs: lint-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Run Chart Releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        with:
+          charts_dir: deploy/helm
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
