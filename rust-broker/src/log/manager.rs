@@ -975,8 +975,16 @@ impl PartitionLog {
             Some(s) => s,
             None => return Ok(None),
         };
-        let idx = File::open(&seg.idx_path)?;
-        let n = idx.metadata()?.len() / 16;
+        // The active segment (the last local one) is served from the pooled handles and the tracked lengths: no open(2) and
+        // no fstat(2) per fetch. Sealed and cold segments are opened on demand, as before.
+        let is_active = self.segments.last().map(|s| s.base_offset) == Some(seg.base_offset) && seg.log_path == self.segments.last().unwrap().log_path;
+        let (idx, n, active_log) = if is_active {
+            (self.active_idx.get()?, self.active_idx_len / 16, Some(self.active_log.get()?))
+        } else {
+            let f = Arc::new(File::open(&seg.idx_path)?);
+            let n = f.metadata()?.len() / 16;
+            (f, n, None)
+        };
         if n == 0 {
             return Ok(None);
         }
@@ -1006,8 +1014,15 @@ impl PartitionLog {
             return Ok(None);
         }
         let (_, pos) = entry(first)?;
-        let log = File::open(&seg.log_path)?;
-        let log_len = log.metadata()?.len();
+        let (log, log_len) = match active_log {
+            // dup(2) of the pooled handle (shares the open file, no path lookup); the length is tracked, not stat'ed
+            Some(pooled) => (pooled.try_clone()?, self.active_len),
+            None => {
+                let f = File::open(&seg.log_path)?;
+                let len = f.metadata()?.len();
+                (f, len)
+            }
+        };
         let end_pos_of = |k: u64| -> io::Result<u64> { if k < n { Ok(entry(k)?.1) } else { Ok(log_len) } };
 
         // Upper bound index search: entries in [first, k_off) are strictly before end_offset.
@@ -1030,7 +1045,7 @@ impl PartitionLog {
 
 /// Result of `PartitionLog::range_bounds`: index entries `[first, k)` of one segment, data bytes `[pos, end)`.
 struct RangeBounds {
-    idx: File,
+    idx: Arc<File>,
     log: File,
     log_len: u64,
     n: u64,

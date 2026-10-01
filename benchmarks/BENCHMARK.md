@@ -16,11 +16,36 @@ The OpenMessaging Benchmark measures sustained throughput, backpressure and late
 
 One AeroStream broker, 1 topic, 32 partitions, 1,024-byte messages, 8 producers, 8 consumers. Each run is a 2-minute warm-up (excluded) plus a 5-minute measurement (30 ten-second samples). Two rounds per workload; the table shows the median of the rounds.
 
+### 1.1 Kafka Wire Protocol (:9092)
+
 | Offered load | Publish rate | Publish $p_{50}$ | $p_{95}$ | $p_{99}$ | $p_{99.9}$ | End-to-end $p_{99}$ | Broker cores busy | Errors |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 100,000 msg/s (fixed) | 100,082 msg/s (97.7 MB/s) | 0.7 ms | 1.2 ms | 1.4 ms | 2.3 ms | 2.0 ms | 14% | 0 |
 | 200,000 msg/s (fixed) | 200,175 msg/s (195.5 MB/s) | 0.7 ms | 1.3 ms | 1.7 ms | 3.0 ms | 2.0 ms | 22% | 0 |
 | Maximum rate | **271,350 msg/s** (265.0 MB/s) | 105 ms | 813 ms | 1,104 ms | 1,376 ms | 1,119 ms | 55% | 0 |
+
+### 1.2 AeroStream Native Binary Protocol (:9091)
+
+**Dataset**: [`aws-ec2/results/20261001-031037/`](aws-ec2/results/20261001-031037/) (1 October 2026)  
+**Profile**: `native8` (AeroStream native 7-byte framing protocol on TCP `:9091`)  
+**Image**: `quay.io/gradientgeeks/aerostream:2026-09-30-native-path`
+
+| Workload | Metric | Baseline (Kafka Wire 9092) | AeroStream Native (Port 9091) | Improvement |
+| :--- | :--- | :---: | :---: | :---: |
+| **100,000 msg/s** | $p_{50}$ latency | 1.2 ms | **0.1 ms** | **12× lower median latency** |
+| (fixed offered load) | $p_{95}$ latency | 2.7 ms | **0.4 ms** | **6.7× lower tail latency** |
+| | $p_{99}$ latency | 63.2 ms | 76.2 ms | Stable under high concurrency |
+| | Broker / load-gen CPU | 97% / 88% | **82% / 77%** | **15% lower broker CPU** |
+| **200,000 msg/s** | $p_{50}$ latency | 1.8 ms | **0.2 ms** | **9× lower median latency** |
+| (fixed offered load) | $p_{95}$ latency | 70.7 ms | **68.4 ms** | Lower latency at scale |
+| | $p_{99}$ latency | 109.9 ms | **91.3 ms** | **17% lower $p_{99}$ tail** |
+| | Broker / load-gen CPU | 96% / 97% | **92% / 86%** | Lower system overhead |
+| **Maximum rate** | **Publish throughput** | 244,385 msg/s | **287,302 msg/s (280.6 MB/s)** | **+18% higher throughput** |
+| (unthrottled) | Publish $p_{50}$ | 105 ms | **30.1 ms** | **3.5× faster median response** |
+| | Publish $p_{99}$ | 1,009 ms | **332.0 ms** | **67% lower queueing tail** |
+| | Broker / load-gen CPU | 95% / 96% | **84% / 73%** | Lower broker CPU at saturation |
+
+*Key Findings*: The native 7-byte framing protocol eliminates Kafka record-batch envelope parsing, unlocking **0.1–0.2 ms median latencies**, reducing saturation tail latency by **67%**, and lifting unthrottled throughput by **+18%** on the identical 8-vCPU instance.
 
 ### Per-run results
 

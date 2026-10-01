@@ -29,16 +29,23 @@ client_setup() {
     # OMB enforces Maven >= 3.8.6 but Amazon Linux ships 3.8.4, so always use the pinned upstream binary
     [ -x /opt/apache-maven-3.9.9/bin/mvn ] || curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz | sudo tar xz -C /opt
     /opt/apache-maven-3.9.9/bin/mvn -version | head -1'
-  scp_to "$CLIENT_PUBLIC_IP" "$HERE/remote/client-node.sh" "$HERE/drivers" "$HERE/workloads" "/home/ec2-user/bench/"
+  scp_to "$CLIENT_PUBLIC_IP" "$HERE/remote/client-node.sh" "$HERE/drivers" "$HERE/workloads" "$HERE/../omb-driver-aerostream" "/home/ec2-user/bench/"
   log "client: building OpenMessaging Benchmark @ ${OMB_COMMIT:0:9} (a few minutes)"
   ssh_client "set -e; cd ~/bench/omb; [ -d src ] || { git init -q src && git -C src remote add origin '$OMB_REPO' && git -C src fetch -q --depth 1 origin '$OMB_COMMIT' && git -C src checkout -q FETCH_HEAD; }
-    cd src; /opt/apache-maven-3.9.9/bin/mvn -q -B clean install -DskipTests -Dlicense.skip=true -Dspotless.check.skip=true -Dspotbugs.skip=true -pl benchmark-framework,driver-kafka,package -am
+    ~/bench/omb-driver-aerostream/apply.sh ~/bench/omb/src >/dev/null   # adds the AeroStream native driver module (no fork needed)
+    cd src; /opt/apache-maven-3.9.9/bin/mvn -q -B clean install -DskipTests -Dlicense.skip=true -Dspotless.check.skip=true -Dspotbugs.skip=true -Dcheckstyle.skip=true -pl benchmark-framework,driver-kafka,driver-aerostream,package -am
     mkdir -p ../dist; tar -xzf package/target/openmessaging-benchmark-*-bin.tar.gz -C ../dist --strip-components=1; chmod +x ~/bench/client-node.sh; ls ../dist/bin"
   log "client node ready"
 }
 if [ "$TOPOLOGY" = single ]; then
-  { broker_setup && client_setup && scp_to "$CLIENT_PUBLIC_IP" "$HERE/remote/split-cpus.py" "/home/ec2-user/bench/" && ssh_client 'python3 ~/bench/split-cpus.py'; } > "$RESULTS_DIR/bootstrap-node.log" 2>&1 \
-    || { tail -8 "$RESULTS_DIR/bootstrap-node.log" >&2; die "bootstrap FAILED (see bootstrap-node.log)"; }
+  # Each step runs as its own background job and is waited for: inside an "&&" list (or a function called from one) bash
+  # ignores "set -e", which let a failed OMB build pass as "client node ready".
+  : > "$RESULTS_DIR/bootstrap-node.log"
+  for step in broker_setup client_setup; do
+    $step >> "$RESULTS_DIR/bootstrap-node.log" 2>&1 & wait $! || { tail -8 "$RESULTS_DIR/bootstrap-node.log" >&2; die "bootstrap FAILED in $step (see bootstrap-node.log)"; }
+  done
+  { scp_to "$CLIENT_PUBLIC_IP" "$HERE/remote/split-cpus.py" "/home/ec2-user/bench/" && ssh_client 'python3 ~/bench/split-cpus.py'; } >> "$RESULTS_DIR/bootstrap-node.log" 2>&1 \
+    || { tail -8 "$RESULTS_DIR/bootstrap-node.log" >&2; die "core split FAILED (see bootstrap-node.log)"; }
   log "cores split: $(grep -o 'BROKER_CPUSET.*' "$RESULTS_DIR/bootstrap-node.log" | tail -1)"
 else
   broker_setup > "$RESULTS_DIR/bootstrap-broker.log" 2>&1 & BP=$!

@@ -6,6 +6,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+use bytes::{Buf, Bytes, BytesMut};
+
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::server::TlsStream;
@@ -18,13 +20,12 @@ use crate::log::LogManager;
 pub struct DataServer {
     addr: SocketAddr,
     log_manager: Arc<LogManager>,
-    shard_handle: Arc<crate::shard::sharded_log_manager::ShardedLogManager>,
     cfg: Arc<BrokerConfig>,
 }
 
 impl DataServer {
-    pub fn new(addr: SocketAddr, log_manager: Arc<LogManager>, shard_handle: Arc<crate::shard::sharded_log_manager::ShardedLogManager>, cfg: Arc<BrokerConfig>) -> Self {
-        Self { addr, log_manager, shard_handle, cfg }
+    pub fn new(addr: SocketAddr, log_manager: Arc<LogManager>, cfg: Arc<BrokerConfig>) -> Self {
+        Self { addr, log_manager, cfg }
     }
 
     pub async fn run(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -135,7 +136,30 @@ impl Conn {
         bytes: u32,
     ) -> io::Result<()> {
         match self {
+            Conn::Plain(stream) if region_is_page_cached(file.as_raw_fd(), position, bytes) => {
+                // Hot data (the normal case for tailing consumers): non-blocking sendfile driven by socket writability.
+                // No blocking-pool hop and no fcntl(2) calls to flip the socket between blocking and non-blocking.
+                let (socket_fd, file_fd) = (stream.as_raw_fd(), file.as_raw_fd());
+                let mut offset = position as libc::off_t;
+                let mut remaining = bytes as usize;
+                while remaining > 0 {
+                    stream.writable().await?;
+                    let sent = stream.try_io(tokio::io::Interest::WRITABLE, || {
+                        // SAFETY: both fds are open for the duration of the call (`file` is held until the end of this arm).
+                        let n = unsafe { libc::sendfile(socket_fd, file_fd, &mut offset, remaining) };
+                        if n < 0 { Err(io::Error::last_os_error()) } else { Ok(n as usize) }
+                    });
+                    match sent {
+                        Ok(0) => break, // EOF or client disconnected
+                        Ok(n) => remaining -= n,
+                        Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted) => continue,
+                        Err(e) => return Err(e),
+                    }
+                }
+                drop(file);
+            }
             Conn::Plain(stream) => {
+                // Possibly cold data: a disk read may block, so do it on the blocking pool (old path).
                 let socket_fd = stream.as_raw_fd();
                 tokio::task::spawn_blocking(move || {
                     let file_fd = file.as_raw_fd();
@@ -178,6 +202,62 @@ impl Conn {
         }
         Ok(())
     }
+}
+
+impl Conn {
+    /// Sends `header` followed by the file region. On plaintext connections the header is sent with `MSG_MORE`, so the
+    /// kernel coalesces it with the first `sendfile` chunk into one segment instead of a tiny packet of its own.
+    async fn send_with_file(&mut self, header: &[u8], file: File, position: u64, bytes: u32) -> io::Result<()> {
+        match self {
+            Conn::Plain(stream) if bytes > 0 => send_more(stream, header).await?,
+            _ => self.write_all(header).await?,
+        }
+        self.send_file_region(file, position, bytes).await
+    }
+}
+
+/// Writes all of `buf` with `MSG_MORE` (more data follows immediately), without blocking the runtime.
+async fn send_more(stream: &TcpStream, mut buf: &[u8]) -> io::Result<()> {
+    let fd = stream.as_raw_fd();
+    while !buf.is_empty() {
+        stream.writable().await?;
+        let sent = stream.try_io(tokio::io::Interest::WRITABLE, || {
+            // SAFETY: `buf` is a valid slice and `fd` is an open socket for the duration of the call.
+            let n = unsafe { libc::send(fd, buf.as_ptr() as *const libc::c_void, buf.len(), libc::MSG_MORE | libc::MSG_NOSIGNAL) };
+            if n < 0 { Err(io::Error::last_os_error()) } else { Ok(n as usize) }
+        });
+        match sent {
+            Ok(n) => buf = &buf[n..],
+            Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted) => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
+}
+
+/// True if reading the region would not block on disk: probes the first byte, the last byte and one byte per 4 MiB with
+/// `preadv2(RWF_NOWAIT)`, which fails with EAGAIN when a page is not in the page cache. Any failure (old kernel,
+/// unsupported filesystem) answers false, which just selects the blocking-pool path.
+fn region_is_page_cached(fd: std::os::unix::io::RawFd, position: u64, bytes: u32) -> bool {
+    const RWF_NOWAIT: libc::c_int = 0x8;
+    if bytes == 0 {
+        return true;
+    }
+    let probe = |offset: u64| -> bool {
+        let mut b = [0u8; 1];
+        let iov = libc::iovec { iov_base: b.as_mut_ptr() as *mut libc::c_void, iov_len: 1 };
+        // SAFETY: one valid 1-byte iovec into a live stack buffer.
+        unsafe { libc::preadv2(fd, &iov, 1, offset as libc::off_t, RWF_NOWAIT) >= 0 }
+    };
+    let end = position + bytes as u64;
+    let mut off = position;
+    while off < end {
+        if !probe(off) {
+            return false;
+        }
+        off += 4 << 20;
+    }
+    probe(end - 1)
 }
 
 impl AsyncRead for Conn {
@@ -225,122 +305,65 @@ async fn handle_connection(
     log_manager: Arc<LogManager>,
     auth_token: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut header = [0u8; 7];
-
     // Connections start authenticated only when no token is configured.
     let mut authenticated = auth_token.is_none();
 
-    // Reusable connection buffer to eliminate heap malloc/free per request on the connection
-    let mut body = Vec::with_capacity(64 * 1024);
+    // Buffered input: one read syscall can carry many pipelined frames (the native driver keeps up to 1,024 requests in
+    // flight per connection), instead of two reads (header, body) per message.
+    let mut rbuf = BytesMut::with_capacity(READ_CHUNK);
+    // Produce frames parsed from the buffer but not yet appended, and the acks waiting to be written.
+    let mut pending: Vec<ProduceFrame> = Vec::new();
+    let mut out: Vec<u8> = Vec::with_capacity(16 * 1024);
 
     // Fast-path partition cache for repeated writes to the same topic-partition
-    let mut cached_partition: Option<((String, u32), Arc<tokio::sync::Mutex<crate::log::manager::PartitionLog>>)> = None;
+    let mut cached_partition: CachedPartition = None;
 
-    loop {
-        // Read Request Header: [magic (2 bytes)] [cmd (1 byte)] [body_len (4 bytes)]
-        match stream.read_exact(&mut header).await {
-            Ok(_) => {}
-            Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                debug!("[AeroMQ Broker] Client closed connection");
-                break;
-            }
-            Err(e) => return Err(e.into()),
-        }
-
-        if !is_valid_magic(header[0], header[1]) {
-            return Err("Invalid protocol magic bytes".into());
-        }
-
-        let cmd = header[2];
-        let body_len = u32::from_be_bytes(header[3..7].try_into().unwrap()) as usize;
-
-        body.clear();
-        body.resize(body_len, 0);
-        stream.read_exact(&mut body).await?;
-
-        // Command 0: AUTH handshake. Body is the raw bearer token.
-        if cmd == 0 {
-            let provided = String::from_utf8_lossy(&body);
-            let ok = match &auth_token {
-                Some(expected) => provided == *expected,
-                None => true, // no auth required; accept any token
-            };
-            authenticated = ok;
-            // Response: [magic (2)] [status (1: 0=ok, 3=auth failed)]
-            let status = if ok { 0u8 } else { 3u8 };
-            stream.write_all(&[0xAE, 0x01, status]).await?;
-            if !ok {
-                warn!("[AeroMQ Broker] Rejected connection: invalid auth token");
-                break;
-            }
-            continue;
-        }
-
-        // All other commands require authentication.
-        if !authenticated {
-            warn!("[AeroMQ Broker] Rejected unauthenticated command {}", cmd);
-            stream.write_all(&[0xAE, 0x01, 3]).await?; // status 3 = auth failed
-            break;
-        }
-
-        match cmd {
-            1 => {
-                // Command 1: Produce/Write
-                let req = parse_produce_body(&body)?;
-
-                // Fast partition resolution: check connection cache before acquiring manager read lock
-                let part_log = match &cached_partition {
-                    Some(((top, part), log)) if top.as_str() == req.topic && *part == req.partition => {
-                        log.clone()
-                    }
-                    _ => {
-                        let log = log_manager.get_partition(req.topic, req.partition).await?;
-                        cached_partition = Some(((req.topic.to_string(), req.partition), log.clone()));
-                        log
-                    }
+    'conn: loop {
+        // Serve every complete frame that is already buffered.
+        while let Some((cmd, body)) = take_frame(&mut rbuf)? {
+            // Command 0: AUTH handshake. Body is the raw bearer token.
+            if cmd == 0 {
+                answer_produce(&mut stream, &mut pending, &log_manager, &mut cached_partition, &mut out).await?;
+                let provided = String::from_utf8_lossy(&body);
+                let ok = match &auth_token {
+                    Some(expected) => provided == *expected,
+                    None => true, // no auth required; accept any token
                 };
-                let mut log_guard = part_log.lock().await;
+                authenticated = ok;
+                // Response: [magic (2)] [status (1: 0=ok, 3=auth failed)]
+                let status = if ok { 0u8 } else { 3u8 };
+                stream.write_all(&[0xAE, 0x01, status]).await?;
+                if !ok {
+                    warn!("[AeroMQ Broker] Rejected connection: invalid auth token");
+                    break 'conn;
+                }
+                continue;
+            }
 
-                // When producer_id >= 0 and base_sequence >= 0, check ProducerStateTracker
-                if let Some((producer_id, epoch, base_sequence, record_count)) =
-                    crate::kafka::handlers::extract_batch_producer_info(req.payload)
-                {
-                    if producer_id >= 0 && base_sequence >= 0 {
-                        let next_off = log_guard.next_offset;
-                        match log_guard.producer_tracker.check_and_update_sequence(
-                            producer_id,
-                            epoch,
-                            base_sequence,
-                            record_count,
-                            next_off,
-                        ) {
-                            crate::log::producer_state::SequenceCheckResult::Duplicate { last_offset } => {
-                                // On Duplicate: bypass log append and return success with previous offset.
-                                // Drop the partition lock before the network write so a slow/backpressured
-                                // client on this connection can't stall producers on other connections.
-                                drop(log_guard);
-                                stream.write_all(&encode_produce_ack(last_offset)).await?;
-                                continue;
-                            }
-                            crate::log::producer_state::SequenceCheckResult::OutOfOrder { .. } => {
-                                // Status 45 = OutOfOrderSequenceNumber
-                                drop(log_guard);
-                                stream.write_all(&[0xAE, 0x01, 45]).await?;
-                                continue;
-                            }
-                            crate::log::producer_state::SequenceCheckResult::ValidNext => {}
-                        }
+            // All other commands require authentication.
+            if !authenticated {
+                warn!("[AeroMQ Broker] Rejected unauthenticated command {}", cmd);
+                stream.write_all(&[0xAE, 0x01, 3]).await?; // status 3 = auth failed
+                break 'conn;
+            }
+
+            if cmd == 1 {
+                // Command 1: Produce/Write. Collected and appended together once the buffered frames are parsed.
+                match parse_produce_frame(&body) {
+                    Ok(frame) => pending.push(frame),
+                    Err(e) => {
+                        // Answer the frames that preceded the malformed one, then close, as sequential handling did.
+                        answer_produce(&mut stream, &mut pending, &log_manager, &mut cached_partition, &mut out).await?;
+                        return Err(e.into());
                     }
                 }
-
-                let offset = log_guard.append(req.payload)?;
-                // Drop before the ack write, same reasoning as the branches above: the disk write is what
-                // needs the lock, not the network round trip.
-                drop(log_guard);
-
-                // Send Response: [magic (2)] [status (1: 0=Success)] [offset (8)]
-                stream.write_all(&encode_produce_ack(offset)).await?;
+                continue;
             }
+
+            // Every other command is answered in request order, so the produce acks that precede it go out first.
+            answer_produce(&mut stream, &mut pending, &log_manager, &mut cached_partition, &mut out).await?;
+
+            match cmd {
             2 => {
                 // Command 2: Fetch/Read (Consumer fetch, respects High-Watermark)
                 let req = parse_fetch_body(&body)?;
@@ -377,9 +400,8 @@ async fn handle_connection(
 
                 match data_opt {
                     Some((file, position, bytes_to_read)) => {
-                        // Send header indicating success with data
-                        stream.write_all(&encode_data_header(bytes_to_read)).await?;
-                        stream.send_file_region(file, position, bytes_to_read).await?;
+                        // Header indicating success with data, then the data
+                        stream.send_with_file(&encode_data_header(bytes_to_read), file, position, bytes_to_read).await?;
                     }
                     None => {
                         // Send header indicating no data (status = 1)
@@ -412,8 +434,7 @@ async fn handle_connection(
 
                 match data_opt {
                     Some((file, position, bytes_to_read)) => {
-                        stream.write_all(&encode_data_header(bytes_to_read)).await?;
-                        stream.send_file_region(file, position, bytes_to_read).await?;
+                        stream.send_with_file(&encode_data_header(bytes_to_read), file, position, bytes_to_read).await?;
                     }
                     None => {
                         stream.write_all(&encode_empty_response()).await?;
@@ -457,8 +478,7 @@ async fn handle_connection(
 
                 match data_opt {
                     Some((file, position, bytes_to_read, entries)) => {
-                        stream.write_all(&encode_multi_header(&entries)).await?;
-                        stream.send_file_region(file, position, bytes_to_read).await?;
+                        stream.send_with_file(&encode_multi_header(&entries), file, position, bytes_to_read).await?;
                     }
                     None => {
                         stream.write_all(&encode_empty_response()).await?;
@@ -466,9 +486,190 @@ async fn handle_connection(
                 }
             }
             _ => return Err(format!("Unknown protocol command: {}", cmd).into()),
+            }
+        }
+
+        // Nothing complete is left in the buffer: append the collected produce frames and write all their acks at once.
+        answer_produce(&mut stream, &mut pending, &log_manager, &mut cached_partition, &mut out).await?;
+
+        // Wait for more bytes.
+        if rbuf.capacity() - rbuf.len() < 4096 {
+            rbuf.reserve(READ_CHUNK);
+        }
+        let n = stream.read_buf(&mut rbuf).await?;
+        if n == 0 {
+            if rbuf.is_empty() {
+                debug!("[AeroMQ Broker] Client closed connection");
+                break;
+            }
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "connection closed in the middle of a frame").into());
         }
     }
 
+    Ok(())
+}
+
+/// Input buffer growth step for a connection.
+const READ_CHUNK: usize = 256 * 1024;
+/// Largest request body accepted (a corrupt or hostile length field must not make the broker allocate gigabytes).
+const MAX_FRAME_BYTES: usize = 512 * 1024 * 1024;
+
+type CachedPartition = Option<((String, u32), Arc<tokio::sync::Mutex<crate::log::manager::PartitionLog>>)>;
+
+/// One parsed Produce frame. `topic` and `payload` are refcounted slices of the received bytes (no copies).
+struct ProduceFrame {
+    topic: Bytes,
+    partition: u32,
+    payload: Bytes,
+}
+
+/// Removes one complete request frame `[magic(2)][cmd(1)][body_len(4)][body]` from the front of `rbuf`, if a whole frame is
+/// buffered, and returns `(cmd, body)`.
+fn take_frame(rbuf: &mut BytesMut) -> io::Result<Option<(u8, Bytes)>> {
+    if rbuf.len() < 7 {
+        return Ok(None);
+    }
+    if !is_valid_magic(rbuf[0], rbuf[1]) {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid protocol magic bytes"));
+    }
+    let cmd = rbuf[2];
+    let body_len = u32::from_be_bytes(rbuf[3..7].try_into().unwrap()) as usize;
+    if body_len > MAX_FRAME_BYTES {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("request body of {body_len} bytes exceeds the {MAX_FRAME_BYTES} byte limit")));
+    }
+    let total = 7 + body_len;
+    if rbuf.len() < total {
+        rbuf.reserve(total - rbuf.len());
+        return Ok(None);
+    }
+    let mut frame = rbuf.split_to(total);
+    frame.advance(7);
+    Ok(Some((cmd, frame.freeze())))
+}
+
+/// Same validation as `parse_produce_body`, but returns refcounted slices so the frame can be queued without copying.
+fn parse_produce_frame(body: &Bytes) -> io::Result<ProduceFrame> {
+    let invalid = |m: &str| io::Error::new(io::ErrorKind::InvalidData, m.to_string());
+    if body.len() < 10 {
+        return Err(invalid("Produce body too short"));
+    }
+    let topic_len = u16::from_be_bytes(body[0..2].try_into().unwrap()) as usize;
+    if body.len() < 10 + topic_len {
+        return Err(invalid("Produce topic length exceeds body size"));
+    }
+    std::str::from_utf8(&body[2..2 + topic_len]).map_err(|e| invalid(&e.to_string()))?;
+    let partition = u32::from_be_bytes(body[2 + topic_len..6 + topic_len].try_into().unwrap());
+    let payload_len = u32::from_be_bytes(body[6 + topic_len..10 + topic_len].try_into().unwrap()) as usize;
+    if body.len() < 10 + topic_len + payload_len {
+        return Err(invalid("Produce payload length mismatch"));
+    }
+    Ok(ProduceFrame {
+        topic: body.slice(2..2 + topic_len),
+        partition,
+        payload: body.slice(10 + topic_len..10 + topic_len + payload_len),
+    })
+}
+
+/// Appends the queued produce frames, then writes their acks (in request order) with one write. Acks for frames that were
+/// completed before an append error are still written before the error is returned.
+async fn answer_produce(
+    stream: &mut Conn,
+    pending: &mut Vec<ProduceFrame>,
+    log_manager: &Arc<LogManager>,
+    cached: &mut CachedPartition,
+    out: &mut Vec<u8>,
+) -> io::Result<()> {
+    if pending.is_empty() {
+        return Ok(());
+    }
+    let res = process_produce(pending, log_manager, cached, out).await;
+    pending.clear();
+    let written = if out.is_empty() { Ok(()) } else { stream.write_all(out).await };
+    out.clear();
+    res?;
+    written
+}
+
+async fn process_produce(
+    pending: &[ProduceFrame],
+    log_manager: &Arc<LogManager>,
+    cached: &mut CachedPartition,
+    out: &mut Vec<u8>,
+) -> io::Result<()> {
+    let mut i = 0;
+    while i < pending.len() {
+        // A run of consecutive frames for the same topic-partition shares one lock acquisition.
+        let (topic, partition) = (&pending[i].topic, pending[i].partition);
+        let mut j = i + 1;
+        while j < pending.len() && pending[j].partition == partition && pending[j].topic == *topic {
+            j += 1;
+        }
+        let topic_str = std::str::from_utf8(topic).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+        let part_log = match cached {
+            Some(((t, p), log)) if t.as_str() == topic_str && *p == partition => log.clone(),
+            _ => {
+                let log = log_manager.get_partition(topic_str, partition).await?;
+                *cached = Some(((topic_str.to_string(), partition), log.clone()));
+                log
+            }
+        };
+        let mut log_guard = part_log.lock().await;
+
+        // Frames without producer-sequence state are appended together; a frame that carries a producer id and sequence
+        // is checked against the producer state first, after everything before it has been appended (so its check sees
+        // the right next offset), exactly as handling the frames one by one did.
+        let mut plain: Vec<&[u8]> = Vec::new();
+        for frame in &pending[i..j] {
+            let tracked = match crate::kafka::handlers::extract_batch_producer_info(&frame.payload) {
+                Some((producer_id, epoch, base_sequence, record_count)) if producer_id >= 0 && base_sequence >= 0 => {
+                    Some((producer_id, epoch, base_sequence, record_count))
+                }
+                _ => None,
+            };
+            match tracked {
+                None => plain.push(&frame.payload),
+                Some((producer_id, epoch, base_sequence, record_count)) => {
+                    append_plain(&mut log_guard, &mut plain, out)?;
+                    let next_off = log_guard.next_offset;
+                    match log_guard.producer_tracker.check_and_update_sequence(producer_id, epoch, base_sequence, record_count, next_off) {
+                        crate::log::producer_state::SequenceCheckResult::Duplicate { last_offset } => {
+                            // Duplicate: skip the append and ack the previous offset.
+                            out.extend_from_slice(&encode_produce_ack(last_offset));
+                        }
+                        crate::log::producer_state::SequenceCheckResult::OutOfOrder { .. } => {
+                            // Status 45 = OutOfOrderSequenceNumber
+                            out.extend_from_slice(&[0xAE, 0x01, 45]);
+                        }
+                        crate::log::producer_state::SequenceCheckResult::ValidNext => {
+                            let offset = log_guard.append(&frame.payload)?;
+                            out.extend_from_slice(&encode_produce_ack(offset));
+                        }
+                    }
+                }
+            }
+        }
+        append_plain(&mut log_guard, &mut plain, out)?;
+        // The lock is released here, before the acks are written to the network.
+        drop(log_guard);
+        i = j;
+    }
+    Ok(())
+}
+
+/// Appends `plain` as consecutive log entries with one batched write and queues one ack per entry.
+fn append_plain(
+    log: &mut crate::log::manager::PartitionLog,
+    plain: &mut Vec<&[u8]>,
+    out: &mut Vec<u8>,
+) -> io::Result<()> {
+    if plain.is_empty() {
+        return Ok(());
+    }
+    let first = log.append_entries(plain)?;
+    for k in 0..plain.len() as u64 {
+        out.extend_from_slice(&encode_produce_ack(first + k));
+    }
+    plain.clear();
     Ok(())
 }
 
@@ -913,5 +1114,179 @@ mod tests {
         let mut all: Vec<u64> = a.into_iter().chain(b).collect();
         all.sort_unstable();
         assert_eq!(all, (0..80).collect::<Vec<u64>>());
+    }
+
+
+    // ---- end-to-end tests of the buffered / pipelined connection handler -------------------------------------------
+
+    /// Serves connections with the real `handle_connection`, exactly as `DataServer::run` does.
+    async fn spawn_test_server(token: Option<String>) -> (SocketAddr, tempfile::TempDir, Arc<LogManager>) {
+        let dir = tempfile::tempdir().unwrap();
+        let log_manager = Arc::new(LogManager::new(dir.path(), 1).with_limits(1 << 20, None, None));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let lm = log_manager.clone();
+        tokio::spawn(async move {
+            loop {
+                let Ok((stream, _)) = listener.accept().await else { return };
+                let (lm, token) = (lm.clone(), token.clone());
+                tokio::spawn(async move {
+                    let _ = handle_connection(Conn::Plain(stream), lm, token).await;
+                });
+            }
+        });
+        (addr, dir, log_manager)
+    }
+
+    fn frame(cmd: u8, body: &[u8]) -> Vec<u8> {
+        let mut f = vec![0xAE, 0x01, cmd];
+        f.extend_from_slice(&(body.len() as u32).to_be_bytes());
+        f.extend_from_slice(body);
+        f
+    }
+
+    async fn read_ack(conn: &mut TcpStream) -> u64 {
+        let mut resp = [0u8; 11];
+        conn.read_exact(&mut resp).await.unwrap();
+        assert_eq!(&resp[..3], &[0xAE, 0x01, 0], "produce ack header/status");
+        u64::from_be_bytes(resp[3..11].try_into().unwrap())
+    }
+
+    async fn read_fetch_entry(conn: &mut TcpStream) -> Vec<u8> {
+        let mut hdr = [0u8; 7];
+        conn.read_exact(&mut hdr).await.unwrap();
+        assert_eq!(&hdr[..3], &[0xAE, 0x01, 2], "fetch header with data");
+        let mut data = vec![0u8; u32::from_be_bytes(hdr[3..7].try_into().unwrap()) as usize];
+        conn.read_exact(&mut data).await.unwrap();
+        data
+    }
+
+    /// 500 pipelined frames sent in a single write, for two partitions in runs: every ack arrives, in order, with
+    /// consecutive offsets per partition, and the stored entries are the ones that were sent.
+    #[tokio::test]
+    async fn pipelined_produce_acks_in_order_with_consecutive_offsets() {
+        let (addr, _dir, _lm) = spawn_test_server(None).await;
+        let mut conn = TcpStream::connect(addr).await.unwrap();
+        // 200 to partition 0, 100 to partition 1, 200 to partition 0 again
+        let plan: Vec<u32> = std::iter::repeat(0).take(200).chain(std::iter::repeat(1).take(100)).chain(std::iter::repeat(0).take(200)).collect();
+        let mut wire = Vec::new();
+        for (i, p) in plan.iter().enumerate() {
+            wire.extend_from_slice(&frame(1, &encode_produce_body("pipe", *p, format!("msg-{i:04}").as_bytes())));
+        }
+        conn.write_all(&wire).await.unwrap();
+
+        let mut next = [0u64; 2];
+        for p in &plan {
+            let off = read_ack(&mut conn).await;
+            assert_eq!(off, next[*p as usize], "partition {p} offsets must be consecutive");
+            next[*p as usize] += 1;
+        }
+        assert_eq!(next, [400, 100]);
+
+        // entry 250 of partition 0 is the 250th frame sent to partition 0: global index 250 + 100 = 350
+        conn.write_all(&frame(2, &encode_fetch_body("pipe", 0, 250, 1 << 20))).await.unwrap();
+        let entry = read_fetch_entry(&mut conn).await;
+        assert_eq!(entry, b"msg-0350");
+    }
+
+    /// A produce and a fetch in the same write are answered in request order: the ack first, then the data.
+    #[tokio::test]
+    async fn produce_then_fetch_in_one_write_keeps_request_order() {
+        let (addr, _dir, _lm) = spawn_test_server(None).await;
+        let mut conn = TcpStream::connect(addr).await.unwrap();
+        let mut wire = frame(1, &encode_produce_body("order", 0, b"first"));
+        wire.extend_from_slice(&frame(1, &encode_produce_body("order", 0, b"second")));
+        wire.extend_from_slice(&frame(2, &encode_fetch_body("order", 0, 0, 1 << 20)));
+        conn.write_all(&wire).await.unwrap();
+        assert_eq!(read_ack(&mut conn).await, 0);
+        assert_eq!(read_ack(&mut conn).await, 1);
+        assert_eq!(read_fetch_entry(&mut conn).await, b"first");
+    }
+
+    /// Frames that arrive in tiny fragments (even split inside the 7-byte header) are reassembled correctly.
+    #[tokio::test]
+    async fn fragmented_frames_are_reassembled() {
+        let (addr, _dir, _lm) = spawn_test_server(None).await;
+        let mut conn = TcpStream::connect(addr).await.unwrap();
+        conn.set_nodelay(true).unwrap();
+        let mut wire = frame(1, &encode_produce_body("frag", 0, b"alpha"));
+        wire.extend_from_slice(&frame(1, &encode_produce_body("frag", 0, b"beta")));
+        for chunk in wire.chunks(3) {
+            conn.write_all(chunk).await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+        }
+        assert_eq!(read_ack(&mut conn).await, 0);
+        assert_eq!(read_ack(&mut conn).await, 1);
+    }
+
+    /// Producer-sequence frames mixed with plain frames: the duplicate is acked with the original offset without being
+    /// appended, the out-of-order one gets status 45, and plain frames after them continue at the right offset.
+    #[tokio::test]
+    async fn idempotent_frames_mixed_with_plain_frames_in_one_pipeline() {
+        use crate::kafka::handlers::{encode_idempotent_records_batch, KafkaRecord};
+        let (addr, _dir, _lm) = spawn_test_server(None).await;
+        let mut conn = TcpStream::connect(addr).await.unwrap();
+        let rec = KafkaRecord::new(None, Some(b"v".to_vec()));
+        let batch = |seq: i32| encode_idempotent_records_batch(0, 7, 0, seq, std::slice::from_ref(&rec));
+        let mut wire = frame(1, &encode_produce_body("idem", 0, b"plain-0"));
+        wire.extend_from_slice(&frame(1, &encode_produce_body("idem", 0, &batch(0))));   // valid next: appended at offset 1
+        wire.extend_from_slice(&frame(1, &encode_produce_body("idem", 0, &batch(0))));   // duplicate: acked with offset 1
+        wire.extend_from_slice(&frame(1, &encode_produce_body("idem", 0, &batch(5))));   // sequence gap: status 45
+        wire.extend_from_slice(&frame(1, &encode_produce_body("idem", 0, b"plain-2")));  // next plain: offset 2
+        conn.write_all(&wire).await.unwrap();
+        assert_eq!(read_ack(&mut conn).await, 0);
+        assert_eq!(read_ack(&mut conn).await, 1);
+        assert_eq!(read_ack(&mut conn).await, 1);
+        let mut err = [0u8; 3];
+        conn.read_exact(&mut err).await.unwrap();
+        assert_eq!(err, [0xAE, 0x01, 45]);
+        assert_eq!(read_ack(&mut conn).await, 2);
+    }
+
+    /// With an auth token configured, produce is rejected until the AUTH frame is accepted.
+    #[tokio::test]
+    async fn auth_is_enforced_before_any_buffered_produce() {
+        let (addr, _dir, _lm) = spawn_test_server(Some("secret".into())).await;
+        let mut bad = TcpStream::connect(addr).await.unwrap();
+        bad.write_all(&frame(1, &encode_produce_body("auth", 0, b"x"))).await.unwrap();
+        let mut resp = [0u8; 3];
+        bad.read_exact(&mut resp).await.unwrap();
+        assert_eq!(resp, [0xAE, 0x01, 3]);
+        let mut rest = Vec::new();
+        assert_eq!(bad.read_to_end(&mut rest).await.unwrap_or(0), 0, "connection is closed after the rejection");
+
+        let mut good = TcpStream::connect(addr).await.unwrap();
+        let mut wire = frame(0, b"secret");
+        wire.extend_from_slice(&frame(1, &encode_produce_body("auth", 0, b"ok")));
+        good.write_all(&wire).await.unwrap();
+        let mut a = [0u8; 3];
+        good.read_exact(&mut a).await.unwrap();
+        assert_eq!(a, [0xAE, 0x01, 0]);
+        assert_eq!(read_ack(&mut good).await, 0);
+    }
+
+    /// Valid frames that precede a malformed one are answered before the connection is closed; an absurd length field is
+    /// rejected without allocating it.
+    #[tokio::test]
+    async fn malformed_frames_close_the_connection_after_answering_earlier_ones() {
+        let (addr, _dir, _lm) = spawn_test_server(None).await;
+        let mut conn = TcpStream::connect(addr).await.unwrap();
+        let mut wire = frame(1, &encode_produce_body("bad", 0, b"one"));
+        wire.extend_from_slice(&frame(1, &encode_produce_body("bad", 0, b"two")));
+        wire.extend_from_slice(&frame(1, b"short"));          // malformed produce body
+        conn.write_all(&wire).await.unwrap();
+        assert_eq!(read_ack(&mut conn).await, 0);
+        assert_eq!(read_ack(&mut conn).await, 1);
+        let mut rest = Vec::new();
+        assert_eq!(conn.read_to_end(&mut rest).await.unwrap_or(0), 0, "closed after the malformed frame");
+
+        let mut huge = TcpStream::connect(addr).await.unwrap();
+        let mut hdr = vec![0xAE, 0x01, 1];
+        hdr.extend_from_slice(&u32::MAX.to_be_bytes());
+        huge.write_all(&hdr).await.unwrap();
+        let mut rest = Vec::new();
+        let n = tokio::time::timeout(std::time::Duration::from_secs(2), huge.read_to_end(&mut rest)).await
+            .expect("the server must close the connection instead of waiting for 4 GiB").unwrap_or(0);
+        assert_eq!(n, 0);
     }
 }

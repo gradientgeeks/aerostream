@@ -10,6 +10,7 @@ use tracing::info;
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 mod config;
+mod cpu;
 mod log;
 mod net;
 mod grpc;
@@ -150,27 +151,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cfg.auth.token.is_some()
     );
 
-    // Build Tokio runtime with CPU affinity/thread pinning
+    // Build the Tokio runtime. Worker placement uses the CPUs this process is actually allowed to run on (which honours
+    // cgroup cpusets), never `thread_number % cpu_count`; only the core workers are pinned, and blocking-pool threads get
+    // the full allowed set back (they would otherwise inherit the single-CPU mask of the worker that spawned them).
+    let allowed_cpus = Arc::new(cpu::allowed_cpus());
+    let n_workers = if cfg.shard_threads > 0 { cfg.shard_threads } else { allowed_cpus.len() }.max(1);
+    let pin_order = Arc::new(cpu::spread_order(&allowed_cpus, cpu::sysfs_siblings));
+    let pin_threads = cfg.pin_threads;
+    info!(
+        "[AeroMQ Broker] Request runtime: {} worker threads on allowed CPUs {:?} (pinning {})",
+        n_workers, allowed_cpus, if pin_threads { "on" } else { "off" }
+    );
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
-        .on_thread_start(|| {
+        .worker_threads(n_workers)
+        .on_thread_start(move || {
             static THREAD_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
             let tid = THREAD_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            
-            let num_cores = std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(1);
-            let core_id = tid % num_cores;
-
-            unsafe {
-                let mut cpuset: libc::cpu_set_t = std::mem::zeroed();
-                libc::CPU_SET(core_id, &mut cpuset);
-                let ret = libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &cpuset);
-                if ret == 0 {
-                    tracing::info!("[AeroMQ Broker] Pinned worker thread {} to CPU core {}", tid, core_id);
-                } else {
-                    tracing::warn!("[AeroMQ Broker] Failed to pin worker thread {} to CPU core {}: {}", tid, core_id, std::io::Error::last_os_error());
+            if tid < n_workers {
+                // Tokio launches its core workers when the runtime is built, so the first `n_workers` threads are them.
+                if pin_threads {
+                    let cpu = pin_order[tid % pin_order.len()];
+                    match cpu::pin_current_thread(cpu) {
+                        Ok(()) => tracing::info!("[AeroMQ Broker] Pinned worker thread {} to CPU {}", tid, cpu),
+                        Err(e) => tracing::warn!("[AeroMQ Broker] Failed to pin worker thread {} to CPU {}: {}", tid, cpu, e),
+                    }
                 }
+            } else {
+                let _ = cpu::set_current_thread_affinity(&allowed_cpus);
             }
         })
         .build()?;
@@ -224,22 +232,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let log_manager = Arc::new(log_manager_builder);
 
-        // Thread-per-core shared-nothing shard engine:
-        // Spawn N shard threads (one per available CPU core), each owning its own
-        // set of PartitionLog instances without any Mutex or cross-thread sharing.
-        let num_shards = if cfg.shard_threads > 0 {
-            cfg.shard_threads
-        } else {
-            std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(2)
-        };
-        let sharded = crate::shard::sharded_log_manager::create_sharded(log_manager.clone(), num_shards);
-        let shard_handle = Arc::new(sharded);
-        info!(
-            "[AeroStream] Thread-per-core shard engine started: {} shards on {} CPU cores",
-            num_shards, num_shards
-        );
+        // Note: the shard engine (`shard` module: thread-per-core actors that own their own PartitionLog instances) is not
+        // started here. Neither wire server ever routed requests through it, so its threads only sat idle (pinned).
+        // Requests are served by the runtime's worker threads against `log_manager`'s per-partition locks.
 
         // Spawn background log compaction cleaner loop (runs every 30 seconds)
         if cfg.storage.compaction_enabled {
@@ -293,7 +288,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|_| format!("0.0.0.0:{}", cfg.kafka_port).parse().unwrap());
         // Kafka admin/group-coordinator state + controller topology refresh loop.
         kafka::admin::init(&cfg, &log_manager);
-        let kafka_server = net::KafkaServer::new(kafka_bind_addr, log_manager.clone(), shard_handle.clone(), cfg.clone());
+        let kafka_server = net::KafkaServer::new(kafka_bind_addr, log_manager.clone(), cfg.clone());
         tokio::spawn(async move {
             if let Err(e) = kafka_server.run().await {
                 tracing::error!("[AeroMQ Broker] Kafka server error: {:?}", e);
@@ -304,11 +299,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let bind_addr: SocketAddr = format!("{}:{}", cfg.host, cfg.data_port)
             .parse()
             .unwrap_or_else(|_| format!("0.0.0.0:{}", cfg.data_port).parse().unwrap());
-        let server = net::DataServer::new(bind_addr, log_manager, shard_handle.clone(), cfg.clone());
+        let server = net::DataServer::new(bind_addr, log_manager, cfg.clone());
 
         server.run().await.map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
-
-        shard_handle.handle.shutdown();
 
         Ok::<(), Box<dyn std::error::Error>>(())
     })?;

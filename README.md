@@ -17,18 +17,23 @@ Built with a **Dual-Engine Architecture**—pairing a resilient **Go-based Raft 
 
 ## ⚡ Benchmark Summary (OpenMessaging Benchmark)
 
-AeroStream was measured with the vendor-neutral **[Linux Foundation OpenMessaging Benchmark (OMB)](https://github.com/openmessaging/benchmark)** framework through its Kafka wire port (`9092`), on an AWS `c6id.2xlarge` (8 vCPU, 16 GiB). One broker, 1 topic, 32 partitions, 1,024-byte messages, 8 producers, 8 consumers, `acks=1`, two rounds per workload:
+AeroStream was measured with the vendor-neutral **[Linux Foundation OpenMessaging Benchmark (OMB)](https://github.com/openmessaging/benchmark)** framework on an AWS `c6id.2xlarge` (8 vCPU, 16 GiB). One broker, 1 topic, 32 partitions, 1,024-byte messages, 8 producers, 8 consumers, `acks=1`, two rounds per workload:
 
-| Offered load | Publish rate | Publish $p_{50}$ | $p_{99}$ | $p_{99.9}$ | End-to-end $p_{99}$ | Errors |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **100,000 msg/s** (fixed) | 100,082 msg/s (97.7 MB/s) | 0.7 ms | 1.4 ms | 2.3 ms | 2.0 ms | 0 |
-| **200,000 msg/s** (fixed) | 200,175 msg/s (195.5 MB/s) | 0.7 ms | 1.7 ms | 3.0 ms | 2.0 ms | 0 |
-| **Maximum rate** | **271,350 msg/s** (265.0 MB/s) | 105 ms | 1,104 ms | 1,376 ms | 1,119 ms | 0 |
+### Kafka Wire Protocol (`:9092`) vs Native Protocol (`:9091`)
 
-Latency stays under 2 ms at $p_{99}$ up to at least 200,000 msg/s; the saturation point is about 271,000 msg/s, where latency reflects queueing. The two rounds agree within 0.1% on throughput.
+| Workload | Metric | Kafka Wire (:9092) | AeroStream Native (:9091) | Improvement |
+| :--- | :--- | :---: | :---: | :---: |
+| **100,000 msg/s** | Publish $p_{50}$ / $p_{95}$ | 1.2 ms / 2.7 ms | **0.1 ms / 0.4 ms** | **12× lower median latency** |
+| (1 KB payloads) | Broker / load-gen CPU | 97% / 88% | **82% / 77%** | **15% less broker CPU** |
+| **200,000 msg/s** | Publish $p_{50}$ / $p_{99}$ | 1.8 ms / 109.9 ms | **0.2 ms / 91.3 ms** | **9× lower median, 17% lower $p_{99}$** |
+| (1 KB payloads) | Broker / load-gen CPU | 96% / 97% | **92% / 86%** | Lower system overhead |
+| **Maximum rate** | **Throughput** | 244,385 msg/s (238 MB/s) | **287,302 msg/s (280.6 MB/s)** | **+18% higher throughput** |
+| (unthrottled) | Saturation $p_{99}$ | 1,009 ms | **332 ms** | **67% lower queueing tail** |
+
+*Key Takeaway*: The 7-byte native binary protocol (`0xAE 0x01`) completely eliminates Kafka record-batch envelope deserialization overhead, unlocking **0.1–0.2 ms median latencies**, reducing saturation queueing tail by **67%**, and lifting throughput to **287k+ msg/s (280 MB/s)** on an 8-vCPU instance.
 
 > 📊 **Explore Full Benchmark Reports & Reproduction**:
-> * 📈 **[Website Benchmark Page](https://aerostream.gradientgeeks.com/docs/benchmarks/)**: Per-run results, CPU use, test environment, and caveats.
+> * 📈 **[Website Benchmark Page](https://aerostream.gradientgeeks.com/docs/benchmarks/)**: Per-run metrics, CPU utilization, test environment, and caveats.
 > * 🔬 **[Benchmark Report](benchmarks/BENCHMARK.md)**: EC2 results, resource-capped container runs, design notes, and partition-density measurements.
 > * ☁️ **[EC2 Benchmark Scripts](benchmarks/aws-ec2/README.md)**: One command creates the machine, runs OMB, copies the results back, and destroys the machine.
 

@@ -1,0 +1,13 @@
+# AeroStream native protocol (TCP data plane on 9091, topics via the controller REST API on 9001).
+# Driver: benchmarks/omb-driver-aerostream (one pipelined connection per partition per producer; one multi-entry long-poll fetch thread per partition).
+name: AeroStream-Native
+driverClass: io.openmessaging.benchmark.driver.aerostream.AeroStreamBenchmarkDriver
+
+controllerHttpUrl: http://__BROKER__:9001
+brokerAddress: __BROKER__:9091
+replicationFactor: 1
+connectionsPerProducer: 1
+lingerMicros: 1000
+maxInFlightPerConnection: 4096
+fetchMaxBytes: 1048576
+fetchMaxWaitMs: 500

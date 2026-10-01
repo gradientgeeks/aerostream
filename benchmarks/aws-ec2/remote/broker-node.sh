@@ -23,7 +23,7 @@ if [ "$ACTION" = start ]; then
   docker rm -f -v "$C" >/dev/null 2>&1; sudo rm -rf "$DATA/$SYSTEM"; sudo mkdir -p "$DATA/$SYSTEM"; sudo chmod 777 "$DATA/$SYSTEM"
   sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null      # same cold page cache for every system
   case "$SYSTEM" in
-    aerostream)
+    aerostream|aerostream-native)
       IMG=$(cat "$BENCH/aerostream.image")
       docker run -d --name "$C" $CPUARG --memory=$MEM --network host -e ADVERTISED_HOST="$IP" -e DATA_DIR=/data \
         -v "$DATA/$SYSTEM:/data" "$IMG" >/dev/null

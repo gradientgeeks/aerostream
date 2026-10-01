@@ -22,9 +22,13 @@ pub struct BrokerConfig {
     pub controller: String,
     /// Path to store physical partition log files (defaults to ./data/broker_{id}).
     pub storage_dir: Option<PathBuf>,
-    /// Number of shard threads for thread-per-core mode.
-    /// 0 = auto-detect (one per CPU core). Set to 1 to disable sharding.
+    /// Number of request-handling worker threads (the Tokio runtime's core workers).
+    /// 0 = auto-detect: one per CPU the process is allowed to run on (honours cgroup cpusets).
+    /// The name is historical; the shard engine itself is not on the request path.
     pub shard_threads: usize,
+    /// Pin each worker thread to its own CPU (chosen from the process's allowed CPU set, one hardware thread per
+    /// physical core first). Blocking-pool threads are never pinned. Set to false to leave placement to the OS scheduler.
+    pub pin_threads: bool,
     /// `broker.rack`: rack / availability-zone label reported to the controller and in Metadata.
     pub rack: Option<String>,
     /// KIP-392 replica selector: "rack_aware" (default) or "leader".
@@ -127,6 +131,7 @@ impl Default for BrokerConfig {
             controller: "http://127.0.0.1:8001".to_string(),
             storage_dir: None,
             shard_threads: 0,
+            pin_threads: true,
             rack: None,
             replica_selector: "rack_aware".to_string(),
             group_initial_rebalance_delay_ms: 3000,

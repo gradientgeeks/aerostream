@@ -33,16 +33,14 @@ async fn resolve_partition(
 pub struct KafkaServer {
     addr: SocketAddr,
     log_manager: Arc<LogManager>,
-    shard_handle: Arc<crate::shard::sharded_log_manager::ShardedLogManager>,
     cfg: Arc<BrokerConfig>,
 }
 
 impl KafkaServer {
-    pub fn new(addr: SocketAddr, log_manager: Arc<LogManager>, shard_handle: Arc<crate::shard::sharded_log_manager::ShardedLogManager>, cfg: Arc<BrokerConfig>) -> Self {
+    pub fn new(addr: SocketAddr, log_manager: Arc<LogManager>, cfg: Arc<BrokerConfig>) -> Self {
         Self {
             addr,
             log_manager,
-            shard_handle,
             cfg,
         }
     }

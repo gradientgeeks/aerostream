@@ -10,7 +10,7 @@ for n in broker client; do
   ssh "${SSH_OPTS[@]}" "$SSH_USER@$ip" 'lscpu | head -20; echo; uname -srm; echo; free -h; echo; lsblk -o NAME,SIZE,MODEL,MOUNTPOINT; echo; sudo docker version --format "docker {{.Server.Version}}" 2>/dev/null; java -version 2>&1 | head -1' > "$RESULTS_DIR/host/$n.txt" 2>&1 || true
 done
 IMAGES=""
-case " $SYSTEMS " in *" aerostream "*) IMAGES="$IMAGES\"aerostream\": \"${AERO_IMAGE:-}\", " ;; esac
+case " $SYSTEMS " in *" aerostream "*|*" aerostream-native "*) IMAGES="$IMAGES\"aerostream\": \"${AERO_IMAGE:-}\", " ;; esac
 case " $SYSTEMS " in *" kafka "*) IMAGES="$IMAGES\"kafka\": \"$KAFKA_IMAGE\", " ;; esac
 case " $SYSTEMS " in *" redpanda "*) IMAGES="$IMAGES\"redpanda\": \"$REDPANDA_IMAGE\", " ;; esac
 IMAGES="${IMAGES%, }"

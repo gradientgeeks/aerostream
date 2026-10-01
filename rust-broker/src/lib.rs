@@ -1,4 +1,5 @@
 pub mod config;
+pub mod cpu;
 pub mod log;
 pub mod net;
 pub mod grpc;
