@@ -517,32 +517,32 @@
                 <td>100,000 msg/s (97.7 MB/s)</td>
                 <td><strong>0.7 ms</strong></td>
                 <td>1.2 ms</td>
-                <td><strong>1.3 ms</strong></td>
-                <td>1.8 ms</td>
+                <td><strong>1.4 ms</strong></td>
+                <td>2.3 ms</td>
                 <td>2.0 ms</td>
-                <td>32% / 47%</td>
+                <td>14% / 48%</td>
                 <td>0</td>
               </tr>
               <tr>
                 <td><strong>200,000 msg/s (fixed)</strong></td>
                 <td>200,000 msg/s (195.5 MB/s)</td>
-                <td><strong>0.8 ms</strong></td>
+                <td><strong>0.7 ms</strong></td>
                 <td>1.3 ms</td>
-                <td><strong>1.5 ms</strong></td>
-                <td>3.8 ms</td>
+                <td><strong>1.7 ms</strong></td>
+                <td>3.0 ms</td>
                 <td>2.0 ms</td>
-                <td>42% / 58%</td>
+                <td>22% / 59%</td>
                 <td>0</td>
               </tr>
               <tr>
                 <td><strong>Maximum rate (unthrottled)</strong></td>
-                <td><strong>287,428 msg/s</strong> (280.7 MB/s)</td>
+                <td><strong>271,350 msg/s</strong> (265.0 MB/s)</td>
                 <td>—</td>
                 <td>—</td>
-                <td><strong>149 ms</strong></td>
+                <td><strong>1,104 ms</strong></td>
                 <td>—</td>
                 <td>—</td>
-                <td>67% / 51%</td>
+                <td>55% / 62%</td>
                 <td>0</td>
               </tr>
             </tbody>
@@ -557,8 +557,8 @@
           <div class="callout-body">
             <strong>How to read this</strong>
             <ul>
-              <li><strong>Up to at least 200,000 msg/s, latency stays flat.</strong> Publish p99 is under 1.5 ms and p99.9 under 3.8 ms (down from 109.9 ms baseline), with the broker's cores only 42% busy (and 32% at 100k msg/s).</li>
-              <li><strong>The saturation point is 287,428 msg/s</strong> (+18% over baseline 244k msg/s), while saturation p99 dropped by 85% to 149 ms.</li>
+              <li><strong>Up to at least 200,000 msg/s, latency stays flat.</strong> Publish p99 is 1.4 ms at 100k msg/s and 1.7 ms at 200k msg/s, with the broker's cores only 14% and 22% busy.</li>
+              <li><strong>The saturation point is about 271,350 msg/s</strong> (265.0 MB/s); latency at that rate is queueing delay (p99 about 1.1 s), so compare latency at the fixed rates.</li>
               <li><strong>Throughput is repeatable:</strong> runs agreed within 0.02% with zero message errors.</li>
             </ul>
           </div>
@@ -673,24 +673,24 @@
             <tbody>
               <tr>
                 <td><strong>100,000 msg/s</strong></td>
-                <td>32%</td>
-                <td>47%</td>
+                <td>14%</td>
+                <td>48%</td>
               </tr>
               <tr>
                 <td><strong>200,000 msg/s</strong></td>
-                <td>42%</td>
-                <td>58%</td>
+                <td>22%</td>
+                <td>59%</td>
               </tr>
               <tr>
                 <td><strong>Maximum rate</strong></td>
-                <td>67%</td>
-                <td>51%</td>
+                <td>55%</td>
+                <td>62%</td>
               </tr>
             </tbody>
           </table>
         </div>
         <p>
-          Neither side was fully busy at the maximum rate, so the 287,428 msg/s limit is not raw CPU on the broker's cores.
+          Neither side was fully busy at the maximum rate, so the 271,350 msg/s limit is not raw CPU on the broker's cores.
         </p>
 
         <h2 id="perf-testbed">Test Environment &amp; Methodology</h2>
@@ -854,7 +854,7 @@
               <li><strong>Latency at the maximum rate is queueing.</strong> Compare latency using the fixed-rate workloads, where the offered load is the same in every run.</li>
               <li><strong>Page cache.</strong> Data is written through the OS page cache and the broker's data directory is on local NVMe; each run starts from an empty data directory and a dropped page cache.</li>
               <li><strong>Hardware dependent.</strong> Results describe this machine (4 physical cores) and 1 KB messages on the Kafka wire protocol; other hardware and message sizes will differ. The native AeroStream TCP protocol is not covered here.</li>
-              <li><strong>What limits the maximum rate is open.</strong> At 287,428 msg/s neither the broker's nor the load generator's cores were fully busy; the limit has not been isolated yet.</li>
+              <li><strong>What limits the maximum rate is open.</strong> At 271,350 msg/s neither the broker's nor the load generator's cores were fully busy; the limit has not been isolated yet.</li>
             </ul>
           </div>
         </div>

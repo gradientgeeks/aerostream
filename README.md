@@ -17,11 +17,21 @@ Built with a **Dual-Engine Architecture**—pairing a resilient **Go-based Raft 
 
 ## ⚡ Benchmark Summary (OpenMessaging Benchmark)
 
-AeroStream was measured with the vendor-neutral **[Linux Foundation OpenMessaging Benchmark (OMB)](https://github.com/openmessaging/benchmark)** framework on an AWS `c6id.2xlarge` (8 vCPU, 16 GiB). One broker, 1 topic, 32 partitions, 1,024-byte messages, 8 producers, 8 consumers, `acks=1`, two rounds per workload:
+AeroStream was measured with the vendor-neutral **[Linux Foundation OpenMessaging Benchmark (OMB)](https://github.com/openmessaging/benchmark)** framework on an AWS `c6id.2xlarge` (8 vCPU, 16 GiB RAM, local PCIe Gen4 NVMe SSD). One broker, 1 topic, 32 partitions, 1,024-byte messages, 8 producers, 8 consumers, `acks=1`, two rounds per workload:
 
-### Storage Kernel Optimization: Original Baseline vs Final (Writeback Fix)
+### 1. Kafka Wire Protocol (:9092) — 100% Drop-in Compatibility
 
-Figures are the median of 2 rounds, 1 KB messages, 32 partitions, 8 producers and 8 consumers, on one AWS `c6id.2xlarge` instance:
+Standard Kafka clients (Python, Java, Go, .NET, Node.js) connect directly to port `9092` with zero code changes:
+
+| Offered Load | Publish Rate | $p_{50}$ Latency | $p_{95}$ Latency | $p_{99}$ Latency | $p_{99.9}$ Latency | Broker CPU | Errors |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **100,000 msg/s** (fixed) | 100,000 msg/s (97.7 MB/s) | **0.7 ms** | **1.2 ms** | **1.4 ms** | **2.3 ms** | **14%** | 0 |
+| **200,000 msg/s** (fixed) | 200,000 msg/s (195.5 MB/s) | **0.7 ms** | **1.3 ms** | **1.7 ms** | **3.0 ms** | **22%** | 0 |
+| **Maximum Rate** (unthrottled) | **271,350 msg/s** (265.0 MB/s) | 105.1 ms | 812.5 ms | 1,104 ms | 1,376 ms | **55%** | 0 |
+
+### 2. Native Protocol (:9091) — Ultra-Low Latency with Paced Writeback
+
+AeroStream's native binary protocol (port 9091) uses a 7-byte framing header and dedicated SDKs. By implementing **paced page-cache writeback** (`sync_file_range` / `posix_fadvise` every 8 MiB), AeroStream eliminated kernel flusher stalls, slashing $p_{99}$ tail latency by **48×–73×** and dropping broker CPU by over **56%**:
 
 | Workload | Metric | Original Baseline | Final (Writeback Fix) | Improvement |
 | :--- | :--- | :---: | :---: | :---: |
@@ -35,7 +45,18 @@ Figures are the median of 2 rounds, 1 KB messages, 32 partitions, 8 producers an
 | (unthrottled) | Saturation $p_{99}$ | 1,009 ms | **149 ms** | **85% lower queueing tail** |
 | | Broker / load-gen CPU | 95% / 96% | **67% / 51%** | **29% lower broker CPU at saturation** |
 
-*Key Takeaway*: By eliminating OS page-cache writeback stalls via paced background writeback (`sync_file_range` / `posix_fadvise`), AeroStream eliminated tail latency spikes—slashing $p_{99}$ latency from **63.2 ms down to 1.3 ms** at 100k msg/s and **109.9 ms down to 1.5 ms** at 200k msg/s, while dropping broker CPU utilization from **96–97% down to 32–42%** and elevating maximum unthrottled throughput to **287,428 msg/s (280.7 MB/s)** with an 85% drop in saturation queueing tail (149 ms vs 1,009 ms).
+*(Reproduced in October 2026: 100k $p_{99}$ 1.2 ms, 200k $p_{99}$ 1.4 ms, max throughput 287,459 msg/s)*
+
+### 3. Head-to-Head: Kafka Wire Port (:9092) vs Native Port (:9091)
+
+| Feature / Metric | Kafka Wire Protocol (:9092) | AeroStream Native Protocol (:9091) |
+| :--- | :---: | :---: |
+| **Protocol Overhead** | Full Kafka Header v2 + RecordBatch | Minimal 7-Byte Header (`0xAE 0x01`) |
+| **Client Compatibility** | Any Kafka client (Java, Python, Go, Node, .NET) | Native SDKs (Go, Rust, Java, .NET, Node.js) |
+| **200,000 msg/s $p_{99}$ Latency** | 1.7 ms | **1.5 ms** (1.4 ms reproduced) |
+| **Max Sustained Throughput** | 271,350 msg/s (265.0 MB/s) | **287,428 msg/s (280.7 MB/s)** (+5.9%) |
+| **Saturation $p_{99}$ Queueing Tail** | 1,104 ms | **149 ms** (86.5% reduction) |
+| **Broker CPU at 200k msg/s** | **22%** (pinned cores) | 42% (pinned cores) |
 
 > 📊 **Explore Full Benchmark Reports & Reproduction**:
 > * 📈 **[Website Benchmark Page](https://aerostream.gradientgeeks.com/docs/benchmarks/)**: Per-run metrics, CPU utilization, test environment, and caveats.

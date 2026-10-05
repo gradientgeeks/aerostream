@@ -1,7 +1,7 @@
 # AeroStream Performance Benchmarks (OpenMessaging Benchmark)
 
 **Benchmark standard**: [Linux Foundation OpenMessaging Benchmark (OMB)](https://github.com/openmessaging/benchmark)  
-**Protocol under test**: Kafka wire protocol (`:9092`), single broker, `acks=1`, no replication  
+**Protocol under test**: Kafka wire protocol (`:9092`) in sections 1.1 and 3, AeroStream native protocol (`:9091`) in section 1.2; single broker, `acks=1`, no replication  
 **Raw datasets**: [`benchmarks/omb-results/`](omb-results/)  
 **Execution guides**: [`core/docs/OPENMESSAGING_BENCHMARK_GUIDE.md`](../core/docs/OPENMESSAGING_BENCHMARK_GUIDE.md), [`aws-ec2/README.md`](aws-ec2/README.md)  
 
@@ -12,7 +12,7 @@ The OpenMessaging Benchmark measures sustained throughput, backpressure and late
 ## 1. Results on AWS EC2 (`c6id.2xlarge`, 8 vCPU, 16 GiB)
 
 **Dataset**: [`omb-results/aws-c6id-2xlarge-aerostream-2026-09-30/`](omb-results/aws-c6id-2xlarge-aerostream-2026-09-30/) (30 September 2026)  
-**Image**: `quay.io/gradientgeeks/aerostream:latest`, digest `sha256:1fd1a44a7c8c`
+**Image (this dataset)**: `quay.io/gradientgeeks/aerostream:latest` at that date, digest `sha256:1fd1a44a7c8c` (before the native-path and writeback-thread work in 1.2)
 
 One AeroStream broker, 1 topic, 32 partitions, 1,024-byte messages, 8 producers, 8 consumers. Each run is a 2-minute warm-up (excluded) plus a 5-minute measurement (30 ten-second samples). Two rounds per workload; the table shows the median of the rounds.
 
@@ -20,13 +20,15 @@ One AeroStream broker, 1 topic, 32 partitions, 1,024-byte messages, 8 producers,
 
 | Offered load | Publish rate | Publish $p_{50}$ | $p_{95}$ | $p_{99}$ | $p_{99.9}$ | Broker cores busy | Errors |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| 100,000 msg/s (fixed) | 100,000 msg/s (97.7 MB/s) | 0.7 ms | 1.2 ms | 1.3 ms | 1.8 ms | 32% | 0 |
-| 200,000 msg/s (fixed) | 200,000 msg/s (195.5 MB/s) | 0.8 ms | 1.3 ms | 1.5 ms | 3.8 ms | 42% | 0 |
-| Maximum rate | **287,428 msg/s** (280.7 MB/s) | — | — | 149 ms | — | 67% | 0 |
+| 100,000 msg/s (fixed) | 100,000 msg/s (97.7 MB/s) | 0.7 ms | 1.2 ms | 1.4 ms | 2.3 ms | 14% | 0 |
+| 200,000 msg/s (fixed) | 200,000 msg/s (195.5 MB/s) | 0.7 ms | 1.3 ms | 1.7 ms | 3.0 ms | 22% | 0 |
+| Maximum rate | **271,350 msg/s** (265.0 MB/s) | — | — | 1,104 ms | — | 55% | 0 |
 
-### 1.2 Storage Kernel Writeback Optimization: Original Baseline vs Final (Writeback Fix)
+### 1.2 Native Protocol (:9091): Original Baseline vs Final (Writeback Fix)
 
-**Profile**: OMB benchmark with writeback pacing on local NVMe SSD (`c6id.2xlarge`)  
+**Protocol**: AeroStream native protocol (port 9091), custom OMB driver in `benchmarks/omb-driver-aerostream`, not the Kafka port  
+**Image (final)**: `quay.io/gradientgeeks/aerostream:2026-10-01-writeback-thread` (digest `sha256:ad92b677…`), reproduced in a second run on 4 October 2026 (100k p99 1.2 ms, 200k p99 1.4 ms, max rate 287,459 msg/s)  
+**Profile**: `c6id.2xlarge`, local NVMe, same machine and matrix as 1.1  
 Figures are the median of 2 rounds, 1 KB messages, 32 partitions, 8 producers and 8 consumers:
 
 | Workload | Metric | Original Baseline | Final (Writeback Fix) | Improvement |
@@ -60,11 +62,11 @@ Figures are the median of 2 rounds, 1 KB messages, 32 partitions, 8 producers an
 
 ### What the results show
 
-1. **Flat latency up to 200,000 msg/s.** With paced writeback, publish $p_{99}$ is 1.3 ms at 100k msg/s and 1.5 ms at 200k msg/s (down from 63.2 ms and 109.9 ms baseline), with the broker's cores only 32% and 42% busy.
-2. **A saturation point at about 287,428 msg/s (280.7 MB/s).** Maximum throughput increased by +18% over baseline (244,385 msg/s), while saturation $p_{99}$ dropped by 85% from 1,009 ms down to 149 ms.
+1. **Flat latency up to 200,000 msg/s.** On the Kafka port, publish $p_{99}$ is 1.4 ms at 100k msg/s and 1.7 ms at 200k msg/s, with the broker's cores only 14% and 22% busy.
+2. **A saturation point at about 271,350 msg/s (265.0 MB/s).** Latency at that rate is queueing delay (p99 about 1.1 s), so compare latency at the fixed rates. The native protocol saturates higher: 287,428 msg/s (section 1.2).
 3. **Consumers keep pace.** Consume rate equals publish rate in every run, with no growing backlog.
 4. **Zero errors** in all six runs.
-5. **CPU utilization at saturation.** At the maximum rate the broker's cores were 67% busy and the load generator's 51% (compared to 95%/96% baseline).
+5. **CPU utilization at saturation.** At the maximum rate the broker's cores were 55% busy and the load generator's 62%.
 
 ### Test environment
 
