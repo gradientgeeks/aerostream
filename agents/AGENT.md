@@ -20,7 +20,7 @@ AeroStream is a next-generation distributed streaming platform featuring a **dua
 │  (go-controller/)       │◄─────►│  (rust-broker/)        │
 │  - HashiCorp Raft FSM   │ gRPC  │  - Shard-per-Core      │
 │  - Schema Registry      │:8001  │  - Zero-Copy Storage   │
-│  - Kafka Connect 100%   │       │  - Paced Page Cache    │
+│  - Kafka Connect REST   │       │  - Paced Page Cache    │
 │  - Web Console UI:9001  │       │  - Native Port :9091   │
 └─────────────────────────┘       └────────────────────────┘
 ```
@@ -29,7 +29,7 @@ AeroStream is a next-generation distributed streaming platform featuring a **dua
   - Implements HashiCorp Raft consensus (`ClusterState` FSM).
   - Dynamic REST API on port `9001` serving metrics, topics, partitions, consumer lag, and ACLs.
   - Confluent Schema Registry (AVRO, JSON Schema, Protobuf).
-  - Kafka Connect 100% REST Engine.
+  - Kafka Connect REST Engine.
   - Serves the compiled Angular Web Console UI at `/aerostream/console/` (or `/`).
 
 - **Rust Data Plane (`rust-broker/`)**:

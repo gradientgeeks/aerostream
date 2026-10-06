@@ -1443,7 +1443,7 @@ def build_native_and_kafka_dual_protocol() -> Tuple[str, dict]:
                       "Full SASL Security: SASL/PLAIN, SASL/SCRAM-SHA-256, SASL/SCRAM-SHA-512, TLS/mTLS",
                       "Transparent Protocol Bridging: Native and Kafka clients read and write the exact same partitions"
                   ],
-                  subtitle="100% Drop-In Replacement",
+                  subtitle="Drop-In Replacement",
                   accent_color="#fbbf24", badge="Drop-In", badge_color="#b45309",
                   code_block="# Switch from Kafka to AeroStream with one line of configuration:\nbootstrap.servers=localhost:9092\n# Zero code changes required in your application!")
 

@@ -11,7 +11,7 @@
 
 **AeroStream** is an ultra-high-performance, distributed event-streaming and messaging engine engineered for extreme throughput, microsecond latencies, and modern multi-cloud workloads.
 
-Built with a **Dual-Engine Architecture**—pairing a resilient **Go-based Raft control plane** with a zero-copy **Rust-based storage and networking data plane**—AeroStream delivers next-generation event streaming with 100% Kafka wire-protocol compatibility, built-in multi-cloud tiered storage, schema governance, stream transforms, and an integrated Web Console UI.
+Built with a **Dual-Engine Architecture**—pairing a resilient **Go-based Raft control plane** with a zero-copy **Rust-based storage and networking data plane**—AeroStream delivers next-generation event streaming with Kafka wire-protocol compatibility, built-in multi-cloud tiered storage, schema governance, stream transforms, and an integrated Web Console UI.
 
 ---
 
@@ -19,7 +19,7 @@ Built with a **Dual-Engine Architecture**—pairing a resilient **Go-based Raft 
 
 AeroStream was measured with the vendor-neutral **[Linux Foundation OpenMessaging Benchmark (OMB)](https://github.com/openmessaging/benchmark)** framework on an AWS `c6id.2xlarge` (8 vCPU, 16 GiB RAM, local PCIe Gen4 NVMe SSD). One broker, 1 topic, 32 partitions, 1,024-byte messages, 8 producers, 8 consumers, `acks=1`, two rounds per workload:
 
-### 1. Kafka Wire Protocol (:9092) — 100% Drop-in Compatibility
+### 1. Kafka Wire Protocol (:9092) — Drop-in Compatibility
 
 Standard Kafka clients (Python, Java, Go, .NET, Node.js) connect directly to port `9092` with zero code changes:
 
@@ -74,7 +74,7 @@ AeroStream's native binary protocol (port 9091) uses a 7-byte framing header and
   * In-place base offset patching directly on disk (`write_all_at`), completely bypassing multi-megabyte heap reallocations in $\mathcal{O}(1)$ time.
   * Paced page-cache writeback via Linux `sync_file_range(2)` and `posix_fadvise(2)` (pacing dirty flushes every 8 MiB), eliminating OS writeback stalls in memory-constrained containers.
   * Zero-copy cold tiering via hard links (`fs::hard_link`), decoupling hot partition log rollover from object store network latency.
-* **100% Kafka Wire Protocol Compatibility**:
+* **Kafka Wire Protocol Compatibility**:
   * Native listener on port `9092` supporting 34+ Kafka API keys across produce, fetch, metadata, consumer groups, schemas, and ACLs.
   * High-performance Fetch long polling with lazy `tokio::sync::Notify` registration and lockless out-of-lock disk I/O.
   * Enterprise SASL authentication (`PLAIN` and `SCRAM-SHA-256`) and Two-Phase Commit (2PC) Transactions.
